@@ -13,10 +13,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './'),
     },
   },
-  // Sử dụng fallback chuỗi rỗng để tránh lỗi AST parsing của Rollup
+  // Chỉ define các giá trị cụ thể, tránh define toàn bộ process.env gây lỗi Rollup AST
   define: {
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ""),
-    'process.env': {}
   },
   build: {
     outDir: 'dist',
