@@ -1,11 +1,17 @@
-<div align="center">
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+# Hệ thống Kiến Thức Toán Học LMS
 
-  <h1>Built with AI Studio</h2>
+Hệ thống quản lý học tập chuyên nghiệp hỗ trợ AI dành cho Giáo viên và Học sinh.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Hướng dẫn thiết lập API
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+Để sử dụng các tính năng AI (Gia sư AI, Phân tích đề thi), bạn cần có Gemini API Key.
 
-</div>
+1. Lấy mã tại: [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Thiết lập biến môi trường:
+   - **Trên Vercel:** Thêm Environment Variable với tên `API_KEY`.
+   - **Chạy cục bộ:** Tạo file `.env.local` và thêm dòng: `API_KEY=mã_của_bạn`.
+
+## Chạy dự án
+1. `npm install`
+2. `npm run dev`
