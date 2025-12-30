@@ -19,7 +19,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    minify: 'terser',
+    minify: 'esbuild', // Sử dụng esbuild thay vì terser để tránh lỗi thiếu dependency
     cssCodeSplit: true,
     rollupOptions: {
       output: {
