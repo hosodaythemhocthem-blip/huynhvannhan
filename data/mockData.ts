@@ -46,18 +46,5 @@ export const MOCK_COURSES: Course[] = [
     students: 210,
     progress: 15,
     modules: []
-  },
-  {
-    id: 'course-3',
-    title: 'Ôn thi THPT Quốc Gia 2025',
-    instructor: 'Thầy Huỳnh Văn Nhẫn',
-    description: 'Tổng hợp đề thi thử và các mẹo giải toán nhanh bằng máy tính cầm tay.',
-    thumbnail: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&q=80&w=800',
-    category: 'Luyện thi',
-    level: 'Trung cấp',
-    rating: 5.0,
-    students: 540,
-    progress: 0,
-    modules: []
   }
 ];

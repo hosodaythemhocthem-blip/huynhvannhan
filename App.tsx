@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, User, GraduationCap, Briefcase, Settings, UserCircle, FileText, CloudCheck, CloudOff, Loader2
+  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, User, GraduationCap, Briefcase, Settings, UserCircle, FileText, Cloud, CloudOff, Loader2
 } from 'lucide-react';
 import { TabType, Exam, UserRole, TeacherAccount, StudentAccount, Class, Grade } from './types';
 import ExamCard from './components/ExamCard';
@@ -55,7 +55,6 @@ const App: React.FC = () => {
     }
   }, [teacher, student]);
 
-  // Hàm đồng bộ dữ liệu tổng thể lên Cloud
   const syncToCloud = useCallback(async () => {
     const user = teacher || student;
     if (!user) return;
@@ -63,7 +62,6 @@ const App: React.FC = () => {
     setSyncStatus('syncing');
     const syncId = SyncService.generateSyncId(user.username);
     
-    // Gom tất cả dữ liệu cần bảo vệ
     const dataToSync = {
       exams: teacher ? JSON.parse(localStorage.getItem(`exams_${user.username}`) || '[]') : [],
       classes: teacher ? JSON.parse(localStorage.getItem(`classes_${user.username}`) || '[]') : [],
@@ -101,8 +99,6 @@ const App: React.FC = () => {
     setExams(updatedExams);
     localStorage.setItem(`exams_${teacher.username}`, JSON.stringify(updatedExams));
     setIsEditorOpen(false);
-    
-    // Tự động sao lưu sau khi lưu thành công
     await syncToCloud();
   };
 
@@ -125,7 +121,6 @@ const App: React.FC = () => {
       setStudent(data);
       localStorage.setItem('current_student', JSON.stringify(data));
     }
-    // Sau khi đăng nhập, hệ thống sẽ tự động Pull dữ liệu (Xử lý trong LoginScreen)
   };
 
   const handleLogout = () => {
@@ -147,10 +142,9 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-inner relative">
             <UserCircle size={32} />
-            {/* Chỉ báo đồng bộ */}
             <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
                {syncStatus === 'syncing' ? <Loader2 size={14} className="text-blue-500 animate-spin" /> : 
-                syncStatus === 'synced' ? <CloudCheck size={14} className="text-emerald-500" /> : 
+                syncStatus === 'synced' ? <Cloud size={14} className="text-emerald-500" /> : 
                 <CloudOff size={14} className="text-red-500" />}
             </div>
           </div>
