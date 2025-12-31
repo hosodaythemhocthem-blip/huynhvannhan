@@ -1,32 +1,27 @@
 // services/firebase.ts
-
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-/**
- * Cấu hình Firebase
- * Dùng biến môi trường để chạy được trên Vercel
- * (KHÔNG hard-code key)
- */
+// Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyDzLBvFEDEjTlvP-bYGE8gxB7Ce6-KwcXw",
+  authDomain: "hvnn-8c48e.firebaseapp.com",
+  projectId: "hvnn-8c48e",
+  storageBucket: "hvnn-8c48e.appspot.com", // SỬA CHUẨN
+  messagingSenderId: "493379893878",
+  appId: "1:493379893878:web:6b5ad4930c220d12fafd57",
+  measurementId: "G-VBHS51JLC3",
 };
 
-/**
- * Tránh lỗi Firebase initialize nhiều lần
- * (xảy ra khi reload / Vercel / hot reload)
- */
-const app = getApps().length === 0
-  ? initializeApp(firebaseConfig)
-  : getApp();
+// Initialize Firebase (CHỈ 1 LẦN)
+export const app = initializeApp(firebaseConfig);
 
-/**
- * Firestore Database
- * Lưu dữ liệu vĩnh viễn, ai mở link cũng thấy
- */
+// Analytics: chỉ chạy phía trình duyệt
+export const analytics =
+  typeof window !== "undefined" ? getAnalytics(app) : null;
+
+// Firebase services dùng cho LMS
+export const auth = getAuth(app);
 export const db = getFirestore(app);
