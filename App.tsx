@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, GraduationCap, Briefcase, Settings, UserCircle, FileText, Cloud, CloudOff, Loader2,
-  CheckCircleIcon, RefreshCw
+  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, GraduationCap, FileText, Cloud, CloudOff, RefreshCw, CheckCircle
 } from 'lucide-react';
 import { TabType, Exam, UserRole, TeacherAccount, Class } from './types';
 import ExamCard from './components/ExamCard';
@@ -12,8 +11,6 @@ import ClassManagement from './components/ClassManagement';
 import GradeManagement from './components/GradeManagement';
 import GameManagement from './components/GameManagement';
 import StudentQuiz from './components/StudentQuiz';
-import StudentDashboard from './components/StudentDashboard';
-import AdminDashboard from './components/AdminDashboard';
 import { SyncService } from './services/syncService';
 import { FIREBASE_CONFIG } from './services/firebase';
 
@@ -29,7 +26,6 @@ const App: React.FC = () => {
   const [editorMode, setEditorMode] = useState<'standard' | 'thpt'>('standard');
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [previewingExam, setPreviewingExam] = useState<Exam | null>(null);
-  const [assigningExam, setAssigningExam] = useState<Exam | null>(null); 
   
   const [exams, setExams] = useState<Exam[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -37,24 +33,26 @@ const App: React.FC = () => {
 
   const isFirebaseConfigured = !!FIREBASE_CONFIG.apiKey;
 
-  // Tải dữ liệu từ Firebase ngay khi vào App
   const loadFromCloud = useCallback(async (username: string) => {
+    if (!isFirebaseConfigured) return;
     setSyncStatus('syncing');
-    const data = await SyncService.pullData(SyncService.generateSyncId(username));
-    if (data) {
-      if (data.exams) {
-        setExams(data.exams);
-        localStorage.setItem(`exams_${username}`, JSON.stringify(data.exams));
+    try {
+      const data = await SyncService.pullData(SyncService.generateSyncId(username));
+      if (data) {
+        if (data.exams) {
+          setExams(data.exams);
+          localStorage.setItem(`exams_${username}`, JSON.stringify(data.exams));
+        }
+        if (data.classes) {
+          setClasses(data.classes);
+          localStorage.setItem(`classes_${username}`, JSON.stringify(data.classes));
+        }
+        setSyncStatus('synced');
       }
-      if (data.classes) {
-        setClasses(data.classes);
-        localStorage.setItem(`classes_${username}`, JSON.stringify(data.classes));
-      }
-      setSyncStatus('synced');
-    } else {
+    } catch (e) {
       setSyncStatus('error');
     }
-  }, []);
+  }, [isFirebaseConfigured]);
 
   useEffect(() => {
     if (teacher) {
@@ -85,14 +83,15 @@ const App: React.FC = () => {
     if (editingExam) {
       updatedExams = exams.map(e => e.id === editingExam.id ? { ...e, ...data } as Exam : e);
     } else {
-      const newExam = { 
-        ...data, 
+      const newExam: Exam = { 
         id: `DE${Date.now().toString().slice(-4)}`, 
+        title: data.title || 'Đề thi không tên',
         createdAt: new Date().toLocaleDateString('vi-VN'),
         questionCount: data.questions?.length || 0,
+        questions: data.questions || [],
         isLocked: false,
         assignedClassIds: []
-      } as Exam;
+      };
       updatedExams = [newExam, ...exams];
     }
     setExams(updatedExams);
@@ -138,8 +137,8 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-extrabold text-slate-800">Thầy: {teacher?.name || 'Huỳnh Văn Nhẫn'}</h1>
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${syncStatus === 'synced' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                {syncStatus === 'syncing' ? <RefreshCw size={10} className="animate-spin" /> : <CheckCircleIcon size={10} />}
-                {syncStatus === 'synced' ? 'Đã kết nối Cloud' : 'Đang đồng bộ...'}
+                {syncStatus === 'syncing' ? <RefreshCw size={10} className="animate-spin" /> : <CheckCircle size={10} />}
+                {syncStatus === 'synced' ? 'Đã đồng bộ' : 'Đang xử lý'}
               </div>
             </div>
             <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{teacher?.school || 'THCS LONG TRUNG'}</p>
@@ -171,7 +170,7 @@ const App: React.FC = () => {
             <div className="space-y-8">
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
-                  <FileText className="text-blue-600" /> Quản lý bài kiểm tra
+                  <FileText className="text-blue-600" /> Danh sách bài tập
                 </h3>
                 <button 
                   onClick={() => { setEditorMode('standard'); setEditingExam(null); setIsEditorOpen(true); }} 
@@ -184,26 +183,34 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {exams.length > 0 ? (
                   exams.map(exam => (
-                    <ExamCard key={exam.id} exam={exam} onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }} onDelete={handleDeleteExam} onView={setPreviewingExam} onToggleLock={() => {}} onAssign={setAssigningExam} />
+                    <ExamCard 
+                      key={exam.id} 
+                      exam={exam} 
+                      onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }} 
+                      onDelete={handleDeleteExam} 
+                      onView={setPreviewingExam} 
+                      onToggleLock={() => {}} 
+                      onAssign={() => {}} 
+                    />
                   ))
                 ) : (
                   <div className="col-span-full py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
                     <CloudOff size={48} className="mb-4 opacity-20" />
-                    <p className="font-bold">Chưa có dữ liệu. Hãy soạn đề thi đầu tiên!</p>
+                    <p className="font-bold">Chưa có bài tập nào. Thầy hãy soạn bài mới nhé!</p>
                   </div>
                 )}
               </div>
             </div>
           )}
-          {activeTab === TabType.CLASSES && teacher && <ClassManagement teacher={teacher} />}
-          {activeTab === TabType.GRADES && <GradeManagement classes={classes} exams={exams} />}
-          {activeTab === TabType.GAMES && <GameManagement classes={classes} />}
+          {activeTab === TabType.CLASSES && teacher && <ClassManagement />}
+          {activeTab === TabType.GRADES && <GradeManagement />}
+          {activeTab === TabType.GAMES && <GameManagement />}
         </main>
       </div>
 
       <footer className="py-8 px-8 text-center bg-white border-t border-slate-100 mt-auto">
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-          Hệ thống được phát triển bởi Thầy <span className="text-blue-600">Huỳnh Văn Nhẫn</span>
+          Phát triển chuyên biệt cho Thầy <span className="text-blue-600">Huỳnh Văn Nhẫn</span>
         </p>
       </footer>
 
@@ -225,7 +232,7 @@ const TabButton: React.FC<{ active: boolean, label: string, icon: React.ReactNod
     className={`flex items-center gap-3 px-8 py-5 font-black text-xs transition-all relative tracking-widest whitespace-nowrap ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
   >
     {icon} {label}
-    {active && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full"></div>}
+    {active && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full shadow-[0_-4px_10px_rgba(37,99,235,0.3)]"></div>}
   </button>
 );
 
