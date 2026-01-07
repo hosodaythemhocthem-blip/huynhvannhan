@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, User, GraduationCap, Briefcase, Settings, UserCircle, FileText, Cloud, CloudOff, Loader2
+  BookOpen, Plus, LogOut, Users, BarChart, Gamepad2, GraduationCap, Briefcase, Settings, UserCircle, FileText, Cloud, CloudOff, Loader2,
+  CheckCircleIcon, RefreshCw
 } from 'lucide-react';
-import { TabType, Exam, UserRole, TeacherAccount, StudentAccount, Class, Grade } from './types';
+import { TabType, Exam, UserRole, TeacherAccount, Class } from './types';
 import ExamCard from './components/ExamCard';
 import ExamEditor from './components/ExamEditor';
 import LoginScreen from './components/LoginScreen';
@@ -14,6 +15,7 @@ import StudentQuiz from './components/StudentQuiz';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import { SyncService } from './services/syncService';
+import { FIREBASE_CONFIG } from './services/firebase';
 
 const App: React.FC = () => {
   const [userRole, setUserRole] = useState<UserRole>(() => (localStorage.getItem('current_role') as UserRole) || UserRole.GUEST);
@@ -21,11 +23,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('current_teacher');
     return saved ? JSON.parse(saved) : null;
   });
-  const [student, setStudent] = useState<StudentAccount | null>(() => {
-    const saved = localStorage.getItem('current_student');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  
   const [activeTab, setActiveTab] = useState<TabType>(TabType.EXAMS);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'standard' | 'thpt'>('standard');
@@ -37,48 +35,49 @@ const App: React.FC = () => {
   const [classes, setClasses] = useState<Class[]>([]);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
 
-  const displayName = student?.name || teacher?.name || 'Người dùng';
+  const isFirebaseConfigured = !!FIREBASE_CONFIG.apiKey;
 
-  const loadLocalData = useCallback(() => {
-    const user = teacher || student;
-    if (user) {
-      const savedClasses = JSON.parse(localStorage.getItem(`classes_${user.username}`) || '[]');
-      setClasses(savedClasses);
-      if (teacher) {
-        const savedExams = JSON.parse(localStorage.getItem(`exams_${teacher.username}`) || '[]');
-        setExams(savedExams);
+  // Tải dữ liệu từ Firebase ngay khi vào App
+  const loadFromCloud = useCallback(async (username: string) => {
+    setSyncStatus('syncing');
+    const data = await SyncService.pullData(SyncService.generateSyncId(username));
+    if (data) {
+      if (data.exams) {
+        setExams(data.exams);
+        localStorage.setItem(`exams_${username}`, JSON.stringify(data.exams));
       }
-      if (student) {
-        const teacherExams = JSON.parse(localStorage.getItem(`exams_${student.teacherUsername}`) || '[]');
-        setExams(teacherExams);
+      if (data.classes) {
+        setClasses(data.classes);
+        localStorage.setItem(`classes_${username}`, JSON.stringify(data.classes));
       }
+      setSyncStatus('synced');
+    } else {
+      setSyncStatus('error');
     }
-  }, [teacher, student]);
+  }, []);
+
+  useEffect(() => {
+    if (teacher) {
+      loadFromCloud(teacher.username);
+    }
+  }, [teacher, loadFromCloud]);
 
   const syncToCloud = useCallback(async () => {
-    const user = teacher || student;
-    if (!user) return;
+    if (!teacher || !isFirebaseConfigured) return;
 
     setSyncStatus('syncing');
-    const syncId = SyncService.generateSyncId(user.username);
+    const syncId = SyncService.generateSyncId(teacher.username);
     
     const dataToSync = {
-      exams: teacher ? JSON.parse(localStorage.getItem(`exams_${user.username}`) || '[]') : [],
-      classes: teacher ? JSON.parse(localStorage.getItem(`classes_${user.username}`) || '[]') : [],
-      grades: JSON.parse(localStorage.getItem('grades') || '[]'),
-      student_accounts: JSON.parse(localStorage.getItem('student_accounts') || '[]'),
+      teacherName: teacher.name,
+      exams: JSON.parse(localStorage.getItem(`exams_${teacher.username}`) || '[]'),
+      classes: JSON.parse(localStorage.getItem(`classes_${teacher.username}`) || '[]'),
       lastSync: new Date().toISOString()
     };
 
     const success = await SyncService.pushData(syncId, dataToSync);
     setSyncStatus(success ? 'synced' : 'error');
-  }, [teacher, student]);
-
-  useEffect(() => {
-    loadLocalData();
-    window.addEventListener('storage', loadLocalData);
-    return () => window.removeEventListener('storage', loadLocalData);
-  }, [loadLocalData]);
+  }, [teacher, isFirebaseConfigured]);
 
   const handleSaveExam = async (data: Partial<Exam>) => {
     if (!teacher) return;
@@ -88,7 +87,7 @@ const App: React.FC = () => {
     } else {
       const newExam = { 
         ...data, 
-        id: `TN${Date.now().toString().slice(-4)}`, 
+        id: `DE${Date.now().toString().slice(-4)}`, 
         createdAt: new Date().toLocaleDateString('vi-VN'),
         questionCount: data.questions?.length || 0,
         isLocked: false,
@@ -103,7 +102,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteExam = async (id: string) => {
-    if (!teacher || !window.confirm("Xóa đề thi này?")) return;
+    if (!teacher || !window.confirm("Thầy có chắc chắn muốn xóa đề thi này không?")) return;
     const updatedExams = exams.filter(e => e.id !== id);
     setExams(updatedExams);
     localStorage.setItem(`exams_${teacher.username}`, JSON.stringify(updatedExams));
@@ -117,111 +116,94 @@ const App: React.FC = () => {
       setTeacher(data);
       localStorage.setItem('current_teacher', JSON.stringify(data));
     }
-    if (role === UserRole.STUDENT && data) {
-      setStudent(data);
-      localStorage.setItem('current_student', JSON.stringify(data));
-    }
   };
 
   const handleLogout = () => {
     setUserRole(UserRole.GUEST);
     setTeacher(null);
-    setStudent(null);
-    localStorage.removeItem('current_role');
-    localStorage.removeItem('current_teacher');
-    localStorage.removeItem('current_student');
+    localStorage.clear();
   };
 
   if (userRole === UserRole.GUEST) return <LoginScreen onSelectRole={handleSelectRole} />;
-  if (userRole === UserRole.ADMIN) return <AdminDashboard onLogout={handleLogout} />;
-  if (previewingExam) return <StudentQuiz studentName={displayName} exam={previewingExam} onFinish={() => {}} onExit={() => setPreviewingExam(null)} />;
+  if (previewingExam) return <StudentQuiz exam={previewingExam} onExit={() => setPreviewingExam(null)} />;
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-inner relative">
-            <UserCircle size={32} />
-            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-               {syncStatus === 'syncing' ? <Loader2 size={14} className="text-blue-500 animate-spin" /> : 
-                syncStatus === 'synced' ? <Cloud size={14} className="text-emerald-500" /> : 
-                <CloudOff size={14} className="text-red-500" />}
-            </div>
+          <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
+            <GraduationCap size={28} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">GV: {teacher?.name || 'Huỳnh Văn Nhẫn'}</h1>
-              {syncStatus === 'synced' && <span className="text-[9px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-black uppercase">Cloud Secured</span>}
+              <h1 className="text-xl font-extrabold text-slate-800">Thầy: {teacher?.name || 'Huỳnh Văn Nhẫn'}</h1>
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${syncStatus === 'synced' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                {syncStatus === 'syncing' ? <RefreshCw size={10} className="animate-spin" /> : <CheckCircleIcon size={10} />}
+                {syncStatus === 'synced' ? 'Đã kết nối Cloud' : 'Đang đồng bộ...'}
+              </div>
             </div>
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{teacher?.school || 'THCS Long Trung'}</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{teacher?.school || 'THCS LONG TRUNG'}</p>
           </div>
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-5 py-2 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-100 transition-all">
-            <Settings size={16} /> Thông tin
+          <button onClick={syncToCloud} title="Đồng bộ thủ công" className="p-2.5 bg-slate-50 text-slate-500 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100">
+            <Cloud size={20} />
           </button>
-          <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2 bg-red-50 text-red-500 border border-red-100 rounded-lg text-sm font-bold hover:bg-red-500 hover:text-white transition-all group">
-            <LogOut size={16} className="group-hover:translate-x-1 transition-transform" /> Thoát
+          <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-black hover:bg-red-600 hover:text-white transition-all border border-red-100">
+            <LogOut size={18} /> THOÁT
           </button>
         </div>
       </header>
 
       <div className="flex-1 flex flex-col">
-        {userRole === UserRole.STUDENT && student ? (
-          <div className="p-8"><StudentDashboard student={student} exams={exams} onTakeExam={setPreviewingExam} /></div>
-        ) : (
-          <div className="flex flex-col h-full">
-            <div className="bg-white border-b border-slate-200">
-               <div className="flex max-w-7xl mx-auto px-4">
-                  <TabButton active={activeTab === TabType.EXAMS} label="Quản Lý Đề Thi" icon={<BookOpen size={18} />} onClick={() => setActiveTab(TabType.EXAMS)} />
-                  <TabButton active={activeTab === TabType.CLASSES} label="Quản Lý Lớp Học" icon={<Users size={18} />} onClick={() => setActiveTab(TabType.CLASSES)} />
-                  <TabButton active={activeTab === TabType.GRADES} label="Quản Lý Điểm" icon={<BarChart size={18} />} onClick={() => setActiveTab(TabType.GRADES)} />
-                  <TabButton active={activeTab === TabType.GAMES} label="Trò Chơi" icon={<Gamepad2 size={18} />} onClick={() => setActiveTab(TabType.GAMES)} />
-               </div>
-            </div>
+        <div className="bg-white border-b border-slate-200">
+           <div className="flex max-w-7xl mx-auto px-4 overflow-x-auto no-scrollbar">
+              <TabButton active={activeTab === TabType.EXAMS} label="KHO ĐỀ THI" icon={<BookOpen size={18} />} onClick={() => setActiveTab(TabType.EXAMS)} />
+              <TabButton active={activeTab === TabType.CLASSES} label="LỚP HỌC" icon={<Users size={18} />} onClick={() => setActiveTab(TabType.CLASSES)} />
+              <TabButton active={activeTab === TabType.GRADES} label="BẢNG ĐIỂM" icon={<BarChart size={18} />} onClick={() => setActiveTab(TabType.GRADES)} />
+              <TabButton active={activeTab === TabType.GAMES} label="TRÒ CHƠI" icon={<Gamepad2 size={18} />} onClick={() => setActiveTab(TabType.GAMES)} />
+           </div>
+        </div>
 
-            <div className="max-w-7xl mx-auto w-full p-8 flex-1">
-              {activeTab === TabType.EXAMS && (
-                <div className="space-y-8">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-black text-slate-800 italic uppercase tracking-wider">Kho Đề Thi</h3>
-                    <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => { setEditorMode('thpt'); setEditingExam(null); setIsEditorOpen(true); }} 
-                        className="flex items-center gap-3 bg-white border border-slate-200 text-slate-600 px-8 py-3.5 rounded-2xl font-black shadow-sm hover:bg-slate-50 transition-all uppercase text-xs tracking-widest active:scale-95"
-                      >
-                        <FileText size={18} className="text-red-500" /> ĐỀ THPT
-                      </button>
-                      <button 
-                        onClick={() => { setEditorMode('standard'); setEditingExam(null); setIsEditorOpen(true); }} 
-                        className="flex items-center gap-3 bg-blue-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all uppercase text-xs tracking-widest active:scale-95"
-                      >
-                        <Plus size={20} /> Soạn Đề Mới (2025)
-                      </button>
-                    </div>
+        <main className="max-w-7xl mx-auto w-full p-8">
+          {activeTab === TabType.EXAMS && (
+            <div className="space-y-8">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tight">
+                  <FileText className="text-blue-600" /> Quản lý bài kiểm tra
+                </h3>
+                <button 
+                  onClick={() => { setEditorMode('standard'); setEditingExam(null); setIsEditorOpen(true); }} 
+                  className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95"
+                >
+                  <Plus size={20} /> SOẠN ĐỀ MỚI
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {exams.length > 0 ? (
+                  exams.map(exam => (
+                    <ExamCard key={exam.id} exam={exam} onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }} onDelete={handleDeleteExam} onView={setPreviewingExam} onToggleLock={() => {}} onAssign={setAssigningExam} />
+                  ))
+                ) : (
+                  <div className="col-span-full py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
+                    <CloudOff size={48} className="mb-4 opacity-20" />
+                    <p className="font-bold">Chưa có dữ liệu. Hãy soạn đề thi đầu tiên!</p>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {exams.map(exam => (
-                      <ExamCard key={exam.id} exam={exam} onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }} onDelete={handleDeleteExam} onView={setPreviewingExam} onToggleLock={() => {}} onAssign={setAssigningExam} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {activeTab === TabType.CLASSES && teacher && <ClassManagement teacher={teacher} />}
-              {activeTab === TabType.GRADES && <GradeManagement classes={classes} exams={exams} />}
-              {activeTab === TabType.GAMES && <GameManagement classes={classes} />}
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          {activeTab === TabType.CLASSES && teacher && <ClassManagement teacher={teacher} />}
+          {activeTab === TabType.GRADES && <GradeManagement classes={classes} exams={exams} />}
+          {activeTab === TabType.GAMES && <GameManagement classes={classes} />}
+        </main>
       </div>
 
-      <footer className="py-6 px-8 text-center bg-white border-t border-slate-100 mt-auto">
-        <p className="text-xs font-black text-slate-400 italic flex items-center justify-center gap-2">
-          <Briefcase size={14} className="text-blue-600" />
-          Thiết kế bởi Thầy <span className="text-slate-700 not-italic uppercase">Huỳnh Văn Nhẫn</span>
-          <GraduationCap size={14} className="text-slate-400" />
+      <footer className="py-8 px-8 text-center bg-white border-t border-slate-100 mt-auto">
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+          Hệ thống được phát triển bởi Thầy <span className="text-blue-600">Huỳnh Văn Nhẫn</span>
         </p>
       </footer>
 
@@ -240,7 +222,7 @@ const App: React.FC = () => {
 const TabButton: React.FC<{ active: boolean, label: string, icon: React.ReactNode, onClick: () => void }> = ({ active, label, icon, onClick }) => (
   <button 
     onClick={onClick} 
-    className={`flex items-center gap-3 px-10 py-5 font-bold text-sm transition-all relative ${active ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+    className={`flex items-center gap-3 px-8 py-5 font-black text-xs transition-all relative tracking-widest whitespace-nowrap ${active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
   >
     {icon} {label}
     {active && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full"></div>}
