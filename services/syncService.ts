@@ -1,59 +1,74 @@
-import { db } from './firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-/**
- * Dịch vụ đồng bộ hóa Cloud - Tối ưu cho Thầy Nhẫn
- */
+import { db } from './firebase';
+import { 
+  doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, serverTimestamp 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
 export const SyncService = {
-  /**
-   * Tạo ID định danh dựa trên tên đăng nhập (ví dụ: user_data_nhan)
-   */
   generateSyncId: (username: string): string => {
     return `user_data_${username.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}`;
   },
 
-  /**
-   * Đẩy dữ liệu lên Cloud Firestore
-   */
-  pushData: async (syncId: string, data: any): Promise<boolean> => {
-    if (!navigator.onLine) return false;
-
+  // Lưu hoặc cập nhật tài khoản (Giáo viên/Học sinh)
+  saveAccount: async (type: 'teachers' | 'students', data: any) => {
     try {
-      const docRef = doc(db, 'app_sync', syncId);
-      
-      // Lưu payload và ghi chú thời gian cập nhật
+      console.log("Đang gửi dữ liệu lên Firebase:", data);
+      const docRef = doc(db, type, data.username);
       await setDoc(docRef, {
-        payload: data,
-        teacherName: data.teacherName || "Thầy Nhẫn",
-        updatedAt: serverTimestamp(),
-        platform: "Vercel-Production"
+        ...data,
+        updatedAt: serverTimestamp()
       }, { merge: true });
-
-      console.log("✅ [Firebase] Dữ liệu đã được lưu an toàn!");
       return true;
-    } catch (error) {
-      console.error("❌ [Firebase] Lỗi đồng bộ:", error);
+    } catch (e) {
+      console.error("Lỗi chi tiết từ Firebase:", e);
       return false;
     }
   },
 
-  /**
-   * Lấy dữ liệu mới nhất từ Cloud
-   */
+  // Lấy danh sách giáo viên chờ duyệt
+  getPendingTeachers: async () => {
+    try {
+      const q = query(collection(db, "teachers"), where("status", "==", "PENDING"));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+      console.error("Error fetching pending teachers:", e);
+      return [];
+    }
+  },
+
+  // Phê duyệt hoặc từ chối giáo viên
+  updateTeacherStatus: async (username: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      const docRef = doc(db, "teachers", username);
+      await updateDoc(docRef, { status });
+      return true;
+    } catch (e) {
+      console.error("Error updating status:", e);
+      return false;
+    }
+  },
+
+  pushData: async (syncId: string, data: any): Promise<boolean> => {
+    try {
+      const docRef = doc(db, 'app_sync', syncId);
+      await setDoc(docRef, {
+        payload: data,
+        updatedAt: serverTimestamp(),
+        source: "Vercel-App"
+      }, { merge: true });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
+
   pullData: async (syncId: string): Promise<any> => {
-    if (!navigator.onLine) return null;
-    
     try {
       const docRef = doc(db, 'app_sync', syncId);
       const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const cloudData = docSnap.data();
-        return cloudData.payload || null;
-      }
-      return null;
+      return docSnap.exists() ? docSnap.data().payload : null;
     } catch (error) {
-      console.error("❌ [Firebase] Lỗi tải dữ liệu:", error);
       return null;
     }
   }
