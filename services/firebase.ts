@@ -1,22 +1,20 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+// Sử dụng mã API trực tiếp của Thầy để Vercel không báo lỗi khi build
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyDzLBvFEDEjTlvP-bYGE8gxB7Ce6-KwcXw",
+  authDomain: "hvnn-8c48e.firebaseapp.com",
+  projectId: "hvnn-8c48e",
+  storageBucket: "hvnn-8c48e.firebasestorage.app",
+  messagingSenderId: "493379893878",
+  appId: "1:493379893878:web:6b5ad4930c220d12fafd57",
+  measurementId: "G-VBHS51JLC3"
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-export const analytics =
-  typeof window !== "undefined" ? getAnalytics(app) : null;
-
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+export { db };
+export const FIREBASE_CONFIG = firebaseConfig;
