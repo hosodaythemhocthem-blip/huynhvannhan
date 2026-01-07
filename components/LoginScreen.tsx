@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { 
-  GraduationCap, ArrowRight, UserCircle, Lock, X, ShieldCheck, CheckCircle2, 
-  School, Briefcase, Settings, Loader2, Check, Search, Info
+  GraduationCap, ArrowRight, UserCircle, X, ShieldCheck, CheckCircle2, 
+  Briefcase, Loader2, Info
 } from 'lucide-react';
-import { UserRole, TeacherAccount, StudentAccount } from '../types';
+import { UserRole } from '../types';
 import { SyncService } from '../services/syncService';
 import { db } from '../services/firebase';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -37,8 +38,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
     setMessage('');
 
     try {
-      const newAccount: any = {
-        username: username.trim().toLowerCase(),
+      // Chuẩn hóa dữ liệu trước khi gửi
+      const cleanUsername = username.trim().toLowerCase();
+      if (!cleanUsername || !password) {
+        throw new Error("Vui lòng điền đầy đủ thông tin");
+      }
+
+      const newAccount = {
+        username: cleanUsername,
         password: password.trim(),
         name: fullName.trim(),
         school: schoolName.trim(),
@@ -51,21 +58,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
       const success = await SyncService.saveAccount('teachers', newAccount);
       
       if (success) {
-        setMessage(`Đăng ký thành công! Tài khoản "${username}" đang chờ Thầy Nhẫn phê duyệt.`);
-        // Chuyển về màn hình đăng nhập sau 2 giây để người dùng thấy thông báo thành công
+        setMessage(`Đăng ký thành công! Đang chờ Thầy Nhẫn phê duyệt.`);
         setTimeout(() => {
           setView('teacher_login');
-          setUsername(newAccount.username);
+          setUsername(cleanUsername);
           setPassword('');
           setIsLoggingIn(false);
         }, 2000);
       } else {
-        setError('Không thể kết nối Cloud. Vui lòng kiểm tra mạng.');
+        setError('Kết nối Cloud thất bại. Thầy hãy kiểm tra lại cấu hình Firebase.');
         setIsLoggingIn(false);
       }
-    } catch (err) {
-      console.error(err);
-      setError('Đã xảy ra lỗi ngoài ý muốn. Vui lòng thử lại.');
+    } catch (err: any) {
+      setError(err.message || 'Lỗi hệ thống. Thầy vui lòng thử lại.');
       setIsLoggingIn(false);
     }
   };
@@ -73,7 +78,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
   const handleTeacherLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoggingIn) return;
-
     setIsLoggingIn(true);
     setError('');
 
@@ -86,23 +90,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
         if (userData.password === password.trim()) {
           if (userData.status === 'APPROVED') {
             onSelectRole(UserRole.TEACHER, userData);
-          } else if (userData.status === 'REJECTED') {
-            setError('Rất tiếc, yêu cầu của bạn đã bị từ chối.');
-            setIsLoggingIn(false);
           } else {
-            setError('Tài khoản này đang chờ Admin (Thầy Nhẫn) phê duyệt.');
+            setError(userData.status === 'REJECTED' ? 'Tài khoản đã bị từ chối.' : 'Tài khoản đang chờ phê duyệt.');
             setIsLoggingIn(false);
           }
         } else {
-          setError('Mật khẩu không đúng. Vui lòng kiểm tra lại.');
+          setError('Mật khẩu không đúng.');
           setIsLoggingIn(false);
         }
       } else {
-        setError('Tài khoản không tồn tại. Thầy vui lòng Đăng ký trước.');
+        setError('Tài khoản không tồn tại.');
         setIsLoggingIn(false);
       }
     } catch (err) {
-      setError('Lỗi kết nối Firebase. Thầy hãy thử lại sau.');
+      setError('Lỗi xác thực Cloud.');
       setIsLoggingIn(false);
     }
   };
@@ -110,24 +111,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
-    setError('');
-
-    // Logic kiểm tra Admin đơn giản
     setTimeout(() => {
-      if (username.trim().toLowerCase() === 'huynhvannhan' && password === '12345678') {
+      if (username === 'huynhvannhan' && password === '12345678') {
         onSelectRole(UserRole.ADMIN);
       } else {
-        setError('Thông tin Admin không chính xác.');
+        setError('Thông tin Admin sai.');
         setIsLoggingIn(false);
       }
-    }, 800);
-  };
-
-  const handleLogout = () => {
-    setView('selection');
-    resetForm();
-    setUsername('');
-    setPassword('');
+    }, 500);
   };
 
   return (
@@ -135,8 +126,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
       {view === 'selection' && (
         <div className="w-full max-w-4xl flex flex-col items-center">
           <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
-             <h1 className="text-5xl font-black text-[#1e293b] mb-3 tracking-tight uppercase italic">Toán Học Phổ Thông</h1>
-             <p className="text-blue-600 font-bold uppercase tracking-[0.25em] text-[10px]">Hệ thống đồng bộ Firebase & Vercel</p>
+             <h1 className="text-5xl font-black text-[#1e293b] mb-3 tracking-tight uppercase italic">Toán Học Cloud</h1>
+             <p className="text-blue-600 font-bold uppercase tracking-[0.25em] text-[10px]">Hệ thống Huỳnh Văn Nhẫn</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 w-full max-w-3xl">
@@ -145,8 +136,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
                 <Briefcase size={40} />
               </div>
               <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Giáo Viên</h2>
-              <p className="text-slate-400 text-sm mb-8 font-medium italic">Đăng nhập để quản lý kho đề thi Cloud.</p>
-              <div className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest shadow-lg shadow-blue-100 transition-colors">Vào hệ thống <ArrowRight size={18} /></div>
+              <div className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest shadow-lg shadow-blue-100">Vào cổng <ArrowRight size={18} /></div>
             </div>
 
             <div onClick={() => { setView('student_login'); resetForm(); }} className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 flex flex-col items-center text-center group hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer">
@@ -154,16 +144,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
                 <GraduationCap size={40} />
               </div>
               <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Học Sinh</h2>
-              <p className="text-slate-400 text-sm mb-8 font-medium italic">Tham gia luyện tập và làm bài thi.</p>
-              <div className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest shadow-lg shadow-orange-100">Luyện tập ngay <ArrowRight size={18} /></div>
+              <div className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest shadow-lg shadow-orange-100">Luyện tập <ArrowRight size={18} /></div>
             </div>
           </div>
 
-          <button 
-            onClick={() => { setView('admin_login'); resetForm(); }}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl"
-          >
-            <ShieldCheck size={16} /> QUẢN TRỊ VIÊN
+          <button onClick={() => { setView('admin_login'); resetForm(); }} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl">
+            <ShieldCheck size={16} /> ADMIN
           </button>
         </div>
       )}
@@ -171,7 +157,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
       {view !== 'selection' && (
         <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="bg-white rounded-[40px] p-10 shadow-2xl border border-slate-50 relative">
-            <button onClick={handleLogout} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24} /></button>
+            <button onClick={() => setView('selection')} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500"><X size={24} /></button>
             
             <div className="flex items-center gap-3 mb-10">
                <div className={`p-3 rounded-2xl text-white ${view === 'admin_login' ? 'bg-slate-900' : 'bg-blue-600'}`}>
@@ -188,11 +174,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
             <form onSubmit={view === 'teacher_register' ? handleTeacherRegister : (view === 'admin_login' ? handleAdminLogin : handleTeacherLogin)} className="space-y-5">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên đăng nhập</label>
-                <input required disabled={isLoggingIn} type="text" className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 outline-none font-bold text-sm focus:border-blue-500 transition-all disabled:opacity-50" value={username} onChange={(e) => setUsername(e.target.value)} />
+                <input required disabled={isLoggingIn} type="text" className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 outline-none font-bold text-sm focus:border-blue-500 disabled:opacity-50" value={username} onChange={(e) => setUsername(e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
-                <input required disabled={isLoggingIn} type="password" title="password" className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 outline-none font-bold text-sm focus:border-blue-500 transition-all disabled:opacity-50" value={password} onChange={(e) => setPassword(e.target.value)} />
+                <input required disabled={isLoggingIn} type="password" title="password" className="w-full px-5 py-3.5 rounded-2xl border border-slate-200 bg-slate-50 outline-none font-bold text-sm focus:border-blue-500 disabled:opacity-50" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
 
               {view === 'teacher_register' && (
@@ -208,9 +194,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
                 </>
               )}
 
-              <button disabled={isLoggingIn} type="submit" className={`w-full py-4.5 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl transition-all mt-4 flex items-center justify-center gap-2 ${view === 'admin_login' ? 'bg-slate-900 active:bg-black' : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-blue-100'} disabled:opacity-70`}>
+              <button disabled={isLoggingIn} type="submit" className={`w-full py-4.5 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl transition-all mt-4 flex items-center justify-center gap-2 ${view === 'admin_login' ? 'bg-slate-900' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} disabled:opacity-70`}>
                 {isLoggingIn ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isLoggingIn ? 'Đang xác thực...' : (view === 'teacher_register' ? 'Đăng ký và Chờ duyệt' : 'Vào hệ thống')}
+                {isLoggingIn ? 'Đang gửi Cloud...' : (view === 'teacher_register' ? 'Đăng ký ngay' : 'Vào hệ thống')}
               </button>
             </form>
 
@@ -221,7 +207,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSelectRole }) => {
                   onClick={() => { setView(view === 'teacher_login' ? 'teacher_register' : 'teacher_login'); resetForm(); }} 
                   className="text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-blue-600 transition-colors underline decoration-dotted"
                 >
-                  {view === 'teacher_login' ? 'Tạo tài khoản giáo viên mới' : 'Quay lại đăng nhập'}
+                  {view === 'teacher_login' ? 'Tạo tài khoản mới' : 'Quay lại đăng nhập'}
                 </button>
               )}
             </div>
