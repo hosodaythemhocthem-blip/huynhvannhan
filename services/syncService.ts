@@ -1,71 +1,59 @@
+import { db } from './firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 /**
- * Dịch vụ đồng bộ hóa đám mây (Cloud Sync Service) - Tối ưu cho Vercel Edge
+ * Dịch vụ đồng bộ hóa Cloud - Kết nối Vercel & Firebase hvnn-8c48e
  */
-
-const CLOUD_API_BASE = 'https://api.keyvalue.xyz';
-
-const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
-
 export const SyncService = {
-  generateSyncId: (username: string) => {
-    return `kienthuctoanhoc-v2-${username.toLowerCase()}`;
+  /**
+   * Tạo ID duy nhất cho mỗi giáo viên (Ví dụ: user_data_nhan)
+   */
+  generateSyncId: (username: string): string => {
+    return `user_data_${username.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}`;
   },
 
   /**
-   * Đẩy dữ liệu với cơ chế Retry thông minh hơn
+   * Đẩy toàn bộ dữ liệu (Đề thi, cấu hình) lên Firebase
    */
-  pushData: async (syncId: string, data: any, retries = 2) => {
+  pushData: async (syncId: string, data: any): Promise<boolean> => {
     if (!navigator.onLine) return false;
 
-    // Kiểm tra dữ liệu để tránh ghi đè dữ liệu rỗng lên mây (data integrity)
-    if (!data || (data.exams && data.exams.length === 0 && retries === 2)) {
-       console.log("Sync skipped: No new data to push.");
-    }
+    try {
+      // Lưu vào collection 'app_sync' trong Firestore
+      const docRef = doc(db, 'app_sync', syncId);
+      
+      await setDoc(docRef, {
+        payload: data,
+        teacherName: data.teacherName || "Huỳnh Văn Nhẫn",
+        lastUpdate: serverTimestamp(),
+        source: "Vercel-App"
+      }, { merge: true });
 
-    for (let i = 0; i <= retries; i++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout 8s
-
-        const response = await fetch(`${CLOUD_API_BASE}/${syncId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify({
-            payload: data,
-            updatedAt: new Date().toISOString(),
-            integrity: 'verified'
-          }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        if (response.ok) return true;
-      } catch (error) {
-        if (i === retries) console.error("Final sync attempt failed.");
-        await wait(1000 * (i + 1));
-      }
+      console.log("✅ Đã sao lưu lên Firebase hvnn-8c48e thành công!");
+      return true;
+    } catch (error) {
+      console.error("❌ Lỗi đồng bộ Firebase:", error);
+      return false;
     }
-    return false;
   },
 
-  pullData: async (syncId: string) => {
+  /**
+   * Lấy dữ liệu từ Cloud về khi Thầy đăng nhập hoặc làm mới trang
+   */
+  pullData: async (syncId: string): Promise<any> => {
     if (!navigator.onLine) return null;
     
     try {
-      const response = await fetch(`${CLOUD_API_BASE}/${syncId}`, {
-        cache: 'no-store', // Không dùng cache cũ của Vercel Edge
-        headers: { 'Pragma': 'no-cache' }
-      });
+      const docRef = doc(db, 'app_sync', syncId);
+      const docSnap = await getDoc(docRef);
       
-      if (response.ok) {
-        const text = await response.text();
-        if (!text || text === "null") return null;
-        const parsed = JSON.parse(text);
-        return parsed.payload || parsed;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return data.payload || null;
       }
       return null;
     } catch (error) {
+      console.error("❌ Lỗi tải dữ liệu Cloud:", error);
       return null;
     }
   }
