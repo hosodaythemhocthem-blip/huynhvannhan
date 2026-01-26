@@ -1,64 +1,69 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   collection,
+  onSnapshot,
   query,
   where,
-  doc,
   updateDoc,
+  doc,
   addDoc,
   serverTimestamp,
-  onSnapshot,
-  getDoc,
 } from "firebase/firestore";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "../services/firebase";
-import { UserRole } from "../types";
 
-type Teacher = {
+/* =========================
+   1. KIỂU DỮ LIỆU (TYPES)
+========================= */
+
+type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+interface Teacher {
   id: string;
-  fullName: string;
+  name: string;
   email: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-};
+  subject?: string;
+  status: ApprovalStatus;
+  createdAt?: any;
+}
 
-type Notification = {
+interface Notification {
   id: string;
   message: string;
   read: boolean;
+}
+
+/* =========================
+   2. STYLE NHẸ (INLINE)
+========================= */
+
+const th: React.CSSProperties = {
+  textAlign: "left",
+  padding: 12,
+  borderBottom: "1px solid #e5e7eb",
+  fontSize: 13,
+  textTransform: "uppercase",
+  color: "#475569",
 };
 
-export default function AdminDashboard() {
+const td: React.CSSProperties = {
+  padding: 12,
+  borderBottom: "1px solid #f1f5f9",
+  fontSize: 14,
+};
+
+/* =========================
+   3. COMPONENT CHÍNH
+========================= */
+
+const AdminDashboard: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ============================
-  // 1. BẢO VỆ QUYỀN ADMIN (FIX CHUẨN ROLE)
-  // ============================
-  useEffect(() => {
-    const auth = getAuth();
+  /* =========================
+     3.1 LOAD GIÁO VIÊN CHỜ DUYỆT (REALTIME)
+  ========================= */
 
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        alert("Bạn chưa đăng nhập");
-        window.location.href = "/login";
-        return;
-      }
-
-      const snap = await getDoc(doc(db, "users", user.uid));
-
-      if (!snap.exists() || snap.data().role !== UserRole.ADMIN) {
-        alert("Bạn không có quyền truy cập admin");
-        window.location.href = "/";
-      }
-    });
-
-    return () => unsub();
-  }, []);
-
-  // ============================
-  // 2. LOAD REALTIME TEACHERS PENDING
-  // ============================
   useEffect(() => {
     const q = query(
       collection(db, "teachers"),
@@ -70,7 +75,6 @@ export default function AdminDashboard() {
         id: d.id,
         ...(d.data() as Omit<Teacher, "id">),
       }));
-
       setTeachers(data);
       setLoading(false);
     });
@@ -78,9 +82,10 @@ export default function AdminDashboard() {
     return () => unsub();
   }, []);
 
-  // ============================
-  // 3. LOAD REALTIME NOTIFICATIONS
-  // ============================
+  /* =========================
+     3.2 LOAD THÔNG BÁO (REALTIME)
+  ========================= */
+
   useEffect(() => {
     const q = query(
       collection(db, "notifications"),
@@ -92,102 +97,136 @@ export default function AdminDashboard() {
         id: d.id,
         ...(d.data() as Omit<Notification, "id">),
       }));
-
       setNotifications(data);
     });
 
     return () => unsub();
   }, []);
 
-  // ============================
-  // 4. DUYỆT / TỪ CHỐI GIÁO VIÊN
-  // ============================
+  /* =========================
+     3.3 DUYỆT / TỪ CHỐI GIÁO VIÊN
+  ========================= */
+
   const updateStatus = async (
     teacherId: string,
-    status: "APPROVED" | "REJECTED"
+    status: ApprovalStatus
   ) => {
     try {
+      // 1️⃣ Update trạng thái giáo viên
       await updateDoc(doc(db, "teachers", teacherId), {
         status,
         reviewedAt: serverTimestamp(),
       });
 
+      // 2️⃣ Ghi log vĩnh viễn (KHÔNG BAO GIỜ XÓA)
       await addDoc(collection(db, "audit_logs"), {
         action: "UPDATE_TEACHER_STATUS",
         teacherId,
         status,
-        actorRole: "ADMIN",
+        actor: "ADMIN",
         createdAt: serverTimestamp(),
       });
 
+      // 3️⃣ Đánh dấu thông báo đã đọc
       for (const n of notifications) {
         await updateDoc(doc(db, "notifications", n.id), {
           read: true,
         });
       }
-
-      alert(status === "APPROVED" ? "Đã duyệt giáo viên" : "Đã từ chối giáo viên");
     } catch (err) {
       console.error(err);
-      alert("Có lỗi xảy ra khi xử lý");
+      alert("❌ Có lỗi xảy ra khi cập nhật");
     }
   };
 
-  // ============================
-  // UI
-  // ============================
+  /* =========================
+     4. GIAO DIỆN
+  ========================= */
+
   return (
     <div style={{ padding: 24 }}>
-      <h2>🛡️ Admin Dashboard – Duyệt giáo viên</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 800 }}>
+        📌 Bảng Quản Trị – Duyệt Giáo Viên
+      </h2>
 
+      {/* ===== THÔNG BÁO ===== */}
       {notifications.length > 0 && (
         <div
           style={{
             background: "#fef3c7",
-            padding: 12,
-            borderRadius: 6,
-            marginBottom: 16,
+            padding: 14,
+            borderRadius: 8,
+            margin: "16px 0",
           }}
         >
           <strong>🔔 Có giáo viên mới đăng ký:</strong>
-          <ul>
+          <ul style={{ marginTop: 8 }}>
             {notifications.map((n) => (
-              <li key={n.id}>{n.message}</li>
+              <li key={n.id}>• {n.message}</li>
             ))}
           </ul>
         </div>
       )}
 
-      {loading && <p>Đang tải dữ liệu...</p>}
+      {/* ===== TRẠNG THÁI LOAD ===== */}
+      {loading && <p>⏳ Đang tải dữ liệu...</p>}
 
       {!loading && teachers.length === 0 && (
-        <p>Không có giáo viên nào đang chờ duyệt</p>
+        <p>✅ Không có giáo viên nào đang chờ duyệt</p>
       )}
 
+      {/* ===== BẢNG GIÁO VIÊN ===== */}
       {!loading && teachers.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            marginTop: 16,
+          }}
+        >
           <thead>
             <tr>
               <th style={th}>Họ tên</th>
               <th style={th}>Email</th>
-              <th style={th}>Hành động</th>
+              <th style={th}>Môn</th>
+              <th style={th}>Thao tác</th>
             </tr>
           </thead>
+
           <tbody>
             {teachers.map((t) => (
               <tr key={t.id}>
-                <td style={td}>{t.fullName}</td>
+                <td style={td}>{t.name}</td>
                 <td style={td}>{t.email}</td>
+                <td style={td}>{t.subject || "—"}</td>
                 <td style={td}>
                   <button
-                    style={approveBtn}
                     onClick={() => updateStatus(t.id, "APPROVED")}
+                    style={{
+                      marginRight: 8,
+                      padding: "6px 12px",
+                      background: "#22c55e",
+                      color: "white",
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
                   >
                     ✔ Duyệt
                   </button>
+
                   <button
-                    style={rejectBtn}
                     onClick={() => updateStatus(t.id, "REJECTED")}
+                    style={{
+                      padding: "6px 12px",
+                      background: "#ef4444",
+                      color: "white",
+                      borderRadius: 6,
+                      border: "none",
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
                   >
                     ✖ Từ chối
                   </button>
@@ -199,37 +238,6 @@ export default function AdminDashboard() {
       )}
     </div>
   );
-}
-
-// ============================
-// STYLE
-// ============================
-const th: React.CSSProperties = {
-  borderBottom: "1px solid #ccc",
-  padding: 8,
-  textAlign: "left",
 };
 
-const td: React.CSSProperties = {
-  borderBottom: "1px solid #eee",
-  padding: 8,
-};
-
-const approveBtn: React.CSSProperties = {
-  marginRight: 8,
-  padding: "6px 12px",
-  background: "#22c55e",
-  color: "#fff",
-  border: "none",
-  borderRadius: 4,
-  cursor: "pointer",
-};
-
-const rejectBtn: React.CSSProperties = {
-  padding: "6px 12px",
-  background: "#ef4444",
-  color: "#fff",
-  border: "none",
-  borderRadius: 4,
-  cursor: "pointer",
-};
+export default AdminDashboard;
