@@ -2,19 +2,17 @@ import React, { useMemo, useState } from "react";
 import { TeacherAccount, AccountStatus } from "@/types";
 
 /* =========================
-   CONFIG (demo – sau thay Firebase)
+   CONFIG ADMIN (demo – sau nối Firebase)
 ========================= */
-const ADMIN_CREDENTIAL = {
-  username: "huynhvannhan",
-  password: "huynhvannhan2020aA@",
-};
+const ADMIN_USERNAME = "huynhvannhan";
+const ADMIN_PASSWORD = "huynhvannhan2020aA@";
 
 /* =========================
    ADMIN DASHBOARD
 ========================= */
 export default function AdminDashboard() {
   /* ---------- AUTH ---------- */
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuth, setIsAuth] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -39,40 +37,34 @@ export default function AdminDashboard() {
   ]);
 
   /* =========================
-     AUTH LOGIC
+     LOGIN
   ========================= */
   const handleLogin = () => {
     if (
-      username.trim() === ADMIN_CREDENTIAL.username &&
-      password === ADMIN_CREDENTIAL.password
+      username.trim() === ADMIN_USERNAME &&
+      password === ADMIN_PASSWORD
     ) {
-      setIsAuthenticated(true);
-      setPassword(""); // clear memory
+      setIsAuth(true);
+      setPassword("");
     } else {
-      alert("❌ Sai tài khoản hoặc mật khẩu Admin");
+      alert("Sai tài khoản hoặc mật khẩu Admin");
     }
   };
 
   /* =========================
      ACTIONS
   ========================= */
-  const updateStatus = (username: string, status: AccountStatus) => {
+  const updateStatus = (u: string, status: AccountStatus) => {
     setTeachers((prev) =>
       prev.map((t) =>
-        t.username === username ? { ...t, status } : t
+        t.username === u ? { ...t, status } : t
       )
     );
   };
 
-  const deleteTeacher = (username: string) => {
-    const ok = window.confirm(
-      "⚠️ Bạn chắc chắn muốn XÓA vĩnh viễn tài khoản giáo viên này?"
-    );
-    if (!ok) return;
-
-    setTeachers((prev) =>
-      prev.filter((t) => t.username !== username)
-    );
+  const deleteTeacher = (u: string) => {
+    if (!window.confirm("Xóa vĩnh viễn tài khoản này?")) return;
+    setTeachers((prev) => prev.filter((t) => t.username !== u));
   };
 
   /* =========================
@@ -91,11 +83,11 @@ export default function AdminDashboard() {
   /* =========================
      UI – LOGIN
   ========================= */
-  if (!isAuthenticated) {
+  if (!isAuth) {
     return (
       <div className="max-w-sm mx-auto mt-24 p-6 border rounded-xl shadow">
         <h2 className="text-xl font-bold mb-4 text-center">
-          🔐 Admin đăng nhập
+          🔐 ADMIN ĐĂNG NHẬP
         </h2>
 
         <input
@@ -114,7 +106,7 @@ export default function AdminDashboard() {
         />
 
         <button
-          className="w-full bg-black text-white py-2 rounded hover:opacity-90"
+          className="w-full bg-black text-white py-2 rounded"
           onClick={handleLogin}
         >
           Đăng nhập
@@ -129,10 +121,10 @@ export default function AdminDashboard() {
   return (
     <div className="p-6 space-y-10">
       <h1 className="text-2xl font-bold">
-        👨‍💼 Quản trị hệ thống
+        👨‍💼 QUẢN TRỊ HỆ THỐNG
       </h1>
 
-      {/* ===== PENDING ===== */}
+      {/* ===== CHỜ DUYỆT ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ⏳ Giáo viên chờ duyệt
@@ -181,7 +173,7 @@ export default function AdminDashboard() {
         </ul>
       </section>
 
-      {/* ===== APPROVED ===== */}
+      {/* ===== ĐÃ DUYỆT ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ✅ Giáo viên đã duyệt
