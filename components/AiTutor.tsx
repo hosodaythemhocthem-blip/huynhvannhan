@@ -1,86 +1,54 @@
-import React, { useEffect, useRef, useState } from "react";
-import { getAiTutorResponse } from "../services/geminiService";
+import React, { useState } from "react";
+import { askGemini } from "../services/geminiService";
 
 /* =========================
    KIỂU DỮ LIỆU
 ========================= */
-interface TutorMessage {
-  id: number;
-  role: "student" | "ai";
+interface ChatMessage {
+  role: "user" | "ai";
   content: string;
 }
 
 /* =========================
-   COMPONENT AI TUTOR
+   COMPONENT
 ========================= */
-interface AiTutorProps {
-  lessonTitle?: string;
-  lessonContext?: string;
-}
-
-const AiTutor: React.FC<AiTutorProps> = ({
-  lessonTitle = "Bài học Toán",
-  lessonContext = "",
-}) => {
-  const [messages, setMessages] = useState<TutorMessage[]>([
+const AiTutor: React.FC = () => {
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: 0,
       role: "ai",
-      content: `👋 Chào bạn! Tôi là AI trợ giảng cho "${lessonTitle}". 
-Bạn có thể hỏi bất cứ điều gì liên quan đến bài học này.`,
+      content:
+        "👋 Xin chào! Tôi là trợ lý AI Toán học. Bạn hãy nhập câu hỏi nhé.",
     },
   ]);
-
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  /* =========================
-     TỰ CUỘN CUỐI CHAT
-  ========================= */
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const handleSend = async () => {
+    if (!input.trim()) return;
 
-  /* =========================
-     GỬI CÂU HỎI CHO AI
-  ========================= */
-  const askTutor = async () => {
-    if (!input.trim() || loading) return;
-
-    const studentMsg: TutorMessage = {
-      id: Date.now(),
-      role: "student",
-      content: input.trim(),
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: input,
     };
 
-    setMessages((prev) => [...prev, studentMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
     try {
-      const aiReply = await getAiTutorResponse(
-        studentMsg.content,
-        lessonContext || lessonTitle
-      );
-
+      const aiReply = await askGemini(input);
+      const aiMsg: ChatMessage = {
+        role: "ai",
+        content: aiReply,
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now() + 1,
-          role: "ai",
-          content: aiReply,
-        },
-      ]);
-    } catch (error) {
-      console.error(error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 2,
           role: "ai",
           content:
-            "❌ AI đang gặp sự cố. Bạn vui lòng thử lại sau.",
+            "❌ Xin lỗi, hệ thống AI đang gặp sự cố.",
         },
       ]);
     } finally {
@@ -88,118 +56,111 @@ Bạn có thể hỏi bất cứ điều gì liên quan đến bài học này.`
     }
   };
 
-  /* =========================
-     GIAO DIỆN
-  ========================= */
   return (
     <div
       style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 10,
-        overflow: "hidden",
-        background: "#ffffff",
+        padding: 24,
+        maxWidth: 800,
+        margin: "0 auto",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
       }}
     >
-      {/* HEADER */}
-      <div
-        style={{
-          background: "#020617",
-          color: "white",
-          padding: 12,
-          fontWeight: 800,
-        }}
-      >
-        📘 AI Trợ giảng – {lessonTitle}
-      </div>
+      <h2 style={{ fontSize: 22, fontWeight: 900 }}>
+        🤖 Trợ lý AI Toán học
+      </h2>
 
-      {/* CHAT CONTENT */}
+      {/* CHAT BOX */}
       <div
         style={{
-          height: 360,
-          overflowY: "auto",
+          flex: 1,
+          marginTop: 16,
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
           padding: 12,
+          overflowY: "auto",
           background: "#f8fafc",
         }}
       >
-        {messages.map((m) => (
+        {messages.map((m, idx) => (
           <div
-            key={m.id}
+            key={idx}
             style={{
-              textAlign: m.role === "student" ? "right" : "left",
               marginBottom: 10,
+              textAlign: m.role === "user" ? "right" : "left",
             }}
           >
-            <span
+            <div
               style={{
                 display: "inline-block",
+                padding: "8px 12px",
+                borderRadius: 10,
                 maxWidth: "80%",
-                padding: 10,
-                borderRadius: 8,
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.6,
                 background:
-                  m.role === "student"
+                  m.role === "user"
                     ? "#2563eb"
-                    : "#ffffff",
+                    : "#e5e7eb",
                 color:
-                  m.role === "student"
+                  m.role === "user"
                     ? "white"
-                    : "#0f172a",
-                boxShadow:
-                  m.role === "ai"
-                    ? "0 2px 6px rgba(0,0,0,0.08)"
-                    : "none",
+                    : "#111827",
+                whiteSpace: "pre-wrap",
               }}
             >
               {m.content}
-            </span>
+            </div>
           </div>
         ))}
 
         {loading && (
-          <p style={{ fontStyle: "italic", color: "#64748b" }}>
-            🤔 AI đang phân tích bài học...
+          <p style={{ color: "#64748b" }}>
+            ⏳ AI đang suy nghĩ...
           </p>
         )}
-
-        <div ref={bottomRef} />
       </div>
 
       {/* INPUT */}
       <div
         style={{
+          marginTop: 12,
           display: "flex",
           gap: 8,
-          padding: 10,
-          borderTop: "1px solid #e5e7eb",
         }}
       >
-        <input
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && askTutor()}
-          placeholder="Hỏi AI về bài học này..."
+          placeholder="Nhập câu hỏi Toán học..."
+          rows={2}
           style={{
             flex: 1,
-            padding: 8,
-            borderRadius: 6,
+            padding: 10,
+            borderRadius: 8,
             border: "1px solid #cbd5e1",
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
         />
+
         <button
-          onClick={askTutor}
+          onClick={handleSend}
           disabled={loading}
           style={{
             padding: "0 16px",
-            borderRadius: 6,
+            borderRadius: 8,
             border: "none",
-            background: "#2563eb",
+            background: "#16a34a",
             color: "white",
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
+            fontWeight: 800,
+            cursor: "pointer",
           }}
         >
-          Hỏi
+          Gửi
         </button>
       </div>
     </div>
