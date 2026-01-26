@@ -1,70 +1,91 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { TeacherAccount, AccountStatus } from "@/types";
+import { db } from "@/services/firebase";
+import {
+  collection,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 
 /* =========================
-   CONFIG ADMIN (demo – sau nối Firebase)
+   ADMIN LOGIN (cố định)
 ========================= */
-const ADMIN_USERNAME = "huynhvannhan";
-const ADMIN_PASSWORD = "huynhvannhan2020aA@";
+const ADMIN_CREDENTIAL = {
+  username: "huynhvannhan",
+  password: "huynhvannhan2020aA@",
+};
 
-/* =========================
-   ADMIN DASHBOARD
-========================= */
 export default function AdminDashboard() {
-  /* ---------- AUTH ---------- */
-  const [isAuth, setIsAuth] = useState(false);
+  /* =========================
+     AUTH
+  ========================= */
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  /* ---------- DATA (demo) ---------- */
-  const [teachers, setTeachers] = useState<TeacherAccount[]>([
-    {
-      username: "gvtoan01",
-      name: "Nguyễn Văn A",
-      school: "THPT ABC",
-      code: "T01",
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      username: "gvtoan02",
-      name: "Trần Thị B",
-      school: "THPT XYZ",
-      code: "T02",
-      status: "APPROVED",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
+  /* =========================
+     DATA FROM FIREBASE
+  ========================= */
+  const [teachers, setTeachers] = useState<TeacherAccount[]>([]);
+  const [loading, setLoading] = useState(true);
 
   /* =========================
      LOGIN
   ========================= */
   const handleLogin = () => {
     if (
-      username.trim() === ADMIN_USERNAME &&
-      password === ADMIN_PASSWORD
+      username.trim() === ADMIN_CREDENTIAL.username &&
+      password === ADMIN_CREDENTIAL.password
     ) {
-      setIsAuth(true);
+      setIsAuthenticated(true);
       setPassword("");
     } else {
-      alert("Sai tài khoản hoặc mật khẩu Admin");
+      alert("❌ Sai tài khoản hoặc mật khẩu Admin");
     }
   };
 
   /* =========================
+     LOAD TEACHERS (REALTIME)
+  ========================= */
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsub = onSnapshot(
+      collection(db, "teachers"),
+      (snap) => {
+        const list: TeacherAccount[] = snap.docs.map((d) => ({
+          ...(d.data() as TeacherAccount),
+        }));
+        setTeachers(list);
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+
+    return () => unsub();
+  }, [isAuthenticated]);
+
+  /* =========================
      ACTIONS
   ========================= */
-  const updateStatus = (u: string, status: AccountStatus) => {
-    setTeachers((prev) =>
-      prev.map((t) =>
-        t.username === u ? { ...t, status } : t
-      )
-    );
+  const updateStatus = async (
+    username: string,
+    status: AccountStatus
+  ) => {
+    await updateDoc(doc(db, "teachers", username), {
+      status,
+    });
   };
 
-  const deleteTeacher = (u: string) => {
-    if (!window.confirm("Xóa vĩnh viễn tài khoản này?")) return;
-    setTeachers((prev) => prev.filter((t) => t.username !== u));
+  const deleteTeacher = async (username: string) => {
+    const ok = window.confirm(
+      "⚠️ Xóa vĩnh viễn tài khoản giáo viên này?"
+    );
+    if (!ok) return;
+
+    await deleteDoc(doc(db, "teachers", username));
   };
 
   /* =========================
@@ -83,11 +104,11 @@ export default function AdminDashboard() {
   /* =========================
      UI – LOGIN
   ========================= */
-  if (!isAuth) {
+  if (!isAuthenticated) {
     return (
       <div className="max-w-sm mx-auto mt-24 p-6 border rounded-xl shadow">
         <h2 className="text-xl font-bold mb-4 text-center">
-          🔐 ADMIN ĐĂNG NHẬP
+          🔐 Admin đăng nhập
         </h2>
 
         <input
@@ -121,10 +142,12 @@ export default function AdminDashboard() {
   return (
     <div className="p-6 space-y-10">
       <h1 className="text-2xl font-bold">
-        👨‍💼 QUẢN TRỊ HỆ THỐNG
+        👨‍💼 Quản trị hệ thống
       </h1>
 
-      {/* ===== CHỜ DUYỆT ===== */}
+      {loading && <p>⏳ Đang tải dữ liệu...</p>}
+
+      {/* ===== PENDING ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ⏳ Giáo viên chờ duyệt
@@ -173,7 +196,7 @@ export default function AdminDashboard() {
         </ul>
       </section>
 
-      {/* ===== ĐÃ DUYỆT ===== */}
+      {/* ===== APPROVED ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ✅ Giáo viên đã duyệt
