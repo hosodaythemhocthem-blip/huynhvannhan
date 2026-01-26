@@ -2,88 +2,74 @@ import React, { useEffect, useRef, useState } from "react";
 import { askGemini } from "../services/geminiService";
 
 /* =========================
-   1. KIỂU DỮ LIỆU
+   KIỂU DỮ LIỆU
 ========================= */
+type Role = "user" | "ai";
 
 interface Message {
   id: number;
-  role: "user" | "ai";
+  role: Role;
   content: string;
 }
 
 /* =========================
-   2. COMPONENT CHÍNH
+   COMPONENT AI ASSISTANT
 ========================= */
-
 const AiAssistant: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 0,
       role: "ai",
       content:
-        "👋 Chào bạn! Tôi là trợ lý AI Toán học. Bạn có thể hỏi về giải bài, công thức, chứng minh, hoặc mẹo làm bài.",
+        "👋 Chào bạn! Tôi là trợ lý AI Toán học. Hãy nhập câu hỏi Toán (giải bài, công thức, chứng minh…).",
     },
   ]);
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   /* =========================
-     2.1 TỰ ĐỘNG CUỘN CUỐI CHAT
+     TỰ CUỘN CUỐI
   ========================= */
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   /* =========================
-     2.2 GỬI CÂU HỎI CHO AI
+     GỬI CÂU HỎI
   ========================= */
-
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
-    const userMsg: Message = {
+    const userMessage: Message = {
       id: Date.now(),
       role: "user",
       content: input.trim(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
-      // 🔹 Context Toán học rõ ràng – tránh trả lời lan man
-      const prompt = `
-Bạn là trợ lý AI Toán học cho học sinh và giáo viên Việt Nam.
-- Trả lời NGẮN GỌN, RÕ RÀNG, đúng trọng tâm
-- Ưu tiên trình bày từng bước
-- Dùng ký hiệu Toán học chuẩn (LaTeX khi cần)
-- Không nói lan man, không nội dung ngoài Toán
+      const aiReply = await askGemini(userMessage.content);
 
-Câu hỏi:
-${userMsg.content}
-      `;
-
-      const aiText = await askGemini(prompt);
-
-      const aiMsg: Message = {
+      const aiMessage: Message = {
         id: Date.now() + 1,
         role: "ai",
-        content: aiText,
+        content: aiReply,
       };
 
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
-      console.error(err);
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error(error);
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 2,
           role: "ai",
-          content: "❌ Xin lỗi, AI đang bận. Bạn thử lại sau nhé.",
+          content: "❌ Có lỗi xảy ra. Bạn thử lại sau nhé.",
         },
       ]);
     } finally {
@@ -92,9 +78,8 @@ ${userMsg.content}
   };
 
   /* =========================
-     3. GIAO DIỆN
+     GIAO DIỆN
   ========================= */
-
   return (
     <div
       style={{
@@ -102,76 +87,76 @@ ${userMsg.content}
         flexDirection: "column",
         height: "100%",
         border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        overflow: "hidden",
-        background: "#fff",
+        borderRadius: 10,
+        background: "#ffffff",
       }}
     >
-      {/* ===== HEADER ===== */}
+      {/* HEADER */}
       <div
         style={{
-          padding: 14,
+          padding: 12,
           fontWeight: 800,
           background: "#0f172a",
           color: "white",
         }}
       >
-        🤖 Trợ lý AI Toán học
+        🤖 AI Toán học
       </div>
 
-      {/* ===== NỘI DUNG CHAT ===== */}
+      {/* CHAT */}
       <div
         style={{
           flex: 1,
-          padding: 16,
+          padding: 14,
           overflowY: "auto",
           background: "#f8fafc",
         }}
       >
-        {messages.map((m) => (
+        {messages.map((msg) => (
           <div
-            key={m.id}
+            key={msg.id}
             style={{
-              marginBottom: 12,
+              marginBottom: 10,
               display: "flex",
-              justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+              justifyContent:
+                msg.role === "user" ? "flex-end" : "flex-start",
             }}
           >
             <div
               style={{
                 maxWidth: "75%",
-                padding: 12,
-                borderRadius: 10,
+                padding: 10,
+                borderRadius: 8,
                 whiteSpace: "pre-wrap",
                 lineHeight: 1.6,
                 background:
-                  m.role === "user" ? "#2563eb" : "white",
-                color: m.role === "user" ? "white" : "#0f172a",
+                  msg.role === "user" ? "#2563eb" : "#ffffff",
+                color: msg.role === "user" ? "white" : "#0f172a",
                 boxShadow:
-                  m.role === "ai"
+                  msg.role === "ai"
                     ? "0 2px 6px rgba(0,0,0,0.08)"
                     : "none",
               }}
             >
-              {m.content}
+              {msg.content}
             </div>
           </div>
         ))}
 
         {loading && (
           <p style={{ fontStyle: "italic", color: "#64748b" }}>
-            🤔 AI đang suy nghĩ...
+            🤔 AI đang xử lý...
           </p>
         )}
 
         <div ref={bottomRef} />
       </div>
 
-      {/* ===== INPUT ===== */}
+      {/* INPUT */}
       <div
         style={{
           display: "flex",
-          padding: 12,
+          padding: 10,
           borderTop: "1px solid #e5e7eb",
           gap: 8,
         }}
@@ -180,13 +165,12 @@ ${userMsg.content}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Nhập câu hỏi Toán học..."
+          placeholder="Nhập câu hỏi Toán..."
           style={{
             flex: 1,
-            padding: 10,
-            borderRadius: 8,
-            border: "1px solid #cbd5f5",
-            outline: "none",
+            padding: 8,
+            borderRadius: 6,
+            border: "1px solid #cbd5e1",
           }}
         />
 
@@ -194,8 +178,8 @@ ${userMsg.content}
           onClick={sendMessage}
           disabled={loading}
           style={{
-            padding: "0 18px",
-            borderRadius: 8,
+            padding: "0 16px",
+            borderRadius: 6,
             border: "none",
             background: "#2563eb",
             color: "white",
