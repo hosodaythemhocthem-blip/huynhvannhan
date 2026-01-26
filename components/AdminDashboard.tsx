@@ -1,158 +1,180 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { TeacherAccount, AccountStatus } from "@/types";
 
-/* =========================
-   KIỂU DỮ LIỆU
-========================= */
-interface TeacherAccount {
-  id: string;
-  username: string;
-  fullName: string;
-  active: boolean;
-}
+const ADMIN_USERNAME = "huynhvannhan";
+const ADMIN_PASSWORD = "huynhvannhan2020aA@";
 
-/* =========================
-   COMPONENT
-========================= */
-const AdminDashboard: React.FC = () => {
+/**
+ * AdminDashboard
+ * - Duyệt / Từ chối / Xóa giáo viên
+ * - KHÔNG thêm chức năng ngoài Word
+ * - Chỉ xử lý state + logic an toàn
+ */
+export default function AdminDashboard() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  // ⚠️ Demo data – sau này bạn nối Firebase/DB thì GIỮ NGUYÊN TYPE
   const [teachers, setTeachers] = useState<TeacherAccount[]>([
     {
-      id: "1",
       username: "gvtoan01",
-      fullName: "Giáo viên Toán 1",
-      active: true,
+      name: "Nguyễn Văn A",
+      school: "THPT ABC",
+      code: "T01",
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
     },
     {
-      id: "2",
       username: "gvtoan02",
-      fullName: "Giáo viên Toán 2",
-      active: false,
+      name: "Trần Thị B",
+      school: "THPT XYZ",
+      code: "T02",
+      status: "APPROVED",
+      createdAt: new Date().toISOString(),
     },
   ]);
 
-  const handleAdd = () => {
-    const username = prompt("Tên đăng nhập GV:");
-    const fullName = prompt("Họ tên GV:");
-    if (!username || !fullName) return;
-
-    setTeachers((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        username,
-        fullName,
-        active: true,
-      },
-    ]);
+  // =====================
+  // AUTH
+  // =====================
+  const handleLogin = () => {
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+    } else {
+      alert("Sai tài khoản hoặc mật khẩu Admin");
+    }
   };
 
-  const toggleActive = (id: string) => {
+  // =====================
+  // ACTIONS
+  // =====================
+  const updateStatus = (u: string, status: AccountStatus) => {
     setTeachers((prev) =>
       prev.map((t) =>
-        t.id === id ? { ...t, active: !t.active } : t
+        t.username === u ? { ...t, status } : t
       )
     );
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Xóa tài khoản giáo viên này?")) return;
-    setTeachers((prev) => prev.filter((t) => t.id !== id));
+  const deleteTeacher = (u: string) => {
+    if (!confirm("Bạn chắc chắn muốn xóa tài khoản này?")) return;
+    setTeachers((prev) => prev.filter((t) => t.username !== u));
   };
 
+  // =====================
+  // FILTER
+  // =====================
+  const pendingTeachers = useMemo(
+    () => teachers.filter((t) => t.status === "PENDING"),
+    [teachers]
+  );
+
+  const approvedTeachers = useMemo(
+    () => teachers.filter((t) => t.status === "APPROVED"),
+    [teachers]
+  );
+
+  // =====================
+  // UI
+  // =====================
+  if (!isAuthenticated) {
+    return (
+      <div className="max-w-sm mx-auto mt-20 p-6 border rounded-xl">
+        <h2 className="text-xl font-bold mb-4">🔐 Admin đăng nhập</h2>
+        <input
+          className="w-full border p-2 mb-3"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <input
+          type="password"
+          className="w-full border p-2 mb-4"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button
+          className="w-full bg-black text-white py-2 rounded"
+          onClick={handleLogin}
+        >
+          Đăng nhập
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 26, fontWeight: 900 }}>
-        🛡 Quản trị hệ thống
-      </h1>
-      <p style={{ color: "#475569", marginBottom: 16 }}>
-        Quản lý tài khoản giáo viên
-      </p>
+    <div className="p-6 space-y-8">
+      <h1 className="text-2xl font-bold">👨‍💼 Quản trị hệ thống</h1>
 
-      <button
-        onClick={handleAdd}
-        style={{
-          marginBottom: 12,
-          padding: "6px 12px",
-          background: "#16a34a",
-          color: "white",
-          border: "none",
-          borderRadius: 6,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        ➕ Thêm giáo viên
-      </button>
-
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-        }}
-      >
-        <thead>
-          <tr style={{ background: "#f1f5f9" }}>
-            <th style={th}>Tên đăng nhập</th>
-            <th style={th}>Họ tên</th>
-            <th style={th}>Trạng thái</th>
-            <th style={th}>Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {teachers.map((t) => (
-            <tr key={t.id}>
-              <td style={td}>{t.username}</td>
-              <td style={td}>{t.fullName}</td>
-              <td style={td}>
-                {t.active ? "✅ Hoạt động" : "⛔ Bị khóa"}
-              </td>
-              <td style={td}>
+      {/* PENDING */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">
+          ⏳ Giáo viên chờ duyệt
+        </h2>
+        {pendingTeachers.length === 0 && (
+          <p className="text-gray-500">Không có tài khoản chờ duyệt</p>
+        )}
+        <ul className="space-y-2">
+          {pendingTeachers.map((t) => (
+            <li
+              key={t.username}
+              className="border p-3 rounded flex justify-between items-center"
+            >
+              <div>
+                <div className="font-medium">{t.name}</div>
+                <div className="text-sm text-gray-500">
+                  {t.school} · {t.username}
+                </div>
+              </div>
+              <div className="space-x-2">
                 <button
-                  onClick={() => toggleActive(t.id)}
-                  style={btn}
+                  className="px-3 py-1 bg-green-600 text-white rounded"
+                  onClick={() => updateStatus(t.username, "APPROVED")}
                 >
-                  {t.active ? "Khóa" : "Mở"}
+                  Duyệt
                 </button>
                 <button
-                  onClick={() => handleDelete(t.id)}
-                  style={{
-                    ...btn,
-                    background: "#fee2e2",
-                    borderColor: "#fecaca",
-                    color: "#991b1b",
-                  }}
+                  className="px-3 py-1 bg-red-600 text-white rounded"
+                  onClick={() => updateStatus(t.username, "REJECTED")}
                 >
-                  Xóa
+                  Từ chối
                 </button>
-              </td>
-            </tr>
+              </div>
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      </section>
+
+      {/* APPROVED */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">
+          ✅ Giáo viên đã duyệt
+        </h2>
+        <ul className="space-y-2">
+          {approvedTeachers.map((t) => (
+            <li
+              key={t.username}
+              className="border p-3 rounded flex justify-between items-center"
+            >
+              <div>
+                <div className="font-medium">{t.name}</div>
+                <div className="text-sm text-gray-500">
+                  {t.school} · {t.username}
+                </div>
+              </div>
+              <button
+                className="px-3 py-1 bg-gray-800 text-white rounded"
+                onClick={() => deleteTeacher(t.username)}
+              >
+                Xóa
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
-};
-
-/* =========================
-   STYLE
-========================= */
-const th: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  padding: 8,
-  textAlign: "left",
-};
-
-const td: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  padding: 8,
-};
-
-const btn: React.CSSProperties = {
-  marginRight: 6,
-  padding: "4px 8px",
-  borderRadius: 6,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  cursor: "pointer",
-};
-
-export default AdminDashboard;
+}
