@@ -1,196 +1,211 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { ChatMessage } from "../types";
-import { getAiTutorResponse } from "../services/geminiService";
-import MathPreview from "./MathPreview";
+import React, { useEffect, useRef, useState } from "react";
+import { askGemini } from "../services/geminiService";
 
-interface AiAssistantProps {
-  currentContext: string;
-  triggerPrompt?: string;
+/* =========================
+   1. KIỂU DỮ LIỆU
+========================= */
+
+interface Message {
+  id: number;
+  role: "user" | "ai";
+  content: string;
 }
 
-const AiAssistant: React.FC<AiAssistantProps> = ({
-  currentContext,
-  triggerPrompt,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
+/* =========================
+   2. COMPONENT CHÍNH
+========================= */
+
+const AiAssistant: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([
     {
-      role: "model",
-      text:
-        "Chào bạn! Tôi là trợ lý EduFlex. Bạn có thể hỏi tôi về bài học, bài tập, điểm số hoặc nội dung đang xem.",
-      timestamp: new Date(),
+      id: 0,
+      role: "ai",
+      content:
+        "👋 Chào bạn! Tôi là trợ lý AI Toán học. Bạn có thể hỏi về giải bài, công thức, chứng minh, hoặc mẹo làm bài.",
     },
   ]);
+
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const lastAutoPromptRef = useRef<string | null>(null);
+  /* =========================
+     2.1 TỰ ĐỘNG CUỘN CUỐI CHAT
+  ========================= */
 
-  /* ===============================
-     AUTO SCROLL (SAFE FOR VERCEL)
-  =============================== */
   useEffect(() => {
-    if (!isOpen || !scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isOpen]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
-  /* ===============================
-     HANDLE AUTO PROMPT TỪ BÊN NGOÀI
-  =============================== */
-  useEffect(() => {
-    if (!triggerPrompt) return;
-    if (triggerPrompt === lastAutoPromptRef.current) return;
+  /* =========================
+     2.2 GỬI CÂU HỎI CHO AI
+  ========================= */
 
-    lastAutoPromptRef.current = triggerPrompt;
-    setIsOpen(true);
-    handleSendMessage(triggerPrompt);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerPrompt]);
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
 
-  /* ===============================
-     CORE SEND LOGIC (REUSE)
-  =============================== */
-  const handleSendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim() || isLoading) return;
+    const userMsg: Message = {
+      id: Date.now(),
+      role: "user",
+      content: input.trim(),
+    };
 
-      const safeContext =
-        currentContext?.trim().length > 0
-          ? currentContext
-          : "Ngữ cảnh chung của hệ thống giáo dục (LMS).";
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setLoading(true);
 
-      const userMsg: ChatMessage = {
-        role: "user",
-        text,
-        timestamp: new Date(),
+    try {
+      // 🔹 Context Toán học rõ ràng – tránh trả lời lan man
+      const prompt = `
+Bạn là trợ lý AI Toán học cho học sinh và giáo viên Việt Nam.
+- Trả lời NGẮN GỌN, RÕ RÀNG, đúng trọng tâm
+- Ưu tiên trình bày từng bước
+- Dùng ký hiệu Toán học chuẩn (LaTeX khi cần)
+- Không nói lan man, không nội dung ngoài Toán
+
+Câu hỏi:
+${userMsg.content}
+      `;
+
+      const aiText = await askGemini(prompt);
+
+      const aiMsg: Message = {
+        id: Date.now() + 1,
+        role: "ai",
+        content: aiText,
       };
 
-      setMessages((prev) => [...prev, userMsg]);
-      setIsLoading(true);
-
-      try {
-        const aiResponse = await getAiTutorResponse(text, safeContext);
-        const modelMsg: ChatMessage = {
-          role: "model",
-          text: aiResponse || "Xin lỗi, tôi chưa thể trả lời câu hỏi này.",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, modelMsg]);
-      } catch (error) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "model",
-            text: "⚠️ Có lỗi khi kết nối AI. Vui lòng thử lại.",
-            timestamp: new Date(),
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [currentContext, isLoading]
-  );
-
-  /* ===============================
-     SEND FROM INPUT
-  =============================== */
-  const handleSend = () => {
-    handleSendMessage(input);
-    setInput("");
+      setMessages((prev) => [...prev, aiMsg]);
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 2,
+          role: "ai",
+          content: "❌ Xin lỗi, AI đang bận. Bạn thử lại sau nhé.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  /* =========================
+     3. GIAO DIỆN
+  ========================= */
+
   return (
-    <div className="fixed bottom-6 right-6 z-[200]">
-      {isOpen && (
-        <div className="bg-white w-[350px] sm:w-[450px] h-[600px] shadow-2xl rounded-[32px] border border-slate-100 flex flex-col mb-4 animate-in slide-in-from-bottom-5 duration-300">
-          {/* HEADER */}
-          <div className="p-6 bg-slate-900 rounded-t-[32px] flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg">
-                🤖
-              </div>
-              <div className="text-white">
-                <p className="font-black text-xs uppercase tracking-widest">
-                  Trợ lý EduFlex AI
-                </p>
-                <p className="text-[10px] opacity-60 font-bold">
-                  Hỗ trợ học tập 24/7
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-white/40 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* MESSAGES */}
-          <div
-            ref={scrollRef}
-            className="flex-grow p-6 overflow-y-auto space-y-6 bg-slate-50/30"
-          >
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[90%] p-4 rounded-3xl text-sm shadow-sm ${
-                    msg.role === "user"
-                      ? "bg-blue-600 text-white rounded-tr-none"
-                      : "bg-white text-slate-700 rounded-tl-none border"
-                  }`}
-                >
-                  <MathPreview math={msg.text} />
-                </div>
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-white p-4 rounded-3xl rounded-tl-none border shadow-sm flex gap-1">
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></span>
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* INPUT */}
-          <div className="p-6 border-t flex gap-3 bg-white rounded-b-[32px]">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="Hỏi trợ lý AI..."
-              className="flex-grow bg-slate-50 rounded-2xl px-6 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <button
-              onClick={handleSend}
-              disabled={isLoading}
-              className="p-3 bg-slate-900 text-white rounded-2xl disabled:opacity-50"
-            >
-              ➤
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* FLOATING BUTTON */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-16 h-16 bg-slate-900 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all"
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        overflow: "hidden",
+        background: "#fff",
+      }}
+    >
+      {/* ===== HEADER ===== */}
+      <div
+        style={{
+          padding: 14,
+          fontWeight: 800,
+          background: "#0f172a",
+          color: "white",
+        }}
       >
-        💬
-      </button>
+        🤖 Trợ lý AI Toán học
+      </div>
+
+      {/* ===== NỘI DUNG CHAT ===== */}
+      <div
+        style={{
+          flex: 1,
+          padding: 16,
+          overflowY: "auto",
+          background: "#f8fafc",
+        }}
+      >
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            style={{
+              marginBottom: 12,
+              display: "flex",
+              justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "75%",
+                padding: 12,
+                borderRadius: 10,
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.6,
+                background:
+                  m.role === "user" ? "#2563eb" : "white",
+                color: m.role === "user" ? "white" : "#0f172a",
+                boxShadow:
+                  m.role === "ai"
+                    ? "0 2px 6px rgba(0,0,0,0.08)"
+                    : "none",
+              }}
+            >
+              {m.content}
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <p style={{ fontStyle: "italic", color: "#64748b" }}>
+            🤔 AI đang suy nghĩ...
+          </p>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* ===== INPUT ===== */}
+      <div
+        style={{
+          display: "flex",
+          padding: 12,
+          borderTop: "1px solid #e5e7eb",
+          gap: 8,
+        }}
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Nhập câu hỏi Toán học..."
+          style={{
+            flex: 1,
+            padding: 10,
+            borderRadius: 8,
+            border: "1px solid #cbd5f5",
+            outline: "none",
+          }}
+        />
+
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          style={{
+            padding: "0 18px",
+            borderRadius: 8,
+            border: "none",
+            background: "#2563eb",
+            color: "white",
+            fontWeight: 700,
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          Gửi
+        </button>
+      </div>
     </div>
   );
 };
