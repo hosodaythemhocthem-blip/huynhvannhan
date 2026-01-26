@@ -4,7 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kiến Thức Toán Học</title>
+
+    <!-- ✅ MATHJAX -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']]
+        },
+        svg: {
+          fontCache: 'global'
+        }
+      };
+    </script>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
+      async
+    ></script>
   </head>
+
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
