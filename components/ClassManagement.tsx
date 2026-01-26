@@ -1,145 +1,52 @@
-import React, { useEffect, useState } from "react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../services/firebase";
+import React, { useState } from "react";
 
 /* =========================
    KIỂU DỮ LIỆU
 ========================= */
-
-interface ClassRoom {
+interface ClassItem {
   id: string;
   name: string;
   grade: string;
-  description?: string;
-  createdAt?: any;
-}
-
-interface Student {
-  id: string;
-  fullName: string;
-  email?: string;
+  teacher: string;
+  studentCount: number;
 }
 
 /* =========================
-   COMPONENT CHÍNH
+   COMPONENT
 ========================= */
-
 const ClassManagement: React.FC = () => {
-  const [classes, setClasses] = useState<ClassRoom[]>([]);
-  const [selectedClass, setSelectedClass] = useState<ClassRoom | null>(null);
+  const [classes, setClasses] = useState<ClassItem[]>([
+    {
+      id: "1",
+      name: "Toán Đại số",
+      grade: "10",
+      teacher: "Huỳnh Văn Nhẫn",
+      studentCount: 42,
+    },
+    {
+      id: "2",
+      name: "Toán Hình học",
+      grade: "11",
+      teacher: "Huỳnh Văn Nhẫn",
+      studentCount: 38,
+    },
+  ]);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [form, setForm] = useState({
-    name: "",
-    grade: "",
-    description: "",
-  });
-
-  /* =========================
-     LOAD DANH SÁCH LỚP (REALTIME)
-  ========================= */
-
-  useEffect(() => {
-    const q = query(
-      collection(db, "classes"),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<ClassRoom, "id">),
-      }));
-      setClasses(data);
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, []);
-
-  /* =========================
-     LOAD HỌC SINH THEO LỚP
-  ========================= */
-
-  useEffect(() => {
-    if (!selectedClass) return;
-
-    const q = collection(
-      db,
-      "classes",
-      selectedClass.id,
-      "students"
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Student, "id">),
-      }));
-      setStudents(data);
-    });
-
-    return () => unsub();
-  }, [selectedClass]);
-
-  /* =========================
-     TẠO LỚP
-  ========================= */
-
-  const createClass = async () => {
-    if (!form.name || !form.grade) {
-      alert("Vui lòng nhập tên lớp và khối");
-      return;
-    }
-
-    await addDoc(collection(db, "classes"), {
-      ...form,
-      createdAt: serverTimestamp(),
-    });
-
-    setForm({ name: "", grade: "", description: "" });
+  const handleAdd = () => {
+    const newClass: ClassItem = {
+      id: Date.now().toString(),
+      name: "Lớp mới",
+      grade: "12",
+      teacher: "Huỳnh Văn Nhẫn",
+      studentCount: 0,
+    };
+    setClasses((prev) => [...prev, newClass]);
   };
 
-  /* =========================
-     CẬP NHẬT LỚP
-  ========================= */
-
-  const updateClass = async () => {
-    if (!selectedClass) return;
-
-    await updateDoc(doc(db, "classes", selectedClass.id), {
-      ...form,
-    });
-
-    setSelectedClass(null);
-    setForm({ name: "", grade: "", description: "" });
+  const handleDelete = (id: string) => {
+    if (!confirm("Xóa lớp này?")) return;
+    setClasses((prev) => prev.filter((c) => c.id !== id));
   };
-
-  /* =========================
-     XÓA LỚP
-  ========================= */
-
-  const deleteClass = async (id: string) => {
-    if (!confirm("Bạn chắc chắn muốn xóa lớp này?")) return;
-    await deleteDoc(doc(db, "classes", id));
-    setSelectedClass(null);
-  };
-
-  /* =========================
-     GIAO DIỆN
-  ========================= */
 
   return (
     <div style={{ padding: 24 }}>
@@ -147,124 +54,76 @@ const ClassManagement: React.FC = () => {
         🏫 Quản lý lớp học
       </h2>
 
-      {/* FORM */}
-      <div
+      <button
+        onClick={handleAdd}
         style={{
-          marginTop: 16,
-          padding: 16,
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
-          maxWidth: 480,
+          margin: "12px 0",
+          padding: "6px 12px",
+          background: "#2563eb",
+          color: "white",
+          border: "none",
+          borderRadius: 6,
+          fontWeight: 700,
+          cursor: "pointer",
         }}
       >
-        <h4 style={{ fontWeight: 700, marginBottom: 8 }}>
-          {selectedClass ? "✏️ Cập nhật lớp" : "➕ Tạo lớp mới"}
-        </h4>
+        ➕ Thêm lớp
+      </button>
 
-        <input
-          placeholder="Tên lớp (VD: 10A1)"
-          value={form.name}
-          onChange={(e) =>
-            setForm({ ...form, name: e.target.value })
-          }
-          style={{ width: "100%", padding: 8, marginBottom: 8 }}
-        />
-
-        <input
-          placeholder="Khối (VD: 10)"
-          value={form.grade}
-          onChange={(e) =>
-            setForm({ ...form, grade: e.target.value })
-          }
-          style={{ width: "100%", padding: 8, marginBottom: 8 }}
-        />
-
-        <textarea
-          placeholder="Mô tả (tuỳ chọn)"
-          value={form.description}
-          onChange={(e) =>
-            setForm({ ...form, description: e.target.value })
-          }
-          style={{ width: "100%", padding: 8, marginBottom: 8 }}
-        />
-
-        <button
-          onClick={selectedClass ? updateClass : createClass}
-          style={{
-            padding: "6px 14px",
-            background: "#2563eb",
-            color: "white",
-            border: "none",
-            borderRadius: 6,
-            fontWeight: 700,
-          }}
-        >
-          {selectedClass ? "Lưu thay đổi" : "Tạo lớp"}
-        </button>
-      </div>
-
-      {/* DANH SÁCH LỚP */}
-      <div style={{ marginTop: 24 }}>
-        <h3 style={{ fontWeight: 700 }}>📚 Danh sách lớp</h3>
-
-        {loading && <p>⏳ Đang tải...</p>}
-
-        {classes.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 6,
-              padding: 12,
-              marginTop: 8,
-            }}
-          >
-            <strong>{c.name}</strong> – Khối {c.grade}
-            <div style={{ marginTop: 6 }}>
-              <button
-                onClick={() => {
-                  setSelectedClass(c);
-                  setForm({
-                    name: c.name,
-                    grade: c.grade,
-                    description: c.description || "",
-                  });
-                }}
-                style={{ marginRight: 8 }}
-              >
-                ✏️ Sửa
-              </button>
-              <button
-                onClick={() => deleteClass(c.id)}
-                style={{ color: "red" }}
-              >
-                🗑 Xóa
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* HỌC SINH */}
-      {selectedClass && (
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontWeight: 700 }}>
-            👨‍🎓 Học sinh – {selectedClass.name}
-          </h3>
-
-          {students.length === 0 && (
-            <p>Chưa có học sinh trong lớp</p>
-          )}
-
-          {students.map((s) => (
-            <div key={s.id}>
-              • {s.fullName} {s.email && `(${s.email})`}
-            </div>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+        }}
+      >
+        <thead>
+          <tr style={{ background: "#f1f5f9" }}>
+            <th style={th}>Tên lớp</th>
+            <th style={th}>Khối</th>
+            <th style={th}>Giáo viên</th>
+            <th style={th}>Sĩ số</th>
+            <th style={th}>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {classes.map((c) => (
+            <tr key={c.id}>
+              <td style={td}>{c.name}</td>
+              <td style={td}>{c.grade}</td>
+              <td style={td}>{c.teacher}</td>
+              <td style={td}>{c.studentCount}</td>
+              <td style={td}>
+                <button
+                  onClick={() => handleDelete(c.id)}
+                  style={{
+                    background: "#fee2e2",
+                    border: "1px solid #fecaca",
+                    color: "#991b1b",
+                    borderRadius: 6,
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  🗑 Xóa
+                </button>
+              </td>
+            </tr>
           ))}
-        </div>
-      )}
+        </tbody>
+      </table>
     </div>
   );
+};
+
+const th: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  padding: 8,
+  textAlign: "left",
+};
+
+const td: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  padding: 8,
 };
 
 export default ClassManagement;
