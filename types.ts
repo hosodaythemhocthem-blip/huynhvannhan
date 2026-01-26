@@ -1,3 +1,6 @@
+/* =========================
+   TAB & ROLE
+========================= */
 
 export enum TabType {
   EXAMS = 'exams',
@@ -14,6 +17,10 @@ export enum UserRole {
 }
 
 export type AccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/* =========================
+   ACCOUNT
+========================= */
 
 export interface TeacherAccount {
   username: string;
@@ -36,16 +43,20 @@ export interface StudentAccount {
   teacherUsername: string;
 }
 
+/* =========================
+   QUESTION & EXAM
+========================= */
+
 export enum QuestionType {
-  MULTIPLE_CHOICE = 'mcq', // Phần I: 4 chọn 1
-  TRUE_FALSE = 'tf',       // Phần II: Đúng/Sai
-  SHORT_ANSWER = 'short'   // Phần III: Trả lời ngắn
+  MULTIPLE_CHOICE = 'mcq',   // Phần I: 4 chọn 1
+  TRUE_FALSE = 'tf',         // Phần II: Đúng / Sai
+  SHORT_ANSWER = 'short'     // Phần III: Trả lời ngắn
 }
 
 export interface SubQuestion {
-  id: string; // a, b, c, d
+  id: string;               // a, b, c, d
   text: string;
-  correctAnswer: boolean; // true = Đúng, false = Sai
+  correctAnswer: boolean;   // true = Đúng, false = Sai
 }
 
 export interface Question {
@@ -53,9 +64,9 @@ export interface Question {
   type: QuestionType;
   section: 1 | 2 | 3;
   text: string;
-  options: string[];      // Dùng cho MCQ (Phần I)
-  subQuestions?: SubQuestion[]; // Dùng cho Đúng/Sai (Phần II)
-  correctAnswer: any;     // MCQ: index, Short: string, TF: xử lý riêng
+  options: string[];        // Dùng cho MCQ
+  subQuestions?: SubQuestion[]; // Dùng cho Đúng / Sai
+  correctAnswer: number | string | boolean | boolean[];
   points?: number;
 }
 
@@ -65,18 +76,26 @@ export interface Exam {
   createdAt: string;
   questionCount: number;
   isLocked: boolean;
-  assignedClass: string; 
-  assignedClassId: string; 
+
+  assignedClass: string;
+  assignedClassId: string;
   assignedClassIds?: string[];
-  duration: number;
+
+  duration: number;         // phút
   maxScore: number;
+
   questions?: Question[];
+
   scoringConfig?: {
-    part1Points: number; // Mặc định 0.25
-    part2Points: number; // Mặc định 1.0 (cho 4 ý)
-    part3Points: number; // Mặc định 0.5
+    part1Points: number;    // Mặc định 0.25
+    part2Points: number;    // Mặc định 1.0 (4 ý)
+    part3Points: number;    // Mặc định 0.5
   };
 }
+
+/* =========================
+   CLASS & GRADE
+========================= */
 
 export interface Class {
   id: string;
@@ -88,12 +107,16 @@ export interface Grade {
   id: string;
   studentName: string;
   examTitle: string;
-  classId: string; 
+  classId: string;
   attempt: number;
   score: number;
   cheatingRisk: string;
   submittedAt: string;
 }
+
+/* =========================
+   AI CHAT
+========================= */
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -101,7 +124,10 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-// Fix: Added Lesson interface for course modules
+/* =========================
+   COURSE / LMS
+========================= */
+
 export interface Lesson {
   id: string;
   title: string;
@@ -112,14 +138,12 @@ export interface Lesson {
   videoUrl?: string;
 }
 
-// Fix: Added Module interface for grouping lessons in a course
 export interface Module {
   id: string;
   title: string;
   lessons: Lesson[];
 }
 
-// Fix: Added Course interface to resolve errors in multiple files (mockData.ts, constants.tsx, components)
 export interface Course {
   id: string;
   title: string;
@@ -134,7 +158,10 @@ export interface Course {
   modules: Module[];
 }
 
-// Fix: Added ProgressData interface for chart data components
+/* =========================
+   CHART / STAT
+========================= */
+
 export interface ProgressData {
   name: string;
   hours: number;
