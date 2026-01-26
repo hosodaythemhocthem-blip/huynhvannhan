@@ -1,21 +1,24 @@
 import React, { useMemo, useState } from "react";
 import { TeacherAccount, AccountStatus } from "@/types";
 
-const ADMIN_USERNAME = "huynhvannhan";
-const ADMIN_PASSWORD = "huynhvannhan2020aA@";
+/* =========================
+   CONFIG (demo – sau thay Firebase)
+========================= */
+const ADMIN_CREDENTIAL = {
+  username: "huynhvannhan",
+  password: "huynhvannhan2020aA@",
+};
 
-/**
- * AdminDashboard
- * - Duyệt / Từ chối / Xóa giáo viên
- * - KHÔNG thêm chức năng ngoài Word
- * - Chỉ xử lý state + logic an toàn
- */
+/* =========================
+   ADMIN DASHBOARD
+========================= */
 export default function AdminDashboard() {
+  /* ---------- AUTH ---------- */
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  // ⚠️ Demo data – sau này bạn nối Firebase/DB thì GIỮ NGUYÊN TYPE
+  /* ---------- DATA (demo) ---------- */
   const [teachers, setTeachers] = useState<TeacherAccount[]>([
     {
       username: "gvtoan01",
@@ -35,36 +38,46 @@ export default function AdminDashboard() {
     },
   ]);
 
-  // =====================
-  // AUTH
-  // =====================
+  /* =========================
+     AUTH LOGIC
+  ========================= */
   const handleLogin = () => {
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    if (
+      username.trim() === ADMIN_CREDENTIAL.username &&
+      password === ADMIN_CREDENTIAL.password
+    ) {
       setIsAuthenticated(true);
+      setPassword(""); // clear memory
     } else {
-      alert("Sai tài khoản hoặc mật khẩu Admin");
+      alert("❌ Sai tài khoản hoặc mật khẩu Admin");
     }
   };
 
-  // =====================
-  // ACTIONS
-  // =====================
-  const updateStatus = (u: string, status: AccountStatus) => {
+  /* =========================
+     ACTIONS
+  ========================= */
+  const updateStatus = (username: string, status: AccountStatus) => {
     setTeachers((prev) =>
       prev.map((t) =>
-        t.username === u ? { ...t, status } : t
+        t.username === username ? { ...t, status } : t
       )
     );
   };
 
-  const deleteTeacher = (u: string) => {
-    if (!confirm("Bạn chắc chắn muốn xóa tài khoản này?")) return;
-    setTeachers((prev) => prev.filter((t) => t.username !== u));
+  const deleteTeacher = (username: string) => {
+    const ok = window.confirm(
+      "⚠️ Bạn chắc chắn muốn XÓA vĩnh viễn tài khoản giáo viên này?"
+    );
+    if (!ok) return;
+
+    setTeachers((prev) =>
+      prev.filter((t) => t.username !== username)
+    );
   };
 
-  // =====================
-  // FILTER
-  // =====================
+  /* =========================
+     FILTER
+  ========================= */
   const pendingTeachers = useMemo(
     () => teachers.filter((t) => t.status === "PENDING"),
     [teachers]
@@ -75,28 +88,33 @@ export default function AdminDashboard() {
     [teachers]
   );
 
-  // =====================
-  // UI
-  // =====================
+  /* =========================
+     UI – LOGIN
+  ========================= */
   if (!isAuthenticated) {
     return (
-      <div className="max-w-sm mx-auto mt-20 p-6 border rounded-xl">
-        <h2 className="text-xl font-bold mb-4">🔐 Admin đăng nhập</h2>
+      <div className="max-w-sm mx-auto mt-24 p-6 border rounded-xl shadow">
+        <h2 className="text-xl font-bold mb-4 text-center">
+          🔐 Admin đăng nhập
+        </h2>
+
         <input
-          className="w-full border p-2 mb-3"
+          className="w-full border p-2 mb-3 rounded"
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
+
         <input
           type="password"
-          className="w-full border p-2 mb-4"
+          className="w-full border p-2 mb-4 rounded"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
         <button
-          className="w-full bg-black text-white py-2 rounded"
+          className="w-full bg-black text-white py-2 rounded hover:opacity-90"
           onClick={handleLogin}
         >
           Đăng nhập
@@ -105,18 +123,27 @@ export default function AdminDashboard() {
     );
   }
 
+  /* =========================
+     UI – ADMIN PANEL
+  ========================= */
   return (
-    <div className="p-6 space-y-8">
-      <h1 className="text-2xl font-bold">👨‍💼 Quản trị hệ thống</h1>
+    <div className="p-6 space-y-10">
+      <h1 className="text-2xl font-bold">
+        👨‍💼 Quản trị hệ thống
+      </h1>
 
-      {/* PENDING */}
+      {/* ===== PENDING ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ⏳ Giáo viên chờ duyệt
         </h2>
+
         {pendingTeachers.length === 0 && (
-          <p className="text-gray-500">Không có tài khoản chờ duyệt</p>
+          <p className="text-gray-500 italic">
+            Không có tài khoản chờ duyệt
+          </p>
         )}
+
         <ul className="space-y-2">
           {pendingTeachers.map((t) => (
             <li
@@ -129,16 +156,22 @@ export default function AdminDashboard() {
                   {t.school} · {t.username}
                 </div>
               </div>
+
               <div className="space-x-2">
                 <button
                   className="px-3 py-1 bg-green-600 text-white rounded"
-                  onClick={() => updateStatus(t.username, "APPROVED")}
+                  onClick={() =>
+                    updateStatus(t.username, "APPROVED")
+                  }
                 >
                   Duyệt
                 </button>
+
                 <button
                   className="px-3 py-1 bg-red-600 text-white rounded"
-                  onClick={() => updateStatus(t.username, "REJECTED")}
+                  onClick={() =>
+                    updateStatus(t.username, "REJECTED")
+                  }
                 >
                   Từ chối
                 </button>
@@ -148,11 +181,12 @@ export default function AdminDashboard() {
         </ul>
       </section>
 
-      {/* APPROVED */}
+      {/* ===== APPROVED ===== */}
       <section>
         <h2 className="text-lg font-semibold mb-3">
           ✅ Giáo viên đã duyệt
         </h2>
+
         <ul className="space-y-2">
           {approvedTeachers.map((t) => (
             <li
@@ -165,6 +199,7 @@ export default function AdminDashboard() {
                   {t.school} · {t.username}
                 </div>
               </div>
+
               <button
                 className="px-3 py-1 bg-gray-800 text-white rounded"
                 onClick={() => deleteTeacher(t.username)}
