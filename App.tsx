@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Plus, Users, BarChart, Gamepad2,
   GraduationCap, FileText, Cloud, RefreshCw, CheckCircle
 } from 'lucide-react';
 
 import { TabType, Exam, UserRole, TeacherAccount } from './types';
+
 import ExamCard from './components/ExamCard';
 import ExamEditor from './components/ExamEditor';
 import LoginScreen from './components/LoginScreen';
@@ -12,11 +13,12 @@ import ClassManagement from './components/ClassManagement';
 import GradeManagement from './components/GradeManagement';
 import GameManagement from './components/GameManagement';
 import StudentQuiz from './components/StudentQuiz';
+import AiExamGenerator from './components/AiExamGenerator';
 
 import { SyncService } from './services/syncService';
 
 const App: React.FC = () => {
-  // ===== AUTH STATE =====
+  // ===== AUTH =====
   const [userRole, setUserRole] = useState<UserRole>(
     () => (localStorage.getItem('current_role') as UserRole) || UserRole.GUEST
   );
@@ -26,17 +28,18 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // ===== UI STATE =====
+  // ===== UI =====
   const [activeTab, setActiveTab] = useState<TabType>(TabType.EXAMS);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [previewingExam, setPreviewingExam] = useState<Exam | null>(null);
 
-  // ===== DATA STATE =====
+  // ===== DATA =====
   const [exams, setExams] = useState<Exam[]>([]);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [syncStatus, setSyncStatus] =
+    useState<'synced' | 'syncing' | 'error'>('synced');
 
-  // ===== CLOUD LOAD =====
+  // ===== LOAD CLOUD =====
   const loadFromCloud = useCallback(async (username: string) => {
     setSyncStatus('syncing');
     try {
@@ -57,47 +60,54 @@ const App: React.FC = () => {
     if (teacher) loadFromCloud(teacher.username);
   }, [teacher, loadFromCloud]);
 
-  // ===== CLOUD SYNC =====
-  const syncToCloud = useCallback(async (currentExams: Exam[]) => {
-    if (!teacher) return;
-    setSyncStatus('syncing');
+  // ===== SYNC CLOUD =====
+  const syncToCloud = useCallback(
+    async (currentExams: Exam[]) => {
+      if (!teacher) return;
+      setSyncStatus('syncing');
 
-    const payload = {
-      teacherName: teacher.name,
-      exams: currentExams,
-      lastSync: new Date().toISOString()
-    };
+      const payload = {
+        teacherName: teacher.name,
+        exams: currentExams,
+        lastSync: new Date().toISOString()
+      };
 
-    const ok = await SyncService.pushData(
-      SyncService.generateSyncId(teacher.username),
-      payload
-    );
+      const ok = await SyncService.pushData(
+        SyncService.generateSyncId(teacher.username),
+        payload
+      );
 
-    setSyncStatus(ok ? 'synced' : 'error');
-  }, [teacher]);
+      setSyncStatus(ok ? 'synced' : 'error');
+    },
+    [teacher]
+  );
 
-  // ===== EXAM HANDLERS =====
+  // ===== SAVE EXAM =====
   const handleSaveExam = async (data: Partial<Exam>) => {
     if (!teacher) return;
 
-    const updatedExams: Exam[] = editingExam
-      ? exams.map(e => e.id === editingExam.id ? { ...e, ...data } as Exam : e)
-      : [{
-          id: `DE${Date.now().toString().slice(-4)}`,
-          title: data.title || 'Đề thi không tên',
-          createdAt: new Date().toLocaleDateString('vi-VN'),
-          questionCount: data.questions?.length || 0,
-          questions: data.questions || [],
-          isLocked: false,
-          assignedClassIds: []
-        }, ...exams];
+    const updated: Exam[] = editingExam
+      ? exams.map(e =>
+          e.id === editingExam.id ? { ...e, ...data } as Exam : e
+        )
+      : [
+          {
+            id: `DE${Date.now().toString().slice(-4)}`,
+            title: data.title || 'Đề thi không tên',
+            createdAt: new Date().toLocaleDateString('vi-VN'),
+            questionCount: data.questions?.length || 0,
+            questions: data.questions || [],
+            isLocked: false,
+            assignedClassIds: []
+          },
+          ...exams
+        ];
 
-    setExams(updatedExams);
-    localStorage.setItem(`exams_${teacher.username}`, JSON.stringify(updatedExams));
+    setExams(updated);
+    localStorage.setItem(`exams_${teacher.username}`, JSON.stringify(updated));
     setIsEditorOpen(false);
     setEditingExam(null);
-
-    await syncToCloud(updatedExams);
+    await syncToCloud(updated);
   };
 
   const handleDeleteExam = async (id: string) => {
@@ -118,13 +128,18 @@ const App: React.FC = () => {
     }
   };
 
-  // ===== EARLY RETURNS =====
+  // ===== EARLY RETURN =====
   if (userRole === UserRole.GUEST) {
     return <LoginScreen onSelectRole={handleSelectRole} />;
   }
 
   if (previewingExam) {
-    return <StudentQuiz exam={previewingExam} onExit={() => setPreviewingExam(null)} />;
+    return (
+      <StudentQuiz
+        exam={previewingExam}
+        onExit={() => setPreviewingExam(null)}
+      />
+    );
   }
 
   // ===== UI =====
@@ -139,21 +154,28 @@ const App: React.FC = () => {
           <div>
             <h1 className="font-black">Thầy: {teacher?.name}</h1>
             <div className="flex items-center gap-1 text-[10px] font-bold">
-              {syncStatus === 'syncing'
-                ? <RefreshCw size={12} className="animate-spin text-amber-500" />
-                : <CheckCircle size={12} className="text-emerald-600" />
-              }
+              {syncStatus === 'syncing' ? (
+                <RefreshCw size={12} className="animate-spin text-amber-500" />
+              ) : (
+                <CheckCircle size={12} className="text-emerald-600" />
+              )}
               {syncStatus === 'synced' ? 'Đã lưu Firebase' : 'Đang đồng bộ'}
             </div>
           </div>
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => syncToCloud(exams)} className="p-2 bg-slate-50 rounded-lg">
+          <button
+            onClick={() => syncToCloud(exams)}
+            className="p-2 bg-slate-50 rounded-lg"
+          >
             <Cloud size={18} />
           </button>
           <button
-            onClick={() => { localStorage.clear(); window.location.reload(); }}
+            onClick={() => {
+              localStorage.clear();
+              window.location.reload();
+            }}
             className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-black"
           >
             Thoát
@@ -180,11 +202,31 @@ const App: React.FC = () => {
                 <FileText size={18} /> Bài tập của Thầy
               </h3>
               <button
-                onClick={() => { setEditingExam(null); setIsEditorOpen(true); }}
+                onClick={() => {
+                  setEditingExam(null);
+                  setIsEditorOpen(true);
+                }}
                 className="bg-blue-600 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2"
               >
                 <Plus size={18} /> Soạn đề mới
               </button>
+            </div>
+
+            {/* AI GENERATOR */}
+            <div className="mb-6">
+              <AiExamGenerator
+                onGenerate={(exam) => {
+                  const updated = [exam, ...exams];
+                  setExams(updated);
+                  if (teacher) {
+                    localStorage.setItem(
+                      `exams_${teacher.username}`,
+                      JSON.stringify(updated)
+                    );
+                    syncToCloud(updated);
+                  }
+                }}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -192,7 +234,10 @@ const App: React.FC = () => {
                 <ExamCard
                   key={exam.id}
                   exam={exam}
-                  onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }}
+                  onEdit={() => {
+                    setEditingExam(exam);
+                    setIsEditorOpen(true);
+                  }}
                   onDelete={handleDeleteExam}
                   onView={setPreviewingExam}
                   onToggleLock={() => {}}
