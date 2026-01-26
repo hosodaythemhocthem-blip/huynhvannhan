@@ -6,14 +6,14 @@ export enum TabType {
   EXAMS = 'exams',
   CLASSES = 'classes',
   GRADES = 'grades',
-  GAMES = 'games'
+  GAMES = 'games',
 }
 
 export enum UserRole {
   GUEST = 'guest',
   TEACHER = 'teacher',
   STUDENT = 'student',
-  ADMIN = 'admin'
+  ADMIN = 'admin',
 }
 
 export type AccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -22,24 +22,22 @@ export type AccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
    ACCOUNT
 ========================= */
 
-export interface TeacherAccount {
+export interface BaseAccount {
   username: string;
   password?: string;
   name: string;
-  school: string;
-  code: string;
   status: AccountStatus;
   createdAt: string;
 }
 
-export interface StudentAccount {
-  username: string;
-  password?: string;
-  name: string;
+export interface TeacherAccount extends BaseAccount {
+  school: string;
+  code: string; // mã giáo viên
+}
+
+export interface StudentAccount extends BaseAccount {
   classId: string;
   requestedClassName?: string;
-  status: AccountStatus;
-  createdAt: string;
   teacherUsername: string;
 }
 
@@ -50,13 +48,13 @@ export interface StudentAccount {
 export enum QuestionType {
   MULTIPLE_CHOICE = 'mcq',   // Phần I: 4 chọn 1
   TRUE_FALSE = 'tf',         // Phần II: Đúng / Sai
-  SHORT_ANSWER = 'short'     // Phần III: Trả lời ngắn
+  SHORT_ANSWER = 'short',    // Phần III: Trả lời ngắn
 }
 
 export interface SubQuestion {
   id: string;               // a, b, c, d
   text: string;
-  correctAnswer: boolean;   // true = Đúng, false = Sai
+  correctAnswer: boolean;
 }
 
 export interface Question {
@@ -64,8 +62,8 @@ export interface Question {
   type: QuestionType;
   section: 1 | 2 | 3;
   text: string;
-  options: string[];        // Dùng cho MCQ
-  subQuestions?: SubQuestion[]; // Dùng cho Đúng / Sai
+  options?: string[];            // chỉ dùng cho MCQ
+  subQuestions?: SubQuestion[];  // chỉ dùng cho Đúng / Sai
   correctAnswer: number | string | boolean | boolean[];
   points?: number;
 }
@@ -81,15 +79,15 @@ export interface Exam {
   assignedClassId: string;
   assignedClassIds?: string[];
 
-  duration: number;         // phút
+  duration: number; // phút
   maxScore: number;
 
   questions?: Question[];
 
   scoringConfig?: {
-    part1Points: number;    // Mặc định 0.25
-    part2Points: number;    // Mặc định 1.0 (4 ý)
-    part3Points: number;    // Mặc định 0.5
+    part1Points: number; // mặc định 0.25
+    part2Points: number; // mặc định 1.0 (4 ý)
+    part3Points: number; // mặc định 0.5
   };
 }
 
