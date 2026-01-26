@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { db } from "../services/firebase";
+import { UserRole } from "../types";
 
 type Teacher = {
   id: string;
@@ -32,7 +33,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   // ============================
-  // 1. BẢO VỆ QUYỀN ADMIN
+  // 1. BẢO VỆ QUYỀN ADMIN (FIX CHUẨN ROLE)
   // ============================
   useEffect(() => {
     const auth = getAuth();
@@ -46,8 +47,8 @@ export default function AdminDashboard() {
 
       const snap = await getDoc(doc(db, "users", user.uid));
 
-      if (!snap.exists() || snap.data().role !== "ADMIN") {
-        alert("Bạn không có quyền truy cập");
+      if (!snap.exists() || snap.data().role !== UserRole.ADMIN) {
+        alert("Bạn không có quyền truy cập admin");
         window.location.href = "/";
       }
     });
@@ -56,7 +57,7 @@ export default function AdminDashboard() {
   }, []);
 
   // ============================
-  // 2. REALTIME LOAD TEACHERS
+  // 2. LOAD REALTIME TEACHERS PENDING
   // ============================
   useEffect(() => {
     const q = query(
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
   }, []);
 
   // ============================
-  // 3. REALTIME LOAD NOTIFICATIONS
+  // 3. LOAD REALTIME NOTIFICATIONS
   // ============================
   useEffect(() => {
     const q = query(
@@ -106,13 +107,11 @@ export default function AdminDashboard() {
     status: "APPROVED" | "REJECTED"
   ) => {
     try {
-      // Update teacher
       await updateDoc(doc(db, "teachers", teacherId), {
         status,
         reviewedAt: serverTimestamp(),
       });
 
-      // Audit log vĩnh viễn
       await addDoc(collection(db, "audit_logs"), {
         action: "UPDATE_TEACHER_STATUS",
         teacherId,
@@ -121,15 +120,16 @@ export default function AdminDashboard() {
         createdAt: serverTimestamp(),
       });
 
-      // Mark all notifications as read
-      notifications.forEach(async (n) => {
+      for (const n of notifications) {
         await updateDoc(doc(db, "notifications", n.id), {
           read: true,
         });
-      });
+      }
+
+      alert(status === "APPROVED" ? "Đã duyệt giáo viên" : "Đã từ chối giáo viên");
     } catch (err) {
       console.error(err);
-      alert("Có lỗi xảy ra");
+      alert("Có lỗi xảy ra khi xử lý");
     }
   };
 
@@ -138,16 +138,17 @@ export default function AdminDashboard() {
   // ============================
   return (
     <div style={{ padding: 24 }}>
-      <h2>📌 Bảng quản trị duyệt giáo viên</h2>
+      <h2>🛡️ Admin Dashboard – Duyệt giáo viên</h2>
 
-      {/* Notifications */}
       {notifications.length > 0 && (
-        <div style={{
-          background: "#fef3c7",
-          padding: 12,
-          borderRadius: 6,
-          marginBottom: 16
-        }}>
+        <div
+          style={{
+            background: "#fef3c7",
+            padding: 12,
+            borderRadius: 6,
+            marginBottom: 16,
+          }}
+        >
           <strong>🔔 Có giáo viên mới đăng ký:</strong>
           <ul>
             {notifications.map((n) => (
@@ -160,7 +161,7 @@ export default function AdminDashboard() {
       {loading && <p>Đang tải dữ liệu...</p>}
 
       {!loading && teachers.length === 0 && (
-        <p>Không có giáo viên nào chờ duyệt</p>
+        <p>Không có giáo viên nào đang chờ duyệt</p>
       )}
 
       {!loading && teachers.length > 0 && (
@@ -178,10 +179,16 @@ export default function AdminDashboard() {
                 <td style={td}>{t.fullName}</td>
                 <td style={td}>{t.email}</td>
                 <td style={td}>
-                  <button style={approveBtn} onClick={() => updateStatus(t.id, "APPROVED")}>
+                  <button
+                    style={approveBtn}
+                    onClick={() => updateStatus(t.id, "APPROVED")}
+                  >
                     ✔ Duyệt
                   </button>
-                  <button style={rejectBtn} onClick={() => updateStatus(t.id, "REJECTED")}>
+                  <button
+                    style={rejectBtn}
+                    onClick={() => updateStatus(t.id, "REJECTED")}
+                  >
                     ✖ Từ chối
                   </button>
                 </td>
