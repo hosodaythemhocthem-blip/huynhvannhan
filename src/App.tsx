@@ -2,13 +2,16 @@ import { useEffect } from "react";
 
 export default function App() {
   useEffect(() => {
-    if ((window as any).MathJax) {
-      (window as any).MathJax.typesetPromise();
-    }
+    const mj = (window as any).MathJax;
+    if (!mj) return;
+
+    mj.startup.promise.then(() => {
+      mj.typesetPromise();
+    });
   }, []);
 
   return (
-    <div className="p-6">
+    <div className="p-6 tex-process">
       <h1 className="text-2xl font-bold">
         LMS Toán học đã chạy 🎉
       </h1>
