@@ -1,4 +1,6 @@
-# Logs
+# ======================
+# LOGS
+# ======================
 logs
 *.log
 npm-debug.log*
@@ -7,18 +9,54 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# ======================
+# DEPENDENCIES
+# ======================
+node_modules/
+
+# ======================
+# BUILD OUTPUT
+# ======================
+dist/
+dist-ssr/
+.vercel/
+
+# ======================
+# ENV FILES (TUYỆT ĐỐI KHÔNG COMMIT)
+# ======================
+.env
+.env.*
 *.local
 
-# Editor directories and files
+# ======================
+# CACHE / TEMP
+# ======================
+.cache/
+.eslintcache
+.vite/
+
+# ======================
+# EDITORS
+# ======================
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ======================
+# TEST / COVERAGE
+# ======================
+coverage/
+*.lcov
+
+# ======================
+# AI / EXPORT FILES
+# ======================
+*.pdf
+*.docx
+*.xlsx
