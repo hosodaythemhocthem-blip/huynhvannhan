@@ -1,243 +1,158 @@
-import React, { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  updateDoc,
-  doc,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../services/firebase";
+import React, { useState } from "react";
 
 /* =========================
-   1. KIỂU DỮ LIỆU (TYPES)
+   KIỂU DỮ LIỆU
 ========================= */
-
-type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
-
-interface Teacher {
+interface TeacherAccount {
   id: string;
-  name: string;
-  email: string;
-  subject?: string;
-  status: ApprovalStatus;
-  createdAt?: any;
-}
-
-interface Notification {
-  id: string;
-  message: string;
-  read: boolean;
+  username: string;
+  fullName: string;
+  active: boolean;
 }
 
 /* =========================
-   2. STYLE NHẸ (INLINE)
+   COMPONENT
 ========================= */
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  borderBottom: "1px solid #e5e7eb",
-  fontSize: 13,
-  textTransform: "uppercase",
-  color: "#475569",
-};
-
-const td: React.CSSProperties = {
-  padding: 12,
-  borderBottom: "1px solid #f1f5f9",
-  fontSize: 14,
-};
-
-/* =========================
-   3. COMPONENT CHÍNH
-========================= */
-
 const AdminDashboard: React.FC = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [teachers, setTeachers] = useState<TeacherAccount[]>([
+    {
+      id: "1",
+      username: "gvtoan01",
+      fullName: "Giáo viên Toán 1",
+      active: true,
+    },
+    {
+      id: "2",
+      username: "gvtoan02",
+      fullName: "Giáo viên Toán 2",
+      active: false,
+    },
+  ]);
 
-  /* =========================
-     3.1 LOAD GIÁO VIÊN CHỜ DUYỆT (REALTIME)
-  ========================= */
+  const handleAdd = () => {
+    const username = prompt("Tên đăng nhập GV:");
+    const fullName = prompt("Họ tên GV:");
+    if (!username || !fullName) return;
 
-  useEffect(() => {
-    const q = query(
-      collection(db, "teachers"),
-      where("status", "==", "PENDING")
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Teacher, "id">),
-      }));
-      setTeachers(data);
-      setLoading(false);
-    });
-
-    return () => unsub();
-  }, []);
-
-  /* =========================
-     3.2 LOAD THÔNG BÁO (REALTIME)
-  ========================= */
-
-  useEffect(() => {
-    const q = query(
-      collection(db, "notifications"),
-      where("read", "==", false)
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Notification, "id">),
-      }));
-      setNotifications(data);
-    });
-
-    return () => unsub();
-  }, []);
-
-  /* =========================
-     3.3 DUYỆT / TỪ CHỐI GIÁO VIÊN
-  ========================= */
-
-  const updateStatus = async (
-    teacherId: string,
-    status: ApprovalStatus
-  ) => {
-    try {
-      // 1️⃣ Update trạng thái giáo viên
-      await updateDoc(doc(db, "teachers", teacherId), {
-        status,
-        reviewedAt: serverTimestamp(),
-      });
-
-      // 2️⃣ Ghi log vĩnh viễn (KHÔNG BAO GIỜ XÓA)
-      await addDoc(collection(db, "audit_logs"), {
-        action: "UPDATE_TEACHER_STATUS",
-        teacherId,
-        status,
-        actor: "ADMIN",
-        createdAt: serverTimestamp(),
-      });
-
-      // 3️⃣ Đánh dấu thông báo đã đọc
-      for (const n of notifications) {
-        await updateDoc(doc(db, "notifications", n.id), {
-          read: true,
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      alert("❌ Có lỗi xảy ra khi cập nhật");
-    }
+    setTeachers((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        username,
+        fullName,
+        active: true,
+      },
+    ]);
   };
 
-  /* =========================
-     4. GIAO DIỆN
-  ========================= */
+  const toggleActive = (id: string) => {
+    setTeachers((prev) =>
+      prev.map((t) =>
+        t.id === id ? { ...t, active: !t.active } : t
+      )
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm("Xóa tài khoản giáo viên này?")) return;
+    setTeachers((prev) => prev.filter((t) => t.id !== id));
+  };
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800 }}>
-        📌 Bảng Quản Trị – Duyệt Giáo Viên
-      </h2>
+      <h1 style={{ fontSize: 26, fontWeight: 900 }}>
+        🛡 Quản trị hệ thống
+      </h1>
+      <p style={{ color: "#475569", marginBottom: 16 }}>
+        Quản lý tài khoản giáo viên
+      </p>
 
-      {/* ===== THÔNG BÁO ===== */}
-      {notifications.length > 0 && (
-        <div
-          style={{
-            background: "#fef3c7",
-            padding: 14,
-            borderRadius: 8,
-            margin: "16px 0",
-          }}
-        >
-          <strong>🔔 Có giáo viên mới đăng ký:</strong>
-          <ul style={{ marginTop: 8 }}>
-            {notifications.map((n) => (
-              <li key={n.id}>• {n.message}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <button
+        onClick={handleAdd}
+        style={{
+          marginBottom: 12,
+          padding: "6px 12px",
+          background: "#16a34a",
+          color: "white",
+          border: "none",
+          borderRadius: 6,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        ➕ Thêm giáo viên
+      </button>
 
-      {/* ===== TRẠNG THÁI LOAD ===== */}
-      {loading && <p>⏳ Đang tải dữ liệu...</p>}
-
-      {!loading && teachers.length === 0 && (
-        <p>✅ Không có giáo viên nào đang chờ duyệt</p>
-      )}
-
-      {/* ===== BẢNG GIÁO VIÊN ===== */}
-      {!loading && teachers.length > 0 && (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            marginTop: 16,
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={th}>Họ tên</th>
-              <th style={th}>Email</th>
-              <th style={th}>Môn</th>
-              <th style={th}>Thao tác</th>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+        }}
+      >
+        <thead>
+          <tr style={{ background: "#f1f5f9" }}>
+            <th style={th}>Tên đăng nhập</th>
+            <th style={th}>Họ tên</th>
+            <th style={th}>Trạng thái</th>
+            <th style={th}>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {teachers.map((t) => (
+            <tr key={t.id}>
+              <td style={td}>{t.username}</td>
+              <td style={td}>{t.fullName}</td>
+              <td style={td}>
+                {t.active ? "✅ Hoạt động" : "⛔ Bị khóa"}
+              </td>
+              <td style={td}>
+                <button
+                  onClick={() => toggleActive(t.id)}
+                  style={btn}
+                >
+                  {t.active ? "Khóa" : "Mở"}
+                </button>
+                <button
+                  onClick={() => handleDelete(t.id)}
+                  style={{
+                    ...btn,
+                    background: "#fee2e2",
+                    borderColor: "#fecaca",
+                    color: "#991b1b",
+                  }}
+                >
+                  Xóa
+                </button>
+              </td>
             </tr>
-          </thead>
-
-          <tbody>
-            {teachers.map((t) => (
-              <tr key={t.id}>
-                <td style={td}>{t.name}</td>
-                <td style={td}>{t.email}</td>
-                <td style={td}>{t.subject || "—"}</td>
-                <td style={td}>
-                  <button
-                    onClick={() => updateStatus(t.id, "APPROVED")}
-                    style={{
-                      marginRight: 8,
-                      padding: "6px 12px",
-                      background: "#22c55e",
-                      color: "white",
-                      borderRadius: 6,
-                      border: "none",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    ✔ Duyệt
-                  </button>
-
-                  <button
-                    onClick={() => updateStatus(t.id, "REJECTED")}
-                    style={{
-                      padding: "6px 12px",
-                      background: "#ef4444",
-                      color: "white",
-                      borderRadius: 6,
-                      border: "none",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    ✖ Từ chối
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          ))}
+        </tbody>
+      </table>
     </div>
   );
+};
+
+/* =========================
+   STYLE
+========================= */
+const th: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  padding: 8,
+  textAlign: "left",
+};
+
+const td: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  padding: 8,
+};
+
+const btn: React.CSSProperties = {
+  marginRight: 6,
+  padding: "4px 8px",
+  borderRadius: 6,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  cursor: "pointer",
 };
 
 export default AdminDashboard;
