@@ -9,8 +9,7 @@ const __dirname = path.dirname(__filename);
 export default defineConfig({
   plugins: [
     react({
-      // Tối ưu render React
-      fastRefresh: true,
+      fastRefresh: true, // React HMR mượt
     }),
   ],
 
@@ -20,28 +19,34 @@ export default defineConfig({
     },
   },
 
+  /**
+   * BẮT BUỘC cho Gemini API
+   * Tránh lỗi: process is not defined (Vercel / Rollup)
+   */
   define: {
-    // An toàn cho build + không gây lỗi Rollup
-    "process.env.API_KEY": JSON.stringify(process.env.API_KEY ?? ""),
+    "process.env.API_KEY": JSON.stringify(process.env.API_KEY || ""),
   },
 
   build: {
     outDir: "dist",
-    target: "es2018", // Tương thích tốt hơn nhiều trình duyệt
-    minify: "esbuild", // Nhanh và ít lỗi hơn terser
+    target: "es2018",
+    minify: "esbuild",
     cssCodeSplit: true,
-    sourcemap: false, // tắt sourcemap khi deploy → nhẹ hơn
+    sourcemap: false,
 
     rollupOptions: {
       output: {
-        // Chia chunk thông minh giúp load nhanh hơn
         manualChunks(id) {
           if (id.includes("node_modules")) {
             if (id.includes("react")) return "vendor-react";
             if (id.includes("@google/genai")) return "vendor-ai";
             if (id.includes("firebase")) return "vendor-firebase";
-            if (id.includes("lucide") || id.includes("recharts"))
+            if (
+              id.includes("lucide") ||
+              id.includes("recharts")
+            ) {
               return "vendor-ui";
+            }
             return "vendor";
           }
         },
