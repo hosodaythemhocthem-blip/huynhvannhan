@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ExamCard, { Exam } from "./components/ExamCard";
 import LoginScreen from "./components/LoginScreen";
+import { UserRole } from "./types";
 
 const exams: Exam[] = [
   {
@@ -18,24 +19,32 @@ const exams: Exam[] = [
 ];
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
 
-  // 🔐 BẮT BUỘC: HIỆN ĐĂNG NHẬP TRƯỚC
-  if (!isLoggedIn) {
-    return <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />;
+  // 🔐 LUÔN HIỆN LOGIN TRƯỚC
+  if (!userRole) {
+    return (
+      <LoginScreen
+        onSelectRole={(role) => {
+          setUserRole(role);
+        }}
+      />
+    );
   }
 
-  // 📘 SAU ĐĂNG NHẬP MỚI HIỆN DANH SÁCH ĐỀ
+  // 📘 SAU KHI ĐĂNG NHẬP
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: "bold", marginBottom: 16 }}>
-        Quản lý đề thi
-      </h1>
+    <div className="min-h-screen bg-slate-100 p-6">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-2xl font-black mb-6">
+          Quản lý đề thi Toán học
+        </h1>
 
-      <div style={{ display: "grid", gap: 16 }}>
-        {exams.map((exam) => (
-          <ExamCard key={exam.id} exam={exam} />
-        ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {exams.map((exam) => (
+            <ExamCard key={exam.id} exam={exam} />
+          ))}
+        </div>
       </div>
     </div>
   );
