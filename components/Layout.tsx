@@ -1,15 +1,14 @@
-
-import React from 'react';
-import { 
-  LayoutDashboard, 
-  BookOpen, 
-  Award, 
-  Settings, 
-  Search, 
-  Bell, 
+import React from "react";
+import {
+  LayoutDashboard,
+  BookOpen,
+  Award,
+  Settings,
+  Search,
+  Bell,
   LogOut,
-  User
-} from 'lucide-react';
+  User,
+} from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,86 +16,108 @@ interface LayoutProps {
   setActiveTab: (tab: string) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) => {
+const Layout: React.FC<LayoutProps> = ({
+  children,
+  activeTab,
+  setActiveTab,
+}) => {
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'courses', label: 'Courses', icon: BookOpen },
-    { id: 'achievements', label: 'Achievements', icon: Award },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "courses", label: "Courses", icon: BookOpen },
+    { id: "achievements", label: "Achievements", icon: Award },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+    <div className="flex min-h-screen bg-slate-100 overflow-hidden">
+      {/* ================= SIDEBAR ================= */}
+      <aside className="w-72 min-w-[18rem] bg-white border-r border-slate-200 hidden md:flex flex-col">
+        {/* Logo */}
+        <div className="px-6 py-6 flex items-center gap-3 border-b">
+          <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow">
             <BookOpen size={24} />
           </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Lumina
-          </span>
+          <div>
+            <div className="text-lg font-extrabold text-slate-800">
+              Toán Học Cloud
+            </div>
+            <div className="text-xs text-slate-500">
+              Hệ thống Huỳnh Văn Nhẫn
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-1">
+        {/* Nav */}
+        <nav className="flex-1 px-4 py-6 space-y-1">
           {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                activeTab === item.id 
-                  ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-sm' 
-                  : 'text-gray-500 hover:bg-gray-50'
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === item.id
+                  ? "bg-indigo-50 text-indigo-700 font-semibold shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               <item.icon size={20} />
-              {item.label}
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-gray-100">
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+        {/* Logout */}
+        <div className="p-4 border-t">
+          <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-xl transition">
             <LogOut size={20} />
-            Logout
+            Đăng xuất
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* ================= MAIN ================= */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-20">
+          {/* Search */}
           <div className="flex-1 max-w-xl">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search for courses, lessons, topics..." 
-                className="w-full pl-10 pr-4 py-2 bg-gray-50 border-transparent focus:bg-white focus:border-indigo-300 rounded-full text-sm transition-all focus:ring-4 focus:ring-indigo-100 outline-none"
+            <div className="relative">
+              <Search
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
+              />
+              <input
+                type="text"
+                placeholder="Tìm khóa học, bài giảng, nội dung..."
+                className="w-full pl-11 pr-4 py-2.5 bg-slate-100 focus:bg-white border border-transparent focus:border-indigo-300 rounded-full text-sm outline-none focus:ring-4 focus:ring-indigo-100 transition"
               />
             </div>
           </div>
 
+          {/* Right */}
           <div className="flex items-center gap-4">
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full relative">
+            <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full">
               <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
             </button>
-            <div className="flex items-center gap-3 border-l pl-4 ml-4">
+
+            <div className="flex items-center gap-3 pl-4 border-l">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-gray-900 leading-none">Alex Johnson</p>
-                <p className="text-xs text-gray-500 mt-1">Student Learner</p>
+                <div className="text-sm font-semibold text-slate-800">
+                  Admin
+                </div>
+                <div className="text-xs text-slate-500">
+                  Quản trị hệ thống
+                </div>
               </div>
-              <div className="w-9 h-9 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full border-2 border-white shadow-sm overflow-hidden flex items-center justify-center text-white">
-                <User size={20} />
+              <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white shadow">
+                <User size={18} />
               </div>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-8">
           {children}
         </main>
       </div>
