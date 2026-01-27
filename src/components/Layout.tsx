@@ -78,7 +78,6 @@ const Layout: React.FC<LayoutProps> = ({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-20">
-          {/* Search */}
           <div className="flex-1 max-w-xl">
             <div className="relative">
               <Search
@@ -93,7 +92,6 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
 
-          {/* Right */}
           <div className="flex items-center gap-4">
             <button className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full">
               <Bell size={20} />
@@ -116,9 +114,11 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         </header>
 
-        {/* Content */}
+        {/* ================= CONTENT (WIDTH CONTROLLED) ================= */}
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-10 md:py-8">
-          {children}
+          <div className="max-w-5xl mx-auto w-full">
+            {children}
+          </div>
         </main>
       </div>
     </div>
