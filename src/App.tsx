@@ -1,10 +1,12 @@
 import { useState } from "react";
 import LoginScreen from "./components/LoginScreen";
+import Layout from "./components/Layout";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [activeTab, setActiveTab] = useState("dashboard");
 
-  // 🔐 BẮT BUỘC ĐĂNG NHẬP TRƯỚC
+  // 🔐 BẮT BUỘC ĐĂNG NHẬP
   if (!isLoggedIn) {
     return (
       <LoginScreen
@@ -13,10 +15,11 @@ function App() {
     );
   }
 
-  // 📘 SAU ĐĂNG NHẬP (dashboard demo)
+  // ✅ SAU ĐĂNG NHẬP → DÙNG LAYOUT FULL
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center">
-      <div className="w-full max-w-7xl px-6 py-8">
+    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+      {/* Content bên trong mới giới hạn chiều rộng */}
+      <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-black text-slate-800 mb-6">
           📘 Bảng điều khiển LMS
         </h1>
@@ -44,7 +47,7 @@ function App() {
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }
 
