@@ -1,5 +1,6 @@
-import React from "react";
+import { useState } from "react";
 import ExamCard, { Exam } from "./components/ExamCard";
+import LoginScreen from "./components/LoginScreen";
 
 const exams: Exam[] = [
   {
@@ -17,6 +18,14 @@ const exams: Exam[] = [
 ];
 
 function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // 🔐 BẮT BUỘC: HIỆN ĐĂNG NHẬP TRƯỚC
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
+
+  // 📘 SAU ĐĂNG NHẬP MỚI HIỆN DANH SÁCH ĐỀ
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: "bold", marginBottom: 16 }}>
