@@ -1,49 +1,47 @@
 import { useState } from "react";
-import ExamCard, { Exam } from "./components/ExamCard";
 import LoginScreen from "./components/LoginScreen";
-import { UserRole } from "./types";
-
-const exams: Exam[] = [
-  {
-    id: "1",
-    title: "Đề kiểm tra Toán 6 – Chương 1",
-    subject: "Toán",
-    questionCount: 20,
-  },
-  {
-    id: "2",
-    title: "Đề HK1 Toán 7",
-    subject: "Toán",
-    questionCount: 30,
-  },
-];
 
 function App() {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // 🔐 LUÔN HIỆN LOGIN TRƯỚC
-  if (!userRole) {
+  // 🔐 BẮT BUỘC ĐĂNG NHẬP TRƯỚC
+  if (!isLoggedIn) {
     return (
       <LoginScreen
-        onSelectRole={(role) => {
-          setUserRole(role);
-        }}
+        onSelectRole={() => setIsLoggedIn(true)}
       />
     );
   }
 
-  // 📘 SAU KHI ĐĂNG NHẬP
+  // 📘 SAU ĐĂNG NHẬP (dashboard demo)
   return (
-    <div className="min-h-screen bg-slate-100 p-6">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-2xl font-black mb-6">
-          Quản lý đề thi Toán học
+    <div className="min-h-screen bg-slate-100 flex justify-center">
+      <div className="w-full max-w-7xl px-6 py-8">
+        <h1 className="text-3xl font-black text-slate-800 mb-6">
+          📘 Bảng điều khiển LMS
         </h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {exams.map((exam) => (
-            <ExamCard key={exam.id} exam={exam} />
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-2xl shadow p-6">
+            <h2 className="font-bold text-lg mb-2">📄 Đề thi</h2>
+            <p className="text-sm text-slate-600">
+              Quản lý, tạo và phân phối đề
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow p-6">
+            <h2 className="font-bold text-lg mb-2">🏫 Lớp học</h2>
+            <p className="text-sm text-slate-600">
+              Danh sách lớp & học sinh
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow p-6">
+            <h2 className="font-bold text-lg mb-2">📊 Kết quả</h2>
+            <p className="text-sm text-slate-600">
+              Thống kê & phân tích điểm
+            </p>
+          </div>
         </div>
       </div>
     </div>
