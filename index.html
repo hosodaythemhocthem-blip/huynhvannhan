@@ -1,29 +1,119 @@
 <!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <title>LMS</title>
+<head>
+  <!-- ================= META ================= -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumina AI – Toán Học Cloud</title>
 
-    <!-- MathJax config -->
-    <script>
-      window.MathJax = {
-        tex: {
-          inlineMath: [['$', '$'], ['\\(', '\\)']],
-          displayMath: [['$$', '$$'], ['\\[', '\\]']]
-        },
-        svg: { fontCache: 'global' }
-      };
-    </script>
+  <!-- ================= FONTS ================= -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
 
-    <!-- MathJax CDN -->
-    <script
-      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
-      async
-    ></script>
-  </head>
+  <!-- ================= TAILWIND CDN ================= -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+  <!-- ================= ENV SHIM (FIX TRẮNG TRANG) ================= -->
+  <script>
+    // BẮT BUỘC: tránh lỗi process is not defined
+    window.process = {
+      env: {
+        NODE_ENV: "production",
+        API_KEY: ""
+      }
+    };
+  </script>
+
+  <!-- ================= MATHJAX CONFIG ================= -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: {
+        enableMenu: false
+      },
+      svg: {
+        fontCache: 'global'
+      }
+    };
+  </script>
+
+  <!-- MathJax Loader -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
+    async
+  ></script>
+
+  <!-- ================= GLOBAL STYLE ================= -->
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f8fafc;
+      margin: 0;
+      color: #0f172a;
+    }
+
+    /* Glass UI */
+    .glass {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+    }
+
+    /* Math overflow fix */
+    .math-content .MathJax {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    /* Fade animation */
+    .fade-in {
+      animation: fadeIn 0.6s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+
+  <!-- ================= IMPORT MAP (DÙNG CHO VITE / ESM) ================= -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@19",
+      "react-dom": "https://esm.sh/react-dom@19",
+      "react-dom/client": "https://esm.sh/react-dom@19/client",
+      "react-router-dom": "https://esm.sh/react-router-dom@7",
+      "lucide-react": "https://esm.sh/lucide-react",
+      "react-markdown": "https://esm.sh/react-markdown@9",
+      "firebase/app": "https://esm.sh/firebase@12/app",
+      "firebase/auth": "https://esm.sh/firebase@12/auth",
+      "firebase/firestore": "https://esm.sh/firebase@12/firestore",
+      "@google/genai": "https://esm.sh/@google/genai"
+    }
+  }
+  </script>
+</head>
+
+<body class="tex2jax_process antialiased">
+  <!-- ================= APP ROOT ================= -->
+  <div id="root"></div>
+
+  <!-- ================= ENTRY ================= -->
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
