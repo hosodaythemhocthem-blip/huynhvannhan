@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, X, Sparkles, MessageCircle, Info, Loader2 } from 'lucide-react';
+import { Send, Bot, X, Sparkles, MessageCircle, Loader2 } from 'lucide-react';
 import { askGemini } from '../services/geminiService.ts';
 import MathPreview from './MathPreview.tsx';
 
