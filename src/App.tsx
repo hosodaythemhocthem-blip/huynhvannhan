@@ -1,211 +1,230 @@
-import React, { useState, memo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { UserRole } from './types/user';
+import { Exam } from './types/exam';
+import { Course } from './types/course';
+
 import {
-  HashRouter as Router,
-  Routes,
-  Route,
-  NavLink,
-  useParams,
-  Navigate
-} from 'react-router-dom';
-import {
-  Sparkles,
   Briefcase,
   GraduationCap,
-  ShieldCheck,
+  Upload,
+  Sparkles,
   LogOut,
-  LayoutDashboard,
   BookOpen,
-  User,
-  Bell
+  Clock
 } from 'lucide-react';
 
-import { Dashboard } from './views/Dashboard';
-import { CourseView } from './views/CourseView';
-import { CreateCourse } from './views/CreateCourse';
+import { parseExamFile, generateCourseOutline } from './services/geminiService';
+import CourseViewer from './components/CourseViewer';
+import MathPreview from './components/MathPreview';
 
-/* =========================================================
-   TYPES
-========================================================= */
-type UserRole = 'teacher' | 'student' | 'admin';
+/* ===== localStorage keys ===== */
+const LS_EXAMS = 'lumina_exams';
+const LS_COURSES = 'lumina_courses';
 
-/* =========================================================
-   LOGIN PORTAL
-========================================================= */
-const LoginPortal = memo(({ onLogin }: { onLogin: (role: UserRole) => void }) => (
-  <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-100 via-transparent to-transparent">
-    <div className="w-full max-w-5xl space-y-16 fade-in">
-      <div className="text-center space-y-6">
-        <div className="inline-flex items-center gap-3 px-6 py-2 bg-white/80 backdrop-blur border border-blue-100 rounded-full text-blue-600 text-[10px] font-black uppercase tracking-[0.3em] shadow-sm">
-          <Sparkles size={14} className="animate-pulse" />
-          Hệ thống quản lý học tập AI
-        </div>
-
-        <h1 className="text-7xl font-black text-slate-900 italic tracking-tighter">
-          Toán Học <span className="text-blue-600">Cloud</span>
-        </h1>
-
-        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-xs">
-          Hệ thống Huỳnh Văn Nhẫn
-        </p>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-10">
-        <RoleCard
-          icon={<Briefcase size={40} />}
-          title="Giáo viên"
-          color="blue"
-          onClick={() => onLogin('teacher')}
-          desc="Biên soạn bài giảng bằng AI, quản lý đề thi và chấm điểm tự động."
-        />
-
-        <RoleCard
-          icon={<GraduationCap size={40} />}
-          title="Học sinh"
-          color="orange"
-          onClick={() => onLogin('student')}
-          desc="Học tập tương tác, làm bài tập và nhận hỗ trợ từ gia sư AI 24/7."
-        />
-      </div>
-
-      <div className="flex justify-center">
-        <button
-          onClick={() => onLogin('admin')}
-          className="flex items-center gap-4 px-10 py-5 bg-slate-900 text-white rounded-[24px] text-xs font-black uppercase tracking-[0.3em] hover:bg-black transition-all shadow-2xl hover:scale-105"
-        >
-          <ShieldCheck size={20} className="text-blue-400" />
-          Quản trị viên (ADMIN)
-        </button>
-      </div>
-    </div>
-  </div>
-));
-
-/* =========================================================
-   ROLE CARD
-========================================================= */
-const RoleCard = ({ icon, title, desc, onClick, color }: any) => (
-  <button
-    onClick={onClick}
-    className="group relative bg-white p-12 rounded-[56px] border border-slate-100 shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all text-left"
-  >
-    <div
-      className={`w-20 h-20 bg-${color}-50 text-${color}-600 rounded-3xl flex items-center justify-center mb-10 group-hover:scale-110 transition-transform shadow-inner`}
-    >
-      {icon}
-    </div>
-    <h3 className="text-4xl font-black text-slate-800 mb-4 italic">
-      {title}
-    </h3>
-    <p className="text-slate-400 font-medium text-lg leading-relaxed">
-      {desc}
-    </p>
-  </button>
-);
-
-/* =========================================================
-   MAIN LAYOUT
-========================================================= */
-const MainLayout = ({ role, onLogout, children }: any) => (
-  <div className="flex min-h-screen bg-[#f8fafc]">
-    <aside className="w-20 lg:w-80 bg-white border-r border-slate-100 flex flex-col sticky top-0 h-screen shadow-sm">
-      <Sidebar />
-    </aside>
-
-    <main className="flex-1 min-w-0">
-      <Header role={role} onLogout={onLogout} />
-      <div className="p-10 max-w-7xl mx-auto fade-in">{children}</div>
-    </main>
-  </div>
-);
-
-/* =========================================================
-   SIDEBAR
-========================================================= */
-const Sidebar = memo(() => (
-  <>
-    <div className="p-8 flex items-center gap-4 border-b border-slate-50">
-      <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
-        <GraduationCap size={28} />
-      </div>
-      <div className="hidden lg:block">
-        <h1 className="text-xl font-black italic">Lumina AI</h1>
-        <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.3em]">
-          Toán Học LMS
-        </span>
-      </div>
-    </div>
-
-    <nav className="flex-1 p-6 space-y-3 mt-6">
-      <NavItem to="/" icon={<LayoutDashboard size={22} />} label="Tổng quan" />
-      <NavItem to="/courses/1" icon={<BookOpen size={22} />} label="Bài giảng" />
-      <NavItem to="/create" icon={<Sparkles size={22} />} label="Biên soạn AI" />
-    </nav>
-  </>
-));
-
-/* =========================================================
-   NAV ITEM (CHUẨN ROUTER)
-========================================================= */
-const NavItem = ({ to, icon, label }: any) => (
-  <NavLink
-    to={to}
-    className={({ isActive }) =>
-      `w-full flex items-center gap-5 px-6 py-5 rounded-[24px] transition-all ${
-        isActive
-          ? 'bg-blue-50 text-blue-600 font-black'
-          : 'text-slate-400 hover:bg-slate-50'
-      }`
-    }
-  >
-    {icon}
-    <span className="hidden lg:block text-sm uppercase tracking-widest italic">
-      {label}
-    </span>
-  </NavLink>
-);
-
-/* =========================================================
-   HEADER
-========================================================= */
-const Header = ({ role, onLogout }: any) => (
-  <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-10 sticky top-0">
-    <div>
-      <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-        Hệ thống quản lý
-      </div>
-      <div className="text-lg font-black italic uppercase">{role} Portal</div>
-    </div>
-
-    <div className="flex items-center gap-6">
-      <Bell />
-      <button onClick={onLogout} className="text-red-500">
-        <LogOut />
-      </button>
-    </div>
-  </header>
-);
-
-/* =========================================================
-   APP ROOT
-========================================================= */
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
+  const [view, setView] = useState<'dashboard' | 'course_viewer'>('dashboard');
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  if (!role) return <LoginPortal onLogin={setRole} />;
+  /* ===== load local data ===== */
+  useEffect(() => {
+    const e = localStorage.getItem(LS_EXAMS);
+    const c = localStorage.getItem(LS_COURSES);
+    if (e) setExams(JSON.parse(e));
+    if (c) setCourses(JSON.parse(c));
+  }, []);
 
+  /* ===== import exam (Word/PDF) ===== */
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    const reader = new FileReader();
+
+    reader.onload = async () => {
+      try {
+        const b64 = (reader.result as string).split(',')[1];
+        const res = await parseExamFile(b64, file.type, file.name);
+
+        if (!res || !Array.isArray(res.questions)) {
+          throw new Error('Invalid exam format');
+        }
+
+        const newExam: Exam = {
+          id: Date.now().toString(),
+          title: res.title || file.name,
+          duration: 90,
+          questions: res.questions,
+          createdAt: new Date().toLocaleDateString('vi-VN')
+        };
+
+        const updated = [newExam, ...exams];
+        setExams(updated);
+        localStorage.setItem(LS_EXAMS, JSON.stringify(updated));
+        alert('Nạp đề thi thành công!');
+      } catch (err) {
+        alert('Lỗi xử lý tệp (Word/PDF).');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  /* ===== AI create course ===== */
+  const createAICourse = async () => {
+    const topic = prompt('Nhập chủ đề Toán bạn muốn AI soạn bài giảng:');
+    if (!topic) return;
+
+    setLoading(true);
+    try {
+      const outline = await generateCourseOutline(topic);
+
+      const newCourse: Course = {
+        id: Date.now().toString(),
+        title: outline.title || topic,
+        description: outline.description || '',
+        category: outline.category || 'Toán học',
+        instructor: 'Lumina AI',
+        imageUrl: `https://picsum.photos/seed/${Math.random()}/800/400`,
+        progress: 0,
+        lessons: (outline.lessons || []).map((l: any, i: number) => ({
+          id: `l-${i}`,
+          title: l.title,
+          content: l.content,
+          duration: l.duration,
+          completed: false
+        }))
+      };
+
+      const updated = [newCourse, ...courses];
+      setCourses(updated);
+      localStorage.setItem(LS_COURSES, JSON.stringify(updated));
+    } catch {
+      alert('AI bận, vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ===== role select ===== */
+  if (!role) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-6xl font-black italic mb-10">
+          Lumina <span className="text-indigo-600">Math</span>
+        </h1>
+
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full">
+          <button
+            onClick={() => setRole(UserRole.TEACHER)}
+            className="bg-white p-10 rounded-3xl shadow hover:-translate-y-1 transition"
+          >
+            <Briefcase size={32} className="mb-4 text-indigo-600" />
+            <h3 className="text-2xl font-black italic">Giáo viên</h3>
+          </button>
+
+          <button
+            onClick={() => setRole(UserRole.STUDENT)}
+            className="bg-white p-10 rounded-3xl shadow hover:-translate-y-1 transition"
+          >
+            <GraduationCap size={32} className="mb-4 text-emerald-600" />
+            <h3 className="text-2xl font-black italic">Học sinh</h3>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ===== main ===== */
   return (
-    <Router>
-      <MainLayout role={role} onLogout={() => setRole(null)}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/courses/:id" element={<CourseView />} />
-          {role !== 'student' && (
-            <Route path="/create" element={<CreateCourse />} />
-          )}
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </MainLayout>
-    </Router>
+    <div className="min-h-screen flex flex-col">
+      <nav className="h-16 bg-white border-b flex items-center justify-between px-6">
+        <span
+          className="font-black italic cursor-pointer"
+          onClick={() => {
+            setView('dashboard');
+            setActiveCourse(null);
+          }}
+        >
+          Lumina Math
+        </span>
+        <button onClick={() => setRole(null)}>
+          <LogOut />
+        </button>
+      </nav>
+
+      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+        {view === 'dashboard' ? (
+          <>
+            <div className="flex gap-4 mb-8">
+              <label className="bg-emerald-600 text-white px-6 py-3 rounded cursor-pointer flex gap-2">
+                <Upload size={18} /> Import đề
+                <input type="file" hidden accept=".docx,.pdf" onChange={handleFileUpload} />
+              </label>
+
+              <button
+                onClick={createAICourse}
+                className="bg-indigo-600 text-white px-6 py-3 rounded flex gap-2"
+              >
+                <Sparkles size={18} /> AI soạn khóa học
+              </button>
+            </div>
+
+            {loading && <p>Đang xử lý...</p>}
+
+            {/* ===== Exams ===== */}
+            <h3 className="font-black mb-4">Kho đề thi</h3>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {exams.map(e => (
+                <div key={e.id} className="bg-white p-6 rounded shadow">
+                  <h4 className="font-black italic mb-2">{e.title}</h4>
+
+                  <div className="text-sm text-slate-500 mb-3 flex gap-3">
+                    <span className="flex items-center gap-1">
+                      <Clock size={14} /> {e.duration}p
+                    </span>
+                    <span>{e.questions.length} câu</span>
+                  </div>
+
+                  {/* PREVIEW TOÁN (LaTeX) */}
+                  {e.questions[0] && (
+                    <MathPreview math={e.questions[0].content} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          activeCourse && (
+            <CourseViewer
+              course={activeCourse}
+              onBack={() => setView('dashboard')}
+              onToggleLesson={(id) => {
+                const updated = {
+                  ...activeCourse,
+                  lessons: activeCourse.lessons.map(l =>
+                    l.id === id ? { ...l, completed: !l.completed } : l
+                  )
+                };
+                setActiveCourse(updated);
+
+                const all = courses.map(c =>
+                  c.id === updated.id ? updated : c
+                );
+                setCourses(all);
+                localStorage.setItem(LS_COURSES, JSON.stringify(all));
+              }}
+            />
+          )
+        )}
+      </main>
+    </div>
   );
 };
 
