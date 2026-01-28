@@ -5,22 +5,30 @@ import { UserRole } from "./types";
 
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState<string>("");
 
+  /* ===== CHƯA ĐĂNG NHẬP ===== */
   if (!role) {
     return (
       <LoginScreen
-        onSelectRole={(r, data) => {
-          setRole(r);
-          setUserName(data?.name || "Huỳnh Văn Nhẫn");
+        onSelectRole={(selectedRole, data) => {
+          setRole(selectedRole);
+
+          // ✅ Admin không có data từ Firestore
+          if (selectedRole === UserRole.ADMIN) {
+            setUserName("Huỳnh Văn Nhẫn");
+          } else {
+            setUserName(data?.name || "Giáo viên");
+          }
         }}
       />
     );
   }
 
+  /* ===== ĐÃ ĐĂNG NHẬP ===== */
   return (
     <Dashboard
-      role={role}
+      userRole={role}        // ⚠️ tên prop PHẢI là userRole
       userName={userName}
       onLogout={() => {
         setRole(null);
