@@ -1,182 +1,127 @@
-import React, { useEffect, useRef, useState } from "react";
-import { UserRole, Exam, Course } from "../types";
-import { parseExamFile } from "../services/exam/parseExamService";
-import { generateCourseOutline } from "../services/ai/geminiService";
-import CourseViewer from "../components/course/CourseViewer";
-import Dashboard from "../components/dashboard/Dashboard";
+import React, { useCallback, useMemo, useState } from "react";
+import Dashboard from "./components/Dashboard";
+import { UserRole, DashboardStats } from "./types";
 
-const COURSES_KEY = "lumina_courses";
-const EXAMS_KEY = "lumina_exams";
+/* ================= TYPES ================= */
+
+type Page = "dashboard" | "courses" | "exams" | "reports" | "classes";
+
+/* ================= APP ================= */
 
 const App: React.FC = () => {
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [activeCourse, setActiveCourse] = useState<Course | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const hydrated = useRef(false);
+  const [role] = useState<UserRole>("TEACHER");
+  const [currentPage, setCurrentPage] = useState<Page>("dashboard");
 
   /**
-   * 🚀 Hydrate cache (1 lần duy nhất – StrictMode safe)
+   * 📊 Stats – sau này thay bằng Firestore selector
    */
-  useEffect(() => {
-    if (hydrated.current) return;
-    hydrated.current = true;
+  const stats: DashboardStats = useMemo(
+    () => ({
+      courses: 14,
+      exams: 52,
+      students: 840,
+    }),
+    []
+  );
 
-    try {
-      const cachedCourses = JSON.parse(
-        localStorage.getItem(COURSES_KEY) || "[]"
-      );
-      const cachedExams = JSON.parse(
-        localStorage.getItem(EXAMS_KEY) || "[]"
-      );
-
-      setCourses(Array.isArray(cachedCourses) ? cachedCourses : []);
-      setExams(Array.isArray(cachedExams) ? cachedExams : []);
-    } catch {
-      localStorage.removeItem(COURSES_KEY);
-      localStorage.removeItem(EXAMS_KEY);
-    }
+  /**
+   * 🚀 Điều hướng trung tâm
+   */
+  const handleNavigate = useCallback((page: Page) => {
+    setCurrentPage(page);
   }, []);
 
   /**
-   * 🔐 Upload đề thi – async an toàn
+   * 🧠 Tạo đề thi (hook sang module AI)
    */
-  const handleUploadExam = async (file: File) => {
-    if (loading) return;
-    setLoading(true);
+  const handleCreateExam = useCallback(() => {
+    // Sau này thay bằng: navigate("exams/create")
+    alert("Chuyển hướng đến module tạo đề thi AI...");
+  }, []);
 
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () =>
-          resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const data = await parseExamFile(base64, file.type, file.name);
-
-      const exam: Exam = {
-        id: crypto.randomUUID(),
-        title: data.title,
-        duration: 90,
-        questions: data.questions,
-        createdAt: new Date().toLocaleDateString("vi-VN"),
-      };
-
-      setExams((prev) => {
-        const updated = [exam, ...prev];
-        localStorage.setItem(EXAMS_KEY, JSON.stringify(updated));
-        return updated;
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * 🤖 Tạo khóa học AI
-   */
-  const createCourseAI = async () => {
-    if (loading) return;
-
-    const topic = prompt("Nhập chủ đề Toán");
-    if (!topic) return;
-
-    setLoading(true);
-    try {
-      const outline = await generateCourseOutline(topic);
-
-      const course: Course = {
-        id: crypto.randomUUID(),
-        title: outline.title,
-        description: outline.description,
-        category: "Toán học",
-        instructor: "Lumina AI",
-        imageUrl: `https://picsum.photos/seed/${crypto.randomUUID()}/800/400`,
-        progress: 0,
-        lessons: outline.lessons.map((l, i) => ({
-          id: `l-${i}`,
-          title: l.title,
-          content: l.content,
-          duration: l.duration,
-          completed: false,
-        })),
-      };
-
-      setCourses((prev) => {
-        const updated = [course, ...prev];
-        localStorage.setItem(COURSES_KEY, JSON.stringify(updated));
-        return updated;
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * 🎯 Chọn vai trò
-   */
-  if (!role) {
-    return <Dashboard.SelectRole onSelect={setRole} />;
-  }
-
-  /**
-   * 📘 Xem khóa học
-   */
-  if (activeCourse) {
-    return (
-      <CourseViewer
-        course={activeCourse}
-        onBack={() => setActiveCourse(null)}
-        onToggleLesson={(id) => {
-          setCourses((prevCourses) => {
-            const updatedCourses = prevCourses.map((c) =>
-              c.id === activeCourse.id
-                ? {
-                    ...c,
-                    lessons: c.lessons.map((l) =>
-                      l.id === id
-                        ? { ...l, completed: !l.completed }
-                        : l
-                    ),
-                  }
-                : c
-            );
-
-            localStorage.setItem(
-              COURSES_KEY,
-              JSON.stringify(updatedCourses)
-            );
-
-            const updatedActive =
-              updatedCourses.find((c) => c.id === activeCourse.id) ||
-              null;
-            setActiveCourse(updatedActive);
-
-            return updatedCourses;
-          });
-        }}
-      />
-    );
-  }
-
-  /**
-   * 🧭 Dashboard chính
-   */
   return (
-    <Dashboard
-      role={role}
-      courses={courses}
-      exams={exams}
-      loading={loading}
-      onUploadExam={handleUploadExam}
-      onCreateCourse={createCourseAI}
-      onOpenCourse={setActiveCourse}
-      onLogout={() => setRole(null)}
-    />
+    <div className="min-h-screen bg-[#f8fafc]">
+      {/* ================= NAVBAR ================= */}
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+              <span className="text-white font-black text-xl italic">L</span>
+            </div>
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-800">
+              Lumina{" "}
+              <span className="text-indigo-600 underline decoration-indigo-200 underline-offset-4">
+                LMS
+              </span>
+            </h1>
+          </div>
+
+          {/* Menu */}
+          <div className="hidden md:flex items-center gap-8 text-sm font-bold text-slate-600">
+            <button
+              onClick={() => handleNavigate("dashboard")}
+              className="text-indigo-600"
+            >
+              Tổng quan
+            </button>
+            <button
+              onClick={() => handleNavigate("courses")}
+              className="hover:text-indigo-600 transition-colors"
+            >
+              Khóa học
+            </button>
+            <button
+              onClick={() => handleNavigate("exams")}
+              className="hover:text-indigo-600 transition-colors"
+            >
+              Đề thi
+            </button>
+            <button
+              onClick={() => handleNavigate("reports")}
+              className="hover:text-indigo-600 transition-colors"
+            >
+              Báo cáo
+            </button>
+          </div>
+
+          {/* User */}
+          <div className="flex items-center gap-4">
+            <div className="text-right hidden sm:block">
+              <div className="text-sm font-black text-slate-800 leading-none">
+                Huỳnh Văn Nhẫn
+              </div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                Giảng viên cấp cao
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-indigo-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-600 font-bold">
+              HVN
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* ================= MAIN ================= */}
+      <main>
+        {currentPage === "dashboard" && (
+          <Dashboard
+            userRole={role}
+            userName="Huỳnh Văn Nhẫn"
+            stats={stats}
+            onNavigate={handleNavigate}
+            onCreateExam={handleCreateExam}
+          />
+        )}
+
+        {/* 
+          👉 Các page khác để sẵn:
+          {currentPage === "courses" && <CoursesPage />}
+          {currentPage === "exams" && <ExamsPage />}
+          {currentPage === "reports" && <ReportsPage />}
+        */}
+      </main>
+    </div>
   );
 };
 
