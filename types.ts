@@ -1,70 +1,96 @@
-
-/* =========================
-   HỆ THỐNG ĐỊNH DANH & PHÂN QUYỀN
-========================= */
+/* ======================================================
+   HỆ THỐNG ĐỊNH DANH & PHÂN QUYỀN (AUTH + RBAC)
+====================================================== */
 
 export enum UserRole {
-  GUEST = 'guest',
-  TEACHER = 'teacher',
-  STUDENT = 'student',
-  ADMIN = 'admin'
+  GUEST = "guest",
+  STUDENT = "student",
+  TEACHER = "teacher",
+  ADMIN = "admin",
 }
 
 export enum AccountStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED'
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+  SUSPENDED = "SUSPENDED",
 }
 
-/* =========================
-   HỆ THỐNG KHÓA HỌC & BÀI GIẢNG (LMS CORE)
-========================= */
+export interface UserProfile {
+  uid: string;
+  email: string;
+  role: UserRole;
+  status: AccountStatus;
+  displayName?: string;
+  photoURL?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
 
-export type LessonType = 'video' | 'reading' | 'quiz' | 'ai_interactive';
+/* ======================================================
+   LMS CORE – KHÓA HỌC / MODULE / BÀI HỌC
+====================================================== */
+
+export type LessonType =
+  | "video"
+  | "reading"
+  | "quiz"
+  | "ai_interactive";
 
 export interface Lesson {
   id: string;
   title: string;
-  duration: string;
   type: LessonType;
-  content: string; // Hỗ trợ Markdown + LaTeX
+  duration?: string;
+  content: string; // Markdown + LaTeX
   completed?: boolean;
+
   videoUrl?: string;
-  aiSuggestedFocus?: string; // AI gợi ý phần cần tập trung
+  attachments?: string[];
+
+  aiSuggestedFocus?: string; // AI phân tích điểm yếu
 }
 
 export interface Module {
   id: string;
   title: string;
-  lessons: Lesson[];
   description?: string;
+  lessons: Lesson[];
 }
 
 export interface Course {
   id: string;
   title: string;
   instructor: string;
-  imageUrl: string; // Đồng bộ với thumbnail
-  progress: number;
+
+  imageUrl: string;
   category: string;
   description: string;
-  level?: 'Cơ bản' | 'Trung cấp' | 'Nâng cao' | 'Chuyên sâu' | string;
+
+  level?: "Cơ bản" | "Trung cấp" | "Nâng cao" | "Chuyên sâu" | string;
+
+  progress: number; // %
   rating?: number;
   students?: number;
+
   modules?: Module[];
-  // Added lessons property to fix errors in components referencing lessons directly on Course
-  lessons: Lesson[]; 
+
+  /** ⚠️ Giữ để tương thích component cũ */
+  lessons: Lesson[];
+
   tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-/* =========================
-   CẤU TRÚC ĐỀ THI & CÂU HỎI (THPT 2025 STANDARD)
-========================= */
+/* ======================================================
+   HỆ THỐNG ĐỀ THI – CHUẨN THPT 2025
+====================================================== */
 
 export enum QuestionType {
-  MULTIPLE_CHOICE = 'mcq',   // Phần I: 4 chọn 1 (0.25đ)
-  TRUE_FALSE = 'tf',         // Phần II: Đúng/Sai 4 ý (1.0đ)
-  SHORT_ANSWER = 'short',    // Phần III: Trả lời ngắn điền số (0.5đ)
+  MULTIPLE_CHOICE = "mcq",   // Phần I – 4 chọn 1
+  TRUE_FALSE = "tf",         // Phần II – Đúng/Sai 4 ý
+  SHORT_ANSWER = "short",    // Phần III – Trả lời ngắn
 }
 
 export interface SubQuestion {
@@ -77,25 +103,38 @@ export interface Question {
   id: string;
   type: QuestionType;
   section: 1 | 2 | 3;
-  text: string;
-  options?: string[]; // Dành cho MCQ
-  subQuestions?: SubQuestion[]; // Dành cho Đúng/Sai
-  correctAnswer: any; // index (MCQ), boolean[] (TF), string (Short)
+
+  text: string; // hỗ trợ LaTeX
+  difficulty?: "Dễ" | "Trung bình" | "Khó" | "Cực khó";
+
+  options?: string[];
+  subQuestions?: SubQuestion[];
+
+  /**
+   * MCQ  : number (index)
+   * TF   : boolean[]
+   * Short: string | number
+   */
+  correctAnswer: number | boolean[] | string;
+
   points?: number;
-  explanation?: string; // Giải thích từ AI
-  difficulty?: 'Dễ' | 'Trung bình' | 'Khó' | 'Cực khó';
+  explanation?: string; // AI giải thích chi tiết
 }
 
 export interface Exam {
   id: string;
   title: string;
   createdAt: string;
+
+  duration: number; // phút
+  maxScore: number;
+
   questionCount: number;
+  questions: Question[];
+
   isLocked: boolean;
   assignedClassIds?: string[];
-  duration: number; // Phút
-  maxScore: number;
-  questions: Question[];
+
   scoringConfig: {
     part1Points: number;
     part2Points: number;
@@ -103,30 +142,38 @@ export interface Exam {
   };
 }
 
-/* =========================
-   HỆ THỐNG ĐIỂM SỐ & AI ANALYTICS
-========================= */
+/* ======================================================
+   ĐIỂM SỐ – CHẤM BÀI – AI ANALYTICS
+====================================================== */
 
 export interface Grade {
   id: string;
+  studentId: string;
   studentName: string;
+
   examId: string;
   examTitle: string;
   classId: string;
+
   score: number;
+  maxScore: number;
   attempt: number;
+
   submittedAt: string;
-  timeSpent: number; // Giây
-  cheatingRisk: 'Low' | 'Medium' | 'High';
+  timeSpent: number; // giây
+
+  cheatingRisk: "Low" | "Medium" | "High";
+
   aiAnalysis?: {
-    weakPoints: string[]; // Các phần kiến thức yếu
-    improvementPlan: string; // Lộ trình AI gợi ý
+    weakPoints: string[];
+    improvementPlan: string;
+    recommendedLessons?: string[];
   };
 }
 
-/* =========================
-   GAMIFICATION (VINH DANH & TRÒ CHƠI)
-========================= */
+/* ======================================================
+   GAMIFICATION – ĐỘNG LỰC HỌC TẬP
+====================================================== */
 
 export interface Badge {
   id: string;
@@ -137,22 +184,31 @@ export interface Badge {
 }
 
 export interface StudentAccount {
+  uid: string;
   username: string;
   name: string;
+
   classId: string;
   teacherUsername: string;
-  points: number; // Điểm kinh nghiệm (XP)
+
+  points: number;
   badges: Badge[];
-  streak: number; // Số ngày học liên tiếp
-  rank: 'Đồng' | 'Bạc' | 'Vàng' | 'Kim cương' | 'Thách đấu';
+  streak: number;
+
+  rank:
+    | "Đồng"
+    | "Bạc"
+    | "Vàng"
+    | "Kim cương"
+    | "Thách đấu";
 }
 
-/* =========================
-   DỮ LIỆU THỐNG KÊ (DASHBOARD)
-========================= */
+/* ======================================================
+   DASHBOARD – THỐNG KÊ & BIỂU ĐỒ
+====================================================== */
 
 export interface ProgressData {
-  name: string; // Thứ hoặc Ngày
+  name: string; // ngày / tuần
   hours: number;
   tasksCompleted?: number;
 }
@@ -164,13 +220,13 @@ export interface DashboardStats {
   activeLessons: number;
 }
 
-/* =========================
-   AI & TRỢ LÝ ẢO
-========================= */
+/* ======================================================
+   AI ASSISTANT / CHAT / TUTOR
+====================================================== */
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'model' | 'system';
+  role: "user" | "model" | "system";
   text: string;
   timestamp: Date;
   isMathFormula?: boolean;
