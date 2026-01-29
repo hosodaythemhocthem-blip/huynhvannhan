@@ -1,47 +1,89 @@
 import {
-  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  User as FirebaseUser,
 } from "firebase/auth";
 import {
-  getFirestore,
   doc,
-  getDoc,
   setDoc,
+  getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { UserRole } from "../types";
-
-const auth = getAuth();
-const db = getFirestore();
+import { auth, db } from "../firebase";
+import { UserRole, AccountStatus } from "../types";
 
 /* =========================
-   ADMIN HARD CODE
+   APP USER
 ========================= */
-const ADMIN_USERNAME = "huynhvannhan";
-const ADMIN_PASSWORD = "huynhvannhan2020";
+export interface AppUser {
+  uid: string;
+  email: string;
+  role: UserRole;
+  status?: AccountStatus;
+}
+
+/* =========================
+   ADMIN HARD-CODE
+========================= */
+const ADMIN_ACCOUNT = {
+  email: "huynhvannhan",
+  password: "huynhvannhan2020",
+};
+
+/* =========================
+   MAP USER
+========================= */
+const mapFirebaseUser = async (
+  fbUser: FirebaseUser
+): Promise<AppUser> => {
+  const snap = await getDoc(doc(db, "users", fbUser.uid));
+
+  if (!snap.exists()) {
+    throw new Error("Tài khoản chưa được cấp quyền");
+  }
+
+  const data = snap.data();
+
+  if (data.deleted) {
+    throw new Error("Tài khoản đã bị khóa");
+  }
+
+  if (
+    data.role === UserRole.TEACHER &&
+    data.status !== AccountStatus.APPROVED
+  ) {
+    throw new Error("Giáo viên đang chờ Admin duyệt");
+  }
+
+  return {
+    uid: fbUser.uid,
+    email: fbUser.email,
+    role: data.role,
+    status: data.status,
+  };
+};
 
 /* =========================
    LOGIN
 ========================= */
-export async function login(
-  role: UserRole,
-  username: string,
+export const login = async (
+  email: string,
   password: string
-): Promise<{ role: UserRole; userName: string }> {
-  // 👉 ADMIN bypass Firestore
-  if (role === "ADMIN") {
-    if (
-      username === ADMIN_USERNAME &&
-      password === ADMIN_PASSWORD
-    ) {
-      return { role: "ADMIN", userName: "Admin" };
-    }
-    throw new Error("Sai tài khoản hoặc mật khẩu Admin");
+): Promise<AppUser> => {
+  // ✅ ADMIN BYPASS
+  if (
+    email === ADMIN_ACCOUNT.email &&
+    password === ADMIN_ACCOUNT.password
+  ) {
+    localStorage.setItem("ADMIN_LOGIN", "true");
+    return {
+      uid: "ADMIN",
+      email,
+      role: UserRole.ADMIN,
+    };
   }
-
-  // 👉 Teacher / Student dùng Firebase Auth
-  const email = `${username}@lms.edu`;
 
   const cred = await signInWithEmailAndPassword(
     auth,
@@ -49,41 +91,16 @@ export async function login(
     password
   );
 
-  const userRef = doc(db, "users", cred.user.uid);
-  const snap = await getDoc(userRef);
-
-  if (!snap.exists()) {
-    throw new Error("Không tìm thấy dữ liệu người dùng");
-  }
-
-  const data = snap.data();
-
-  if (data.role === "TEACHER" && data.status === "PENDING") {
-    throw new Error(
-      "Tài khoản Giáo viên đang chờ Quản trị viên phê duyệt"
-    );
-  }
-
-  return {
-    role: data.role,
-    userName: data.username,
-  };
-}
+  return mapFirebaseUser(cred.user);
+};
 
 /* =========================
-   REGISTER (Teacher / Student)
+   REGISTER
 ========================= */
-export async function register(
-  role: UserRole,
-  username: string,
+export const registerTeacher = async (
+  email: string,
   password: string
-) {
-  if (role === "ADMIN") {
-    throw new Error("Không thể đăng ký Admin");
-  }
-
-  const email = `${username}@lms.edu`;
-
+) => {
   const cred = await createUserWithEmailAndPassword(
     auth,
     email,
@@ -91,9 +108,70 @@ export async function register(
   );
 
   await setDoc(doc(db, "users", cred.user.uid), {
-    username,
-    role,
-    status: role === "TEACHER" ? "PENDING" : "ACTIVE",
+    uid: cred.user.uid,
+    email,
+    role: UserRole.TEACHER,
+    status: AccountStatus.PENDING,
+    deleted: false,
     createdAt: serverTimestamp(),
   });
-}
+};
+
+export const registerStudent = async (
+  email: string,
+  password: string
+) => {
+  const cred = await createUserWithEmailAndPassword(
+    auth,
+    email,
+    password
+  );
+
+  await setDoc(doc(db, "users", cred.user.uid), {
+    uid: cred.user.uid,
+    email,
+    role: UserRole.STUDENT,
+    status: AccountStatus.APPROVED,
+    deleted: false,
+    createdAt: serverTimestamp(),
+  });
+};
+
+/* =========================
+   ✅ OBSERVE AUTH (BẮT BUỘC)
+========================= */
+export const observeAuth = (
+  callback: (user: AppUser | null) => void
+) => {
+  // ADMIN SESSION
+  if (localStorage.getItem("ADMIN_LOGIN") === "true") {
+    callback({
+      uid: "ADMIN",
+      email: "huynhvannhan",
+      role: UserRole.ADMIN,
+    });
+    return () => {};
+  }
+
+  return onAuthStateChanged(auth, async (fbUser) => {
+    if (!fbUser) {
+      callback(null);
+      return;
+    }
+
+    try {
+      const appUser = await mapFirebaseUser(fbUser);
+      callback(appUser);
+    } catch {
+      callback(null);
+    }
+  });
+};
+
+/* =========================
+   LOGOUT
+========================= */
+export const logout = async () => {
+  localStorage.removeItem("ADMIN_LOGIN");
+  await signOut(auth);
+};
