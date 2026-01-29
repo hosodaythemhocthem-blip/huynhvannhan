@@ -47,7 +47,6 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
         return;
       }
 
-      // ===== REGISTER =====
       if (role === UserRole.TEACHER) {
         await registerTeacher(email, password);
         setError("🎉 Đăng ký thành công! Đang chờ Admin phê duyệt.");
@@ -184,4 +183,7 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
         )}
       </form>
     </div>
-  )
+  );
+};
+
+export default LoginScreen;
