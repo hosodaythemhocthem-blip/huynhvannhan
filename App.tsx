@@ -1,38 +1,57 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import LoginScreen from "./components/LoginScreen";
 import Dashboard from "./pages/Dashboard";
 import { UserRole } from "./types";
+import { AppUser, observeAuth, logout } from "./services/authService";
 
 const App: React.FC = () => {
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [userName, setUserName] = useState<string>("");
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  /* ===== CHƯA ĐĂNG NHẬP ===== */
-  if (!role) {
+  /* =========================
+     LẮNG NGHE AUTH (CHUẨN FIREBASE)
+  ========================= */
+  useEffect(() => {
+    const unsubscribe = observeAuth((appUser) => {
+      setUser(appUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  /* =========================
+     LOADING – TRÁNH GIẬT UI
+  ========================= */
+  if (loading) {
     return (
-      <LoginScreen
-        onSelectRole={(selectedRole, data) => {
-          setRole(selectedRole);
-
-          // ✅ Admin không có data từ Firestore
-          if (selectedRole === UserRole.ADMIN) {
-            setUserName("Huỳnh Văn Nhẫn");
-          } else {
-            setUserName(data?.name || "Giáo viên");
-          }
-        }}
-      />
+      <div className="flex h-screen items-center justify-center text-gray-500">
+        Đang khởi tạo hệ thống Lumina LMS...
+      </div>
     );
   }
 
-  /* ===== ĐÃ ĐĂNG NHẬP ===== */
+  /* =========================
+     CHƯA ĐĂNG NHẬP
+  ========================= */
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  /* =========================
+     ĐÃ ĐĂNG NHẬP
+  ========================= */
   return (
     <Dashboard
-      userRole={role}        // ⚠️ tên prop PHẢI là userRole
-      userName={userName}
-      onLogout={() => {
-        setRole(null);
-        setUserName("");
+      userRole={user.role}          // ⚠️ giữ nguyên prop
+      userName={
+        user.role === UserRole.ADMIN
+          ? "Huỳnh Văn Nhẫn"
+          : user.email
+      }
+      onLogout={async () => {
+        await logout();
+        setUser(null);
       }}
     />
   );
