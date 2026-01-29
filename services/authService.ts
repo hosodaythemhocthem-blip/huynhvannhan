@@ -9,6 +9,9 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { UserRole, AccountStatus } from "../types";
 
+/* =========================
+   TYPES
+========================= */
 export interface AppUser {
   uid: string;
   email: string;
@@ -17,7 +20,7 @@ export interface AppUser {
 }
 
 /* =========================
-   ADMIN
+   ADMIN BYPASS
 ========================= */
 const ADMIN_ACCOUNT = {
   email: "huynhvannhan",
@@ -25,7 +28,7 @@ const ADMIN_ACCOUNT = {
 };
 
 /* =========================
-   MAP USER
+   MAP FIREBASE USER → APP USER
 ========================= */
 const mapFirebaseUser = async (fbUser: FirebaseUser): Promise<AppUser> => {
   const snap = await getDoc(doc(db, "users", fbUser.uid));
@@ -41,7 +44,7 @@ const mapFirebaseUser = async (fbUser: FirebaseUser): Promise<AppUser> => {
   }
 
   if (data.role === UserRole.TEACHER && data.status !== AccountStatus.APPROVED) {
-    throw new Error("Giáo viên đang chờ duyệt");
+    throw new Error("Tài khoản giáo viên đang chờ duyệt");
   }
 
   return {
@@ -55,18 +58,26 @@ const mapFirebaseUser = async (fbUser: FirebaseUser): Promise<AppUser> => {
 /* =========================
    LOGIN
 ========================= */
-export const login = async (email: string, password: string): Promise<AppUser> => {
+export const login = async (
+  email: string,
+  password: string
+): Promise<AppUser> => {
+  // Admin bypass
   if (email === ADMIN_ACCOUNT.email && password === ADMIN_ACCOUNT.password) {
     localStorage.setItem("ADMIN_LOGIN", "true");
-    return { uid: "ADMIN", email, role: UserRole.ADMIN };
+    return {
+      uid: "ADMIN",
+      email,
+      role: UserRole.ADMIN,
+    };
   }
 
   const cred = await signInWithEmailAndPassword(auth, email, password);
-  return mapFirebaseUser(cred.user);
+  return await mapFirebaseUser(cred.user);
 };
 
 /* =========================
-   REGISTER (chuẩn theo component)
+   REGISTER CORE
 ========================= */
 export const register = async (
   email: string,
@@ -89,13 +100,25 @@ export const register = async (
 };
 
 /* =========================
-   OBSERVE AUTH
+   ALIAS EXPORT (Fix lỗi build)
+========================= */
+export const registerTeacher = (email: string, password: string) => {
+  return register(email, password, UserRole.TEACHER);
+};
+
+export const registerStudent = (email: string, password: string) => {
+  return register(email, password, UserRole.STUDENT);
+};
+
+/* =========================
+   OBSERVE AUTH STATE
 ========================= */
 export const observeAuth = (callback: (user: AppUser | null) => void) => {
+  // Admin session
   if (localStorage.getItem("ADMIN_LOGIN") === "true") {
     callback({
       uid: "ADMIN",
-      email: "huynhvannhan",
+      email: ADMIN_ACCOUNT.email,
       role: UserRole.ADMIN,
     });
     return () => {};
@@ -107,7 +130,7 @@ export const observeAuth = (callback: (user: AppUser | null) => void) => {
     try {
       const appUser = await mapFirebaseUser(fbUser);
       callback(appUser);
-    } catch {
+    } catch (err) {
       callback(null);
     }
   });
