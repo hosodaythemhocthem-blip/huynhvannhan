@@ -1,5 +1,27 @@
 {
   "name": "Kiến Thức Toán Học",
+  "short_name": "Toán LMS",
   "description": "Hệ thống biên soạn và quản lý đề thi trắc nghiệm toán học chuyên nghiệp với hỗ trợ LaTeX, quản lý lớp học và bảng điểm.",
+
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+
+  "orientation": "portrait-primary",
+
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+
   "requestFramePermissions": []
 }
