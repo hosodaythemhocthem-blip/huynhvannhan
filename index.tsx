@@ -1,19 +1,23 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import App from './App';
+/**
+ * 🚀 ENTRY POINT DUY NHẤT CỦA LMS
+ * - KHÔNG đặt Router ở đây
+ * - KHÔNG init Firebase / AI ở đây
+ * - App.tsx là nơi kiểm soát toàn bộ luồng
+ */
 
-const rootElement = document.getElementById('root');
+const rootElement = document.getElementById("root");
+
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+  throw new Error("❌ Không tìm thấy #root trong index.html");
 }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <App />
   </React.StrictMode>
 );
