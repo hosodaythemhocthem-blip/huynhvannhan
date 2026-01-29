@@ -1,6 +1,13 @@
 import React, { useState } from "react";
-import { login, register } from "../services/authService";
+import { login, registerTeacher, registerStudent } from "../services/authService";
 import { UserRole } from "../types";
+import {
+  Mail,
+  Lock,
+  Loader2,
+  GraduationCap,
+  User,
+} from "lucide-react";
 
 interface Props {
   onSelectRole: (role: UserRole, data: any) => void;
@@ -16,11 +23,20 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const validate = () => {
+    if (!email.trim()) return "Vui lòng nhập email hoặc tài khoản";
+    if (!password.trim()) return "Vui lòng nhập mật khẩu";
+    if (password.length < 6) return "Mật khẩu tối thiểu 6 ký tự";
+    return null;
+  };
+
   const handleLogin = async () => {
+    const msg = validate();
+    if (msg) return setError(msg);
+
     try {
       setLoading(true);
       setError(null);
-
       const user = await login(email, password);
       onSelectRole(user.role, user);
     } catch (err: any) {
@@ -31,17 +47,20 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
   };
 
   const handleRegister = async () => {
+    const msg = validate();
+    if (msg) return setError(msg);
+
     try {
       setLoading(true);
       setError(null);
 
-      await register(email, password, role);
-
-      alert(
-        role === UserRole.TEACHER
-          ? "Đăng ký thành công! Vui lòng chờ Admin duyệt."
-          : "Đăng ký thành công! Bạn có thể đăng nhập."
-      );
+      if (role === UserRole.TEACHER) {
+        await registerTeacher(email, password);
+        alert("Đăng ký thành công! Vui lòng chờ Admin duyệt.");
+      } else {
+        await registerStudent(email, password);
+        alert("Đăng ký thành công! Bạn có thể đăng nhập.");
+      }
 
       setMode("login");
     } catch (err: any) {
@@ -51,76 +70,99 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
     }
   };
 
+  const onEnter = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      mode === "login" ? handleLogin() : handleRegister();
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-      <div className="w-full max-w-md bg-slate-800 p-8 rounded-xl shadow-lg space-y-5">
-        <h1 className="text-2xl font-bold text-center">
-          {mode === "login" ? "Đăng nhập hệ thống" : "Đăng ký tài khoản"}
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-[2rem] shadow-2xl space-y-6 animate-fadeIn">
+        <h1 className="text-3xl font-bold text-center tracking-wide">
+          Lumina LMS
         </h1>
 
         {/* Email */}
-        <input
-          className="w-full px-4 py-2 rounded bg-slate-700 outline-none"
-          placeholder="Email hoặc tài khoản"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div className="relative">
+          <Mail className="absolute left-4 top-3 text-slate-400" size={18} />
+          <input
+            onKeyDown={onEnter}
+            className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-800 outline-none border border-slate-700 focus:border-indigo-500"
+            placeholder="Email hoặc tài khoản"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
 
         {/* Password */}
-        <input
-          className="w-full px-4 py-2 rounded bg-slate-700 outline-none"
-          type="password"
-          placeholder="Mật khẩu"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="relative">
+          <Lock className="absolute left-4 top-3 text-slate-400" size={18} />
+          <input
+            onKeyDown={onEnter}
+            type="password"
+            className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-800 outline-none border border-slate-700 focus:border-indigo-500"
+            placeholder="Mật khẩu"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
 
-        {/* Role select khi đăng ký */}
+        {/* Role select đẹp khi register */}
         {mode === "register" && (
-          <select
-            className="w-full px-4 py-2 rounded bg-slate-700"
-            value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
-          >
-            <option value={UserRole.STUDENT}>Học sinh</option>
-            <option value={UserRole.TEACHER}>Giáo viên</option>
-          </select>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setRole(UserRole.STUDENT)}
+              className={`p-3 rounded-xl flex items-center justify-center gap-2 border ${
+                role === UserRole.STUDENT
+                  ? "bg-emerald-600 border-emerald-400"
+                  : "bg-slate-800 border-slate-700"
+              }`}
+            >
+              <GraduationCap size={18} /> Học sinh
+            </button>
+            <button
+              onClick={() => setRole(UserRole.TEACHER)}
+              className={`p-3 rounded-xl flex items-center justify-center gap-2 border ${
+                role === UserRole.TEACHER
+                  ? "bg-emerald-600 border-emerald-400"
+                  : "bg-slate-800 border-slate-700"
+              }`}
+            >
+              <User size={18} /> Giáo viên
+            </button>
+          </div>
         )}
 
         {/* Error */}
         {error && (
-          <div className="text-red-400 text-sm bg-red-950 px-3 py-2 rounded">
+          <div className="text-red-400 text-sm bg-red-950 px-4 py-2 rounded-xl animate-shake">
             {error}
           </div>
         )}
 
         {/* Button */}
-        {mode === "login" ? (
-          <button
-            disabled={loading}
-            onClick={handleLogin}
-            className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-semibold disabled:opacity-50"
-          >
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
-        ) : (
-          <button
-            disabled={loading}
-            onClick={handleRegister}
-            className="w-full bg-green-600 hover:bg-green-700 py-2 rounded font-semibold disabled:opacity-50"
-          >
-            {loading ? "Đang đăng ký..." : "Đăng ký"}
-          </button>
-        )}
+        <button
+          disabled={loading}
+          onClick={mode === "login" ? handleLogin : handleRegister}
+          className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition ${
+            mode === "login"
+              ? "bg-indigo-600 hover:bg-indigo-700"
+              : "bg-emerald-600 hover:bg-emerald-700"
+          } disabled:opacity-50`}
+        >
+          {loading && <Loader2 className="animate-spin" size={18} />}
+          {mode === "login" ? "Đăng nhập" : "Đăng ký"}
+        </button>
 
-        {/* Switch mode */}
+        {/* Switch */}
         <div className="text-center text-sm text-slate-400">
           {mode === "login" ? (
             <>
               Chưa có tài khoản?{" "}
               <button
                 onClick={() => setMode("register")}
-                className="text-blue-400 underline"
+                className="text-indigo-400 underline"
               >
                 Đăng ký
               </button>
@@ -130,7 +172,7 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
               Đã có tài khoản?{" "}
               <button
                 onClick={() => setMode("login")}
-                className="text-blue-400 underline"
+                className="text-indigo-400 underline"
               >
                 Đăng nhập
               </button>
