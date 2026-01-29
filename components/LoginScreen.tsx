@@ -1,26 +1,28 @@
 import React, { useState } from "react";
-import { UserRole } from "../types";
 import { login, register } from "../services/authService";
+import { UserRole } from "../types";
 
 interface Props {
-  onLoginSuccess: (role: UserRole, userName: string) => void;
+  onSelectRole: (role: UserRole, data: any) => void;
 }
 
-const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [username, setUsername] = useState("");
+const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    setError("");
-    setLoading(true);
-
     try {
-      const result = await login(role!, username, password);
+      setLoading(true);
+      setError(null);
 
-      onLoginSuccess(result.role, result.userName);
+      const user = await login(email, password);
+      onSelectRole(user.role, user);
     } catch (err: any) {
       setError(err.message || "Đăng nhập thất bại");
     } finally {
@@ -28,13 +30,20 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleRegisterTeacher = async () => {
-    setError("");
-    setLoading(true);
-
+  const handleRegister = async () => {
     try {
-      await register("TEACHER", username, password);
-      setError("✅ Đăng ký thành công. Tài khoản đang chờ Admin duyệt.");
+      setLoading(true);
+      setError(null);
+
+      await register(email, password, role);
+
+      alert(
+        role === UserRole.TEACHER
+          ? "Đăng ký thành công! Vui lòng chờ Admin duyệt."
+          : "Đăng ký thành công! Bạn có thể đăng nhập."
+      );
+
+      setMode("login");
     } catch (err: any) {
       setError(err.message || "Đăng ký thất bại");
     } finally {
@@ -42,97 +51,92 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
     }
   };
 
-  if (!role) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="space-y-6 text-center">
-          <h1 className="text-3xl font-bold">LMS Toán học</h1>
-
-          <div className="grid grid-cols-1 gap-4">
-            <button
-              onClick={() => setRole("ADMIN")}
-              className="p-4 rounded-xl bg-slate-800 hover:bg-slate-700"
-            >
-              👑 Quản trị viên
-            </button>
-
-            <button
-              onClick={() => setRole("TEACHER")}
-              className="p-4 rounded-xl bg-slate-800 hover:bg-slate-700"
-            >
-              📘 Giáo viên
-            </button>
-
-            <button
-              onClick={() => setRole("STUDENT")}
-              className="p-4 rounded-xl bg-slate-800 hover:bg-slate-700"
-            >
-              🎓 Học sinh
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-      <div className="w-full max-w-md p-8 rounded-2xl bg-slate-800 space-y-4">
-        <h2 className="text-2xl font-bold text-center">
-          {role === "ADMIN" && "Đăng nhập Admin"}
-          {role === "TEACHER" && "Đăng nhập Giáo viên"}
-          {role === "STUDENT" && "Đăng nhập Học sinh"}
-        </h2>
+      <div className="w-full max-w-md bg-slate-800 p-8 rounded-xl shadow-lg space-y-5">
+        <h1 className="text-2xl font-bold text-center">
+          {mode === "login" ? "Đăng nhập hệ thống" : "Đăng ký tài khoản"}
+        </h1>
 
-        {role === "ADMIN" && (
-          <p className="text-sm text-slate-300 text-center">
-            Gợi ý: <b>huynhvannhan</b>
-          </p>
-        )}
-
+        {/* Email */}
         <input
-          className="w-full p-3 rounded bg-slate-700"
-          placeholder="Tên đăng nhập"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          className="w-full px-4 py-2 rounded bg-slate-700 outline-none"
+          placeholder="Email hoặc tài khoản"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
 
+        {/* Password */}
         <input
+          className="w-full px-4 py-2 rounded bg-slate-700 outline-none"
           type="password"
-          className="w-full p-3 rounded bg-slate-700"
           placeholder="Mật khẩu"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        {error && (
-          <div className="text-sm text-red-400 text-center">{error}</div>
+        {/* Role select khi đăng ký */}
+        {mode === "register" && (
+          <select
+            className="w-full px-4 py-2 rounded bg-slate-700"
+            value={role}
+            onChange={(e) => setRole(e.target.value as UserRole)}
+          >
+            <option value={UserRole.STUDENT}>Học sinh</option>
+            <option value={UserRole.TEACHER}>Giáo viên</option>
+          </select>
         )}
 
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="w-full p-3 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
-        >
-          {loading ? "Đang xử lý..." : "Đăng nhập"}
-        </button>
+        {/* Error */}
+        {error && (
+          <div className="text-red-400 text-sm bg-red-950 px-3 py-2 rounded">
+            {error}
+          </div>
+        )}
 
-        {role === "TEACHER" && (
+        {/* Button */}
+        {mode === "login" ? (
           <button
-            onClick={handleRegisterTeacher}
             disabled={loading}
-            className="w-full p-3 rounded bg-green-600 hover:bg-green-500 disabled:opacity-50"
+            onClick={handleLogin}
+            className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded font-semibold disabled:opacity-50"
           >
-            Đăng ký Giáo viên
+            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+          </button>
+        ) : (
+          <button
+            disabled={loading}
+            onClick={handleRegister}
+            className="w-full bg-green-600 hover:bg-green-700 py-2 rounded font-semibold disabled:opacity-50"
+          >
+            {loading ? "Đang đăng ký..." : "Đăng ký"}
           </button>
         )}
 
-        <button
-          onClick={() => setRole(null)}
-          className="w-full text-sm text-slate-400 hover:text-white"
-        >
-          ← Quay lại chọn vai trò
-        </button>
+        {/* Switch mode */}
+        <div className="text-center text-sm text-slate-400">
+          {mode === "login" ? (
+            <>
+              Chưa có tài khoản?{" "}
+              <button
+                onClick={() => setMode("register")}
+                className="text-blue-400 underline"
+              >
+                Đăng ký
+              </button>
+            </>
+          ) : (
+            <>
+              Đã có tài khoản?{" "}
+              <button
+                onClick={() => setMode("login")}
+                className="text-blue-400 underline"
+              >
+                Đăng nhập
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
