@@ -1,60 +1,45 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import LoginScreen from "./components/LoginScreen";
 import Dashboard from "./pages/Dashboard";
+import { observeAuth, logout } from "./services/authService";
 import { UserRole } from "./types";
-import { AppUser, observeAuth, logout } from "./services/authService";
 
-const App: React.FC = () => {
-  const [user, setUser] = useState<AppUser | null>(null);
+function App() {
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  /* =========================
-     LẮNG NGHE AUTH (CHUẨN FIREBASE)
-  ========================= */
   useEffect(() => {
-    const unsubscribe = observeAuth((appUser) => {
-      setUser(appUser);
+    const unsub = observeAuth((u) => {
+      setUser(u);
       setLoading(false);
     });
-
-    return () => unsubscribe();
+    return unsub;
   }, []);
 
-  /* =========================
-     LOADING – TRÁNH GIẬT UI
-  ========================= */
   if (loading) {
+    return <div className="text-white p-10">Loading...</div>;
+  }
+
+  if (!user) {
     return (
-      <div className="flex h-screen items-center justify-center text-gray-500">
-        Đang khởi tạo hệ thống Lumina LMS...
-      </div>
+      <LoginScreen
+        onSelectRole={(role, data) => {
+          setUser({ role, ...data });
+        }}
+      />
     );
   }
 
-  /* =========================
-     CHƯA ĐĂNG NHẬP
-  ========================= */
-  if (!user) {
-    return <LoginScreen />;
-  }
-
-  /* =========================
-     ĐÃ ĐĂNG NHẬP
-  ========================= */
   return (
     <Dashboard
-      userRole={user.role}          // ⚠️ giữ nguyên prop
-      userName={
-        user.role === UserRole.ADMIN
-          ? "Huỳnh Văn Nhẫn"
-          : user.email
-      }
+      userRole={user.role}
+      userName={user.email || "Admin"}
       onLogout={async () => {
         await logout();
         setUser(null);
       }}
     />
   );
-};
+}
 
 export default App;
