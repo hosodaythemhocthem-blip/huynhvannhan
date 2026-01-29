@@ -15,45 +15,63 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // observeAuth nên trả về user đã gắn sẵn role từ Firestore
     const unsub = observeAuth((u: AppUser | null) => {
       setUser(u);
       setLoading(false);
     });
 
-    return () => unsub();
+    // Cleanup tránh memory leak
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
   }, []);
 
-  // Loading đẹp hơn chút (UX tốt hơn)
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("Đăng xuất thất bại, vui lòng thử lại.");
+    }
+  };
+
+  /* =========================
+     LOADING SCREEN (PRO UX)
+  ========================= */
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
-        <div className="animate-pulse text-lg">Đang tải hệ thống...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white">
+        <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-6"></div>
+        <div className="animate-pulse text-lg tracking-wide text-white/80">
+          Đang khởi tạo hệ thống Lumina...
+        </div>
       </div>
     );
   }
 
-  // Chưa đăng nhập → hiện Login
+  /* =========================
+     NOT LOGIN
+  ========================= */
   if (!user) {
     return (
       <LoginScreen
         onSelectRole={(role: UserRole, data: any) => {
-          // Cho phép login thủ công nếu bạn đang dùng bypass admin
+          // Dùng cho admin bypass hoặc login custom
           setUser({ role, ...data });
         }}
       />
     );
   }
 
-  // Đã đăng nhập → vào Dashboard theo role
+  /* =========================
+     LOGGED IN
+  ========================= */
   return (
     <Dashboard
       userRole={user.role}
       userName={user.email || "Admin"}
-      onLogout={async () => {
-        await logout();
-        setUser(null);
-      }}
+      onLogout={handleLogout}
     />
   );
 }
