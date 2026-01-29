@@ -15,7 +15,7 @@ import { auth, db } from "../firebase";
 import { UserRole, AccountStatus } from "../types";
 
 /* =========================
-   APP USER (DÙNG CHUNG TOÀN APP)
+   USER CHUẨN TOÀN APP
 ========================= */
 export interface AppUser {
   uid: string;
@@ -25,15 +25,15 @@ export interface AppUser {
 }
 
 /* =========================
-   ADMIN NỘI BỘ (BYPASS FIRESTORE)
+   ADMIN CỨNG (CỨU HỆ THỐNG)
 ========================= */
 const ADMIN_ACCOUNT = {
-  email: "huynhvannhan",
+  username: "huynhvannhan",
   password: "huynhvannhan2020",
 };
 
 /* =========================
-   MAP FIREBASE USER → APP USER
+   MAP FIREBASE → APP USER
 ========================= */
 const mapFirebaseUser = async (
   fbUser: FirebaseUser
@@ -52,9 +52,11 @@ const mapFirebaseUser = async (
 
   if (
     data.role === UserRole.TEACHER &&
-    data.status !== AccountStatus.APPROVED
+    data.status === AccountStatus.PENDING
   ) {
-    throw new Error("Tài khoản giáo viên đang chờ Admin phê duyệt");
+    throw new Error(
+      "Tài khoản Giáo viên đang chờ Quản trị viên phê duyệt"
+    );
   }
 
   return {
@@ -66,53 +68,37 @@ const mapFirebaseUser = async (
 };
 
 /* =========================
-   ĐĂNG NHẬP (DUY NHẤT)
+   LOGIN DUY NHẤT
 ========================= */
 export const login = async (
-  email: string,
+  usernameOrEmail: string,
   password: string
 ): Promise<AppUser> => {
-  // 👉 ADMIN ƯU TIÊN – KHÔNG QUA FIRESTORE
+  /* 👉 ADMIN ƯU TIÊN */
   if (
-    email === ADMIN_ACCOUNT.email &&
+    usernameOrEmail === ADMIN_ACCOUNT.username &&
     password === ADMIN_ACCOUNT.password
   ) {
-    return {
+    const adminUser: AppUser = {
       uid: "ADMIN",
-      email,
+      email: "admin@local",
       role: UserRole.ADMIN,
     };
+
+    localStorage.setItem("ADMIN_SESSION", "true");
+    return adminUser;
   }
 
   try {
     const cred = await signInWithEmailAndPassword(
       auth,
-      email,
+      usernameOrEmail,
       password
     );
     return await mapFirebaseUser(cred.user);
   } catch {
     throw new Error("Email hoặc mật khẩu không đúng");
   }
-};
-
-/* =========================
-   ĐĂNG KÝ (LOGINSCREEN DÙNG)
-========================= */
-export const register = async (
-  email: string,
-  password: string,
-  role: UserRole
-) => {
-  if (role === UserRole.TEACHER) {
-    return registerTeacher(email, password);
-  }
-
-  if (role === UserRole.STUDENT) {
-    return registerStudent(email, password);
-  }
-
-  throw new Error("Không thể đăng ký vai trò này");
 };
 
 /* =========================
@@ -136,13 +122,6 @@ export const registerTeacher = async (
     deleted: false,
     createdAt: serverTimestamp(),
   });
-
-  return {
-    uid: cred.user.uid,
-    email,
-    role: UserRole.TEACHER,
-    status: AccountStatus.PENDING,
-  };
 };
 
 /* =========================
@@ -166,21 +145,24 @@ export const registerStudent = async (
     deleted: false,
     createdAt: serverTimestamp(),
   });
-
-  return {
-    uid: cred.user.uid,
-    email,
-    role: UserRole.STUDENT,
-    status: AccountStatus.APPROVED,
-  };
 };
 
 /* =========================
-   THEO DÕI TRẠNG THÁI ĐĂNG NHẬP
+   THEO DÕI LOGIN
 ========================= */
 export const observeAuth = (
   callback: (user: AppUser | null) => void
 ) => {
+  // 👉 ADMIN SESSION BỀN
+  if (localStorage.getItem("ADMIN_SESSION") === "true") {
+    callback({
+      uid: "ADMIN",
+      email: "admin@local",
+      role: UserRole.ADMIN,
+    });
+    return () => {};
+  }
+
   return onAuthStateChanged(auth, async (fbUser) => {
     if (!fbUser) {
       callback(null);
@@ -197,8 +179,9 @@ export const observeAuth = (
 };
 
 /* =========================
-   ĐĂNG XUẤT
+   LOGOUT
 ========================= */
 export const logout = async () => {
+  localStorage.removeItem("ADMIN_SESSION");
   await signOut(auth);
 };
