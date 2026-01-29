@@ -1,22 +1,19 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 /* =====================================================
-   SAFE API KEY (CHẠY TRONG BROWSER)
+   API KEY (chuẩn Vite / Vercel)
 ===================================================== */
-const getSafeApiKey = (): string => {
-  // @ts-ignore – được shim trong index.html
-  const key = window?.process?.env?.API_KEY;
-  if (!key) {
-    console.warn("⚠️ API_KEY chưa được cấu hình");
-  }
-  return key || "";
-};
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!API_KEY) {
+  console.warn("⚠️ VITE_GEMINI_API_KEY chưa được cấu hình");
+}
 
 /* =====================================================
    KHỞI TẠO AI (SINGLETON)
 ===================================================== */
 const ai = new GoogleGenAI({
-  apiKey: getSafeApiKey(),
+  apiKey: API_KEY || "",
 });
 
 /* =====================================================
@@ -51,13 +48,15 @@ Phân tích đề thi Toán từ hình ảnh.
 Yêu cầu:
 - Trả về JSON array
 - Mỗi câu có LaTeX dạng $...$
-            `,
+              `,
             },
             { inlineData: { data: base64Image, mimeType } },
           ],
         },
       ],
-      config: { responseMimeType: "application/json" },
+      config: {
+        responseMimeType: "application/json",
+      },
     });
 
     return safeJSON(response.text, []);
@@ -91,7 +90,9 @@ ${rawText}
           ],
         },
       ],
-      config: { responseMimeType: "application/json" },
+      config: {
+        responseMimeType: "application/json",
+      },
     });
 
     return safeJSON(response.text, []);
@@ -102,7 +103,7 @@ ${rawText}
 };
 
 /* =====================================================
-   AI TRỢ GIẢNG TOÁN
+   AI TRỢ GIẢNG
 ===================================================== */
 export const getAiTutorResponse = async (
   message: string,
@@ -139,83 +140,98 @@ Câu hỏi học sinh: ${message}
 };
 
 /* =====================================================
-   WRAPPER (GIỮ NGUYÊN – KHÔNG PHÁ CODE CŨ)
+   WRAPPER GIỮ COMPAT
 ===================================================== */
 export async function askGemini(prompt: string): Promise<string> {
   return await getAiTutorResponse(prompt, "");
 }
 
 /* =====================================================
-   🔥 BỔ SUNG SIÊU VIP – COURSE SYLLABUS
+   COURSE SYLLABUS
 ===================================================== */
 export const generateCourseSyllabus = async (topic: string) => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `
 Bạn là chuyên gia xây dựng chương trình Toán học.
 Tạo đề cương cho khóa: "${topic}"
-    `,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          lessons: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: { title: { type: Type.STRING } },
+      `,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            lessons: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                },
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  return safeJSON(response.text, {});
+    return safeJSON(response.text, {});
+  } catch (err) {
+    console.error("Syllabus error:", err);
+    return {};
+  }
 };
 
 /* =====================================================
-   🔥 SINH BÀI GIẢNG
+   SINH BÀI GIẢNG
 ===================================================== */
 export const generateLessonContent = async (
   courseTitle: string,
   lessonTitle: string
 ): Promise<string> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `
 Viết bài giảng Toán:
 - Khóa: ${courseTitle}
 - Bài: ${lessonTitle}
 
 Dùng Markdown + LaTeX.
-    `,
-  });
+      `,
+    });
 
-  return response.text || "";
+    return response.text || "";
+  } catch {
+    return "";
+  }
 };
 
 /* =====================================================
-   🔥 SINH QUIZ
+   SINH QUIZ
 ===================================================== */
 export const generateQuiz = async (lessonContent: string) => {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `
 Tạo 5 câu trắc nghiệm Toán từ nội dung sau:
 ${lessonContent}
-    `,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
+      `,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
 
-  return safeJSON(response.text, []).map((q: any) => ({
-    ...q,
-    id: uid(),
-    type: "MULTIPLE_CHOICE",
-  }));
+    return safeJSON(response.text, []).map((q: any) => ({
+      ...q,
+      id: uid(),
+      type: "MULTIPLE_CHOICE",
+    }));
+  } catch {
+    return [];
+  }
 };
