@@ -15,7 +15,7 @@ import { auth, db } from "../firebase";
 import { UserRole, AccountStatus } from "../types";
 
 /* =========================
-   APP USER (CHUẨN ỨNG DỤNG)
+   APP USER (DÙNG CHUNG TOÀN APP)
 ========================= */
 export interface AppUser {
   uid: string;
@@ -25,12 +25,11 @@ export interface AppUser {
 }
 
 /* =========================
-   ADMIN NỘI BỘ (CỨU HỆ THỐNG)
+   ADMIN NỘI BỘ (BYPASS FIRESTORE)
 ========================= */
 const ADMIN_ACCOUNT = {
   email: "huynhvannhan",
   password: "huynhvannhan2020",
-  role: UserRole.ADMIN,
 };
 
 /* =========================
@@ -55,7 +54,7 @@ const mapFirebaseUser = async (
     data.role === UserRole.TEACHER &&
     data.status !== AccountStatus.APPROVED
   ) {
-    throw new Error("Tài khoản giáo viên đang chờ admin duyệt");
+    throw new Error("Tài khoản giáo viên đang chờ Admin phê duyệt");
   }
 
   return {
@@ -67,13 +66,13 @@ const mapFirebaseUser = async (
 };
 
 /* =========================
-   ĐĂNG NHẬP DUY NHẤT
+   ĐĂNG NHẬP (DUY NHẤT)
 ========================= */
 export const login = async (
   email: string,
   password: string
 ): Promise<AppUser> => {
-  /* 👉 ADMIN ƯU TIÊN */
+  // 👉 ADMIN ƯU TIÊN – KHÔNG QUA FIRESTORE
   if (
     email === ADMIN_ACCOUNT.email &&
     password === ADMIN_ACCOUNT.password
@@ -92,9 +91,28 @@ export const login = async (
       password
     );
     return await mapFirebaseUser(cred.user);
-  } catch (err: any) {
+  } catch {
     throw new Error("Email hoặc mật khẩu không đúng");
   }
+};
+
+/* =========================
+   ĐĂNG KÝ (LOGINSCREEN DÙNG)
+========================= */
+export const register = async (
+  email: string,
+  password: string,
+  role: UserRole
+) => {
+  if (role === UserRole.TEACHER) {
+    return registerTeacher(email, password);
+  }
+
+  if (role === UserRole.STUDENT) {
+    return registerStudent(email, password);
+  }
+
+  throw new Error("Không thể đăng ký vai trò này");
 };
 
 /* =========================
@@ -118,6 +136,13 @@ export const registerTeacher = async (
     deleted: false,
     createdAt: serverTimestamp(),
   });
+
+  return {
+    uid: cred.user.uid,
+    email,
+    role: UserRole.TEACHER,
+    status: AccountStatus.PENDING,
+  };
 };
 
 /* =========================
@@ -141,10 +166,17 @@ export const registerStudent = async (
     deleted: false,
     createdAt: serverTimestamp(),
   });
+
+  return {
+    uid: cred.user.uid,
+    email,
+    role: UserRole.STUDENT,
+    status: AccountStatus.APPROVED,
+  };
 };
 
 /* =========================
-   THEO DÕI TRẠNG THÁI LOGIN
+   THEO DÕI TRẠNG THÁI ĐĂNG NHẬP
 ========================= */
 export const observeAuth = (
   callback: (user: AppUser | null) => void
