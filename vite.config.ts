@@ -9,20 +9,17 @@ const __dirname = path.dirname(__filename);
 export default defineConfig({
   plugins: [
     react({
-      fastRefresh: true, // React HMR mượt
+      fastRefresh: true,
     }),
   ],
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 
-  /**
-   * BẮT BUỘC cho Gemini API
-   * Tránh lỗi: process is not defined (Vercel / Rollup)
-   */
+  // Fix process.env cho Gemini + Vercel
   define: {
     "process.env.API_KEY": JSON.stringify(process.env.API_KEY || ""),
   },
@@ -41,12 +38,8 @@ export default defineConfig({
             if (id.includes("react")) return "vendor-react";
             if (id.includes("@google/genai")) return "vendor-ai";
             if (id.includes("firebase")) return "vendor-firebase";
-            if (
-              id.includes("lucide") ||
-              id.includes("recharts")
-            ) {
+            if (id.includes("lucide") || id.includes("recharts"))
               return "vendor-ui";
-            }
             return "vendor";
           }
         },
