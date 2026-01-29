@@ -5,18 +5,10 @@ import {
   signOut,
   User as FirebaseUser,
 } from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { UserRole, AccountStatus } from "../types";
 
-/* =========================
-   APP USER
-========================= */
 export interface AppUser {
   uid: string;
   email: string;
@@ -25,7 +17,7 @@ export interface AppUser {
 }
 
 /* =========================
-   ADMIN HARD-CODE
+   ADMIN
 ========================= */
 const ADMIN_ACCOUNT = {
   email: "huynhvannhan",
@@ -35,9 +27,7 @@ const ADMIN_ACCOUNT = {
 /* =========================
    MAP USER
 ========================= */
-const mapFirebaseUser = async (
-  fbUser: FirebaseUser
-): Promise<AppUser> => {
+const mapFirebaseUser = async (fbUser: FirebaseUser): Promise<AppUser> => {
   const snap = await getDoc(doc(db, "users", fbUser.uid));
 
   if (!snap.exists()) {
@@ -50,16 +40,13 @@ const mapFirebaseUser = async (
     throw new Error("Tài khoản đã bị khóa");
   }
 
-  if (
-    data.role === UserRole.TEACHER &&
-    data.status !== AccountStatus.APPROVED
-  ) {
-    throw new Error("Giáo viên đang chờ Admin duyệt");
+  if (data.role === UserRole.TEACHER && data.status !== AccountStatus.APPROVED) {
+    throw new Error("Giáo viên đang chờ duyệt");
   }
 
   return {
     uid: fbUser.uid,
-    email: fbUser.email,
+    email: fbUser.email || "",
     role: data.role,
     status: data.status,
   };
@@ -68,82 +55,43 @@ const mapFirebaseUser = async (
 /* =========================
    LOGIN
 ========================= */
-export const login = async (
-  email: string,
-  password: string
-): Promise<AppUser> => {
-  // ✅ ADMIN BYPASS
-  if (
-    email === ADMIN_ACCOUNT.email &&
-    password === ADMIN_ACCOUNT.password
-  ) {
+export const login = async (email: string, password: string): Promise<AppUser> => {
+  if (email === ADMIN_ACCOUNT.email && password === ADMIN_ACCOUNT.password) {
     localStorage.setItem("ADMIN_LOGIN", "true");
-    return {
-      uid: "ADMIN",
-      email,
-      role: UserRole.ADMIN,
-    };
+    return { uid: "ADMIN", email, role: UserRole.ADMIN };
   }
 
-  const cred = await signInWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
-
+  const cred = await signInWithEmailAndPassword(auth, email, password);
   return mapFirebaseUser(cred.user);
 };
 
 /* =========================
-   REGISTER
+   REGISTER (chuẩn theo component)
 ========================= */
-export const registerTeacher = async (
+export const register = async (
   email: string,
-  password: string
+  password: string,
+  role: UserRole
 ) => {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
 
   await setDoc(doc(db, "users", cred.user.uid), {
     uid: cred.user.uid,
     email,
-    role: UserRole.TEACHER,
-    status: AccountStatus.PENDING,
-    deleted: false,
-    createdAt: serverTimestamp(),
-  });
-};
-
-export const registerStudent = async (
-  email: string,
-  password: string
-) => {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
-
-  await setDoc(doc(db, "users", cred.user.uid), {
-    uid: cred.user.uid,
-    email,
-    role: UserRole.STUDENT,
-    status: AccountStatus.APPROVED,
+    role,
+    status:
+      role === UserRole.TEACHER
+        ? AccountStatus.PENDING
+        : AccountStatus.APPROVED,
     deleted: false,
     createdAt: serverTimestamp(),
   });
 };
 
 /* =========================
-   ✅ OBSERVE AUTH (BẮT BUỘC)
+   OBSERVE AUTH
 ========================= */
-export const observeAuth = (
-  callback: (user: AppUser | null) => void
-) => {
-  // ADMIN SESSION
+export const observeAuth = (callback: (user: AppUser | null) => void) => {
   if (localStorage.getItem("ADMIN_LOGIN") === "true") {
     callback({
       uid: "ADMIN",
@@ -154,10 +102,7 @@ export const observeAuth = (
   }
 
   return onAuthStateChanged(auth, async (fbUser) => {
-    if (!fbUser) {
-      callback(null);
-      return;
-    }
+    if (!fbUser) return callback(null);
 
     try {
       const appUser = await mapFirebaseUser(fbUser);
