@@ -3,43 +3,32 @@ import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 /**
- * 🔐 Firebase config
- * 👉 DÙNG ENV khi deploy (Vercel)
- * 👉 Local vẫn chạy bình thường
+ * Firebase config - hvnn-8c48e
  */
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
-    "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:
-    import.meta.env.VITE_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
-    "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "YOUR_SENDER_ID",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_APP_ID",
+  apiKey: "AIzaSyDzLBvFEDEjTlvP-bYGE8gxB7Ce6-KwcXw",
+  authDomain: "hvnn-8c48e.firebaseapp.com",
+  projectId: "hvnn-8c48e",
+  storageBucket: "hvnn-8c48e.appspot.com",
+  messagingSenderId: "493379893878",
+  appId: "1:493379893878:web:6b5ad4930c220d12fafd57",
+  measurementId: "G-VBHS51JLC3",
 };
 
 /**
- * 🚀 CHỐNG KHỞI TẠO LẠI APP
- * (Hot reload, redeploy, mở nhiều tab)
+ * 🚀 Tránh initialize nhiều lần
  */
-const app = getApps().length === 0
-  ? initializeApp(firebaseConfig)
-  : getApp();
+const app =
+  getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 /**
- * 🔥 Firestore & Auth
+ * Firebase services
  */
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 /**
- * 🛡️ BẬT OFFLINE PERSISTENCE
- * 👉 Mạng chập chờn vẫn KHÔNG mất dữ liệu
- * 👉 Sync lại khi online
+ * 🛡️ Offline persistence
  */
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === "failed-precondition") {
@@ -50,3 +39,4 @@ enableIndexedDbPersistence(db).catch((err) => {
 });
 
 export default app;
+export const FIREBASE_CONFIG = firebaseConfig;
