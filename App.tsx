@@ -12,7 +12,8 @@ type AppUser = {
 
 function App() {
   const [user, setUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+const [loading, setLoading] = useState(true);
+const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     const unsub = observeAuth((u: AppUser | null) => {
