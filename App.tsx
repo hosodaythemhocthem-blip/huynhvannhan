@@ -7,7 +7,7 @@ import { UserRole } from "./types";
 type AppUser = {
   uid?: string;
   email?: string;
-  role: UserRole;
+  role?: UserRole;
 };
 
 function App() {
