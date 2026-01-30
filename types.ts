@@ -246,3 +246,11 @@ export interface ChatMessage {
   timestamp: Date;
   isMathFormula?: boolean;
 }
+// =========================
+// TRẠNG THÁI DUYỆT (GV / ADMIN)
+// =========================
+export enum ApprovalStatus {
+  PENDING = "pending",     // chờ duyệt
+  APPROVED = "approved",   // đã duyệt
+  REJECTED = "rejected",   // từ chối
+}
