@@ -16,16 +16,14 @@ const [loading, setLoading] = useState(true);
 const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsub = observeAuth((u: AppUser | null) => {
-      setUser(u);
-      setLoading(false);
-    });
+  const unsub = observeAuth((u: AppUser | null) => {
+    setUser(u);
+    setLoading(false);
+    setAuthReady(true);
+  });
 
-    // Cleanup tránh memory leak
-    return () => {
-      if (typeof unsub === "function") unsub();
-    };
-  }, []);
+  return () => unsub?.();
+}, []);
 
   const handleLogout = async () => {
     try {
