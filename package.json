@@ -17,7 +17,13 @@
     "firebase": "^10.7.1",
     "katex": "^0.16.9",
     "react-katex": "^3.0.1",
-    "lucide-react": "^0.344.0"
+    "lucide-react": "^0.462.0"
+  },
+
+  "overrides": {
+    "lucide-react": {
+      "react": "^18.0.0"
+    }
   },
 
   "devDependencies": {
