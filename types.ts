@@ -1,5 +1,5 @@
 /* ======================================================
-   HỆ THỐNG ĐỊNH DANH & PHÂN QUYỀN (AUTH + RBAC)
+   AUTH + RBAC – PHÂN QUYỀN NGƯỜI DÙNG
 ====================================================== */
 
 export enum UserRole {
@@ -23,12 +23,37 @@ export interface UserProfile {
   status: AccountStatus;
   displayName?: string;
   photoURL?: string;
+  school?: string;
+  classId?: string;
+  requestedClassName?: string;
   createdAt: string;
   lastLoginAt?: string;
 }
 
 /* ======================================================
-   LMS CORE – KHÓA HỌC / MODULE / BÀI HỌC
+   UI COMPONENT CATALOG (ADMIN / AI BUILDER)
+====================================================== */
+
+export enum ComponentCategory {
+  ACTIONS = "Actions",
+  FORMS = "Forms",
+  DATA_DISPLAY = "Data Display",
+  FEEDBACK = "Feedback",
+  NAVIGATION = "Navigation",
+  AI = "AI Powered",
+  MANAGEMENT = "Management",
+}
+
+export interface UIComponent {
+  id: string;
+  name: string;
+  description: string;
+  category: ComponentCategory;
+  code: string;
+}
+
+/* ======================================================
+   LMS CORE – COURSE / MODULE / LESSON
 ====================================================== */
 
 export type LessonType =
@@ -41,14 +66,14 @@ export interface Lesson {
   id: string;
   title: string;
   type: LessonType;
-  duration?: string;
   content: string; // Markdown + LaTeX
+  duration?: string;
   completed?: boolean;
 
   videoUrl?: string;
   attachments?: string[];
 
-  aiSuggestedFocus?: string; // AI phân tích điểm yếu
+  aiSuggestedFocus?: string;
 }
 
 export interface Module {
@@ -63,19 +88,18 @@ export interface Course {
   title: string;
   instructor: string;
 
-  imageUrl: string;
-  category: string;
-  description: string;
-
+  imageUrl?: string;
+  category?: string;
+  description?: string;
   level?: "Cơ bản" | "Trung cấp" | "Nâng cao" | "Chuyên sâu" | string;
 
-  progress: number; // %
+  progress?: number;
   rating?: number;
   students?: number;
 
   modules?: Module[];
 
-  /** ⚠️ Giữ để tương thích component cũ */
+  /** ⚠️ Legacy support */
   lessons: Lesson[];
 
   tags?: string[];
@@ -88,9 +112,9 @@ export interface Course {
 ====================================================== */
 
 export enum QuestionType {
-  MULTIPLE_CHOICE = "mcq",   // Phần I – 4 chọn 1
-  TRUE_FALSE = "tf",         // Phần II – Đúng/Sai 4 ý
-  SHORT_ANSWER = "short",    // Phần III – Trả lời ngắn
+  MULTIPLE_CHOICE = "mcq",
+  TRUE_FALSE = "tf",
+  SHORT_ANSWER = "short",
 }
 
 export interface SubQuestion {
@@ -104,21 +128,16 @@ export interface Question {
   type: QuestionType;
   section: 1 | 2 | 3;
 
-  text: string; // hỗ trợ LaTeX
+  text: string;
   difficulty?: "Dễ" | "Trung bình" | "Khó" | "Cực khó";
 
   options?: string[];
   subQuestions?: SubQuestion[];
 
-  /**
-   * MCQ  : number (index)
-   * TF   : boolean[]
-   * Short: string | number
-   */
   correctAnswer: number | boolean[] | string;
 
   points?: number;
-  explanation?: string; // AI giải thích chi tiết
+  explanation?: string;
 }
 
 export interface Exam {
@@ -126,7 +145,7 @@ export interface Exam {
   title: string;
   createdAt: string;
 
-  duration: number; // phút
+  duration: number;
   maxScore: number;
 
   questionCount: number;
@@ -143,24 +162,25 @@ export interface Exam {
 }
 
 /* ======================================================
-   ĐIỂM SỐ – CHẤM BÀI – AI ANALYTICS
+   ĐIỂM SỐ – CHẤM BÀI – AI PHÂN TÍCH
 ====================================================== */
 
 export interface Grade {
   id: string;
+
   studentId: string;
   studentName: string;
+  classId: string;
 
   examId: string;
   examTitle: string;
-  classId: string;
 
   score: number;
   maxScore: number;
   attempt: number;
 
   submittedAt: string;
-  timeSpent: number; // giây
+  timeSpent: number;
 
   cheatingRisk: "Low" | "Medium" | "High";
 
@@ -172,7 +192,7 @@ export interface Grade {
 }
 
 /* ======================================================
-   GAMIFICATION – ĐỘNG LỰC HỌC TẬP
+   HỌC SINH – GAMIFICATION
 ====================================================== */
 
 export interface Badge {
@@ -195,20 +215,15 @@ export interface StudentAccount {
   badges: Badge[];
   streak: number;
 
-  rank:
-    | "Đồng"
-    | "Bạc"
-    | "Vàng"
-    | "Kim cương"
-    | "Thách đấu";
+  rank: "Đồng" | "Bạc" | "Vàng" | "Kim cương" | "Thách đấu";
 }
 
 /* ======================================================
-   DASHBOARD – THỐNG KÊ & BIỂU ĐỒ
+   DASHBOARD – THỐNG KÊ
 ====================================================== */
 
 export interface ProgressData {
-  name: string; // ngày / tuần
+  name: string;
   hours: number;
   tasksCompleted?: number;
 }
@@ -221,7 +236,7 @@ export interface DashboardStats {
 }
 
 /* ======================================================
-   AI ASSISTANT / CHAT / TUTOR
+   AI CHAT / TUTOR
 ====================================================== */
 
 export interface ChatMessage {
