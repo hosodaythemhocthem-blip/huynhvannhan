@@ -38,16 +38,16 @@ const [authReady, setAuthReady] = useState(false);
   /* =========================
      LOADING SCREEN (PRO UX)
   ========================= */
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white">
-        <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-6"></div>
-        <div className="animate-pulse text-lg tracking-wide text-white/80">
-          Đang khởi tạo hệ thống Lumina...
-        </div>
+  if (loading || !authReady) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white">
+      <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-6"></div>
+      <div className="animate-pulse text-lg tracking-wide text-white/80">
+        Đang khởi tạo hệ thống Lumina...
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   /* =========================
      NOT LOGIN
