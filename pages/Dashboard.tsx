@@ -1,6 +1,5 @@
 import React from 'react';
 import { UserRole, DashboardStats, User } from '../types';
-import DashboardComponent from '../components/Dashboard';
 import TeacherPortal from './TeacherPortal';
 import ClassManagement from '../components/ClassManagement';
 import GameManagement from '../components/GameManagement';
