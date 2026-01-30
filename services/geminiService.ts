@@ -1,27 +1,27 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 /* =====================================================
-   API KEY (chuẩn Vite / Vercel)
+   ENV – VITE / VERCEL
 ===================================================== */
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
 if (!API_KEY) {
   console.warn("⚠️ VITE_GEMINI_API_KEY chưa được cấu hình");
 }
 
 /* =====================================================
-   KHỞI TẠO AI (SINGLETON)
+   AI SINGLETON
 ===================================================== */
 const ai = new GoogleGenAI({
-  apiKey: API_KEY || "",
+  apiKey: API_KEY ?? "",
 });
 
 /* =====================================================
-   HELPER
+   UTILS
 ===================================================== */
 const safeJSON = <T>(text?: string, fallback: T): T => {
   try {
-    return JSON.parse(text || "");
+    return JSON.parse(text ?? "");
   } catch {
     return fallback;
   }
@@ -44,13 +44,19 @@ export const extractQuestionsFromVisual = async (
           parts: [
             {
               text: `
-Phân tích đề thi Toán từ hình ảnh.
+Bạn là AI trích xuất đề thi Toán.
 Yêu cầu:
-- Trả về JSON array
-- Mỗi câu có LaTeX dạng $...$
+- Chỉ trả về JSON array
+- Mỗi câu có nội dung LaTeX ($...$)
+- Không giải thích thêm
               `,
             },
-            { inlineData: { data: base64Image, mimeType } },
+            {
+              inlineData: {
+                data: base64Image,
+                mimeType,
+              },
+            },
           ],
         },
       ],
@@ -60,8 +66,8 @@ Yêu cầu:
     });
 
     return safeJSON(response.text, []);
-  } catch (error) {
-    console.error("AI Visual Extraction Error:", error);
+  } catch (err) {
+    console.error("❌ AI Visual Extraction Error:", err);
     return [];
   }
 };
@@ -80,9 +86,11 @@ export const extractQuestionsFromText = async (
           parts: [
             {
               text: `
-Chuyển nội dung sau thành đề thi Toán trắc nghiệm.
+Chuyển nội dung sau thành đề thi Toán.
+Yêu cầu:
 - JSON array
 - Có LaTeX
+- Không thêm lời giải
 
 ${rawText}
               `,
@@ -96,18 +104,18 @@ ${rawText}
     });
 
     return safeJSON(response.text, []);
-  } catch (error) {
-    console.error("AI Text Extraction Error:", error);
+  } catch (err) {
+    console.error("❌ AI Text Extraction Error:", err);
     return [];
   }
 };
 
 /* =====================================================
-   AI TRỢ GIẢNG
+   AI TRỢ GIẢNG (TUTOR)
 ===================================================== */
 export const getAiTutorResponse = async (
   message: string,
-  context: string
+  context?: string
 ): Promise<string> => {
   try {
     const response = await ai.models.generateContent({
@@ -117,7 +125,7 @@ export const getAiTutorResponse = async (
           parts: [
             {
               text: `
-Bạn là trợ lý giảng dạy Toán học.
+Bạn là trợ giảng Toán học THCS/THPT.
 Ngữ cảnh: ${context || "Chung"}
 Câu hỏi học sinh: ${message}
               `,
@@ -127,27 +135,27 @@ Câu hỏi học sinh: ${message}
       ],
       config: {
         systemInstruction:
-          "Giải thích sư phạm, dùng LaTeX cho công thức, ngắn gọn.",
-        temperature: 0.7,
+          "Giải thích sư phạm, rõ ràng, ngắn gọn. Công thức dùng LaTeX.",
+        temperature: 0.6,
       },
     });
 
-    return response.text || "Không thể tạo câu trả lời.";
-  } catch (error) {
-    console.error("AI Tutor Error:", error);
-    return "Hệ thống AI tạm thời không khả dụng.";
+    return response.text || "Mình chưa trả lời được câu này.";
+  } catch (err) {
+    console.error("❌ AI Tutor Error:", err);
+    return "Hệ thống AI đang bận, vui lòng thử lại sau.";
   }
 };
 
 /* =====================================================
-   WRAPPER GIỮ COMPAT
+   BACKWARD COMPAT
 ===================================================== */
-export async function askGemini(prompt: string): Promise<string> {
-  return await getAiTutorResponse(prompt, "");
-}
+export const askGemini = async (prompt: string): Promise<string> => {
+  return getAiTutorResponse(prompt);
+};
 
 /* =====================================================
-   COURSE SYLLABUS
+   SINH ĐỀ CƯƠNG KHÓA HỌC
 ===================================================== */
 export const generateCourseSyllabus = async (topic: string) => {
   try {
@@ -155,7 +163,7 @@ export const generateCourseSyllabus = async (topic: string) => {
       model: "gemini-3-flash-preview",
       contents: `
 Bạn là chuyên gia xây dựng chương trình Toán học.
-Tạo đề cương cho khóa: "${topic}"
+Tạo đề cương cho khóa học: "${topic}"
       `,
       config: {
         responseMimeType: "application/json",
@@ -180,13 +188,13 @@ Tạo đề cương cho khóa: "${topic}"
 
     return safeJSON(response.text, {});
   } catch (err) {
-    console.error("Syllabus error:", err);
+    console.error("❌ Syllabus Error:", err);
     return {};
   }
 };
 
 /* =====================================================
-   SINH BÀI GIẢNG
+   SINH NỘI DUNG BÀI GIẢNG
 ===================================================== */
 export const generateLessonContent = async (
   courseTitle: string,
@@ -196,11 +204,14 @@ export const generateLessonContent = async (
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `
-Viết bài giảng Toán:
+Viết bài giảng Toán học.
 - Khóa: ${courseTitle}
 - Bài: ${lessonTitle}
 
-Dùng Markdown + LaTeX.
+Yêu cầu:
+- Markdown
+- Công thức dùng LaTeX
+- Phù hợp LMS
       `,
     });
 
@@ -211,14 +222,16 @@ Dùng Markdown + LaTeX.
 };
 
 /* =====================================================
-   SINH QUIZ
+   SINH QUIZ TRẮC NGHIỆM
 ===================================================== */
 export const generateQuiz = async (lessonContent: string) => {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `
-Tạo 5 câu trắc nghiệm Toán từ nội dung sau:
+Tạo 5 câu hỏi trắc nghiệm Toán từ nội dung sau.
+Chỉ trả về JSON array.
+
 ${lessonContent}
       `,
       config: {
@@ -229,7 +242,7 @@ ${lessonContent}
     return safeJSON(response.text, []).map((q: any) => ({
       ...q,
       id: uid(),
-      type: "MULTIPLE_CHOICE",
+      type: "mcq",
     }));
   } catch {
     return [];
