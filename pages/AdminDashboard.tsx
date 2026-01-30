@@ -7,10 +7,12 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  query,
+  where,
 } from "firebase/firestore";
 
 /* =========================
-   ADMIN LOGIN (cố định)
+   ADMIN LOGIN (CỐ ĐỊNH)
 ========================= */
 const ADMIN_CREDENTIAL = {
   username: "huynhvannhan",
@@ -26,7 +28,7 @@ export default function AdminDashboard() {
   const [password, setPassword] = useState("");
 
   /* =========================
-     DATA FROM FIREBASE
+     DATA
   ========================= */
   const [teachers, setTeachers] = useState<TeacherAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,66 +50,73 @@ export default function AdminDashboard() {
 
   /* =========================
      LOAD TEACHERS (REALTIME)
+     collection: users
+     role: TEACHER
   ========================= */
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const unsub = onSnapshot(
-      collection(db, "teachers"),
+    const q = query(
+      collection(db, "users"),
+      where("role", "==", "TEACHER")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
       (snap) => {
         const list: TeacherAccount[] = snap.docs.map((d) => ({
+          uid: d.id,                 // 🔑 docId = uid
           ...(d.data() as TeacherAccount),
         }));
         setTeachers(list);
         setLoading(false);
       },
-      () => setLoading(false)
+      (err) => {
+        console.error("Firestore error:", err);
+        setLoading(false);
+      }
     );
 
-    return () => unsub();
+    return () => unsubscribe();
   }, [isAuthenticated]);
 
   /* =========================
      ACTIONS
   ========================= */
   const updateStatus = async (
-    username: string,
+    uid: string,
     status: AccountStatus
   ) => {
-    await updateDoc(doc(db, "teachers", username), { status });
+    await updateDoc(doc(db, "users", uid), { status });
   };
 
-  const deleteTeacher = async (username: string) => {
-    const ok = window.confirm(
-      "⚠️ Xóa vĩnh viễn tài khoản giáo viên này?"
-    );
+  const deleteTeacher = async (uid: string) => {
+    const ok = window.confirm("⚠️ Xóa vĩnh viễn tài khoản giáo viên?");
     if (!ok) return;
 
-    await deleteDoc(doc(db, "teachers", username));
+    await deleteDoc(doc(db, "users", uid));
   };
 
   /* =========================
      FILTER
   ========================= */
   const pendingTeachers = useMemo(
-    () => teachers.filter((t) => t.status === "PENDING"),
+    () => teachers.filter((t) => t.status === AccountStatus.PENDING),
     [teachers]
   );
 
   const approvedTeachers = useMemo(
-    () => teachers.filter((t) => t.status === "APPROVED"),
+    () => teachers.filter((t) => t.status === AccountStatus.APPROVED),
     [teachers]
   );
-
-  const totalTeachers = teachers.length;
 
   /* =========================
      UI – LOGIN
   ========================= */
   if (!isAuthenticated) {
     return (
-      <div className="max-w-sm mx-auto mt-24 p-6 bg-white rounded-2xl shadow">
-        <h2 className="text-2xl font-extrabold mb-6 text-center">
+      <div className="max-w-sm mx-auto mt-24 p-8 bg-white rounded-3xl shadow-xl">
+        <h2 className="text-2xl font-black mb-6 text-center">
           🔐 Admin đăng nhập
         </h2>
 
@@ -116,6 +125,7 @@ export default function AdminDashboard() {
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
         />
 
         <input
@@ -124,10 +134,11 @@ export default function AdminDashboard() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
         />
 
         <button
-          className="w-full bg-black text-white py-3 rounded-xl font-semibold"
+          className="w-full bg-black text-white py-3 rounded-xl font-black"
           onClick={handleLogin}
         >
           Đăng nhập
@@ -140,121 +151,90 @@ export default function AdminDashboard() {
      UI – ADMIN PANEL
   ========================= */
   return (
-    <div className="p-6 space-y-10">
-      <h1 className="text-3xl font-extrabold text-gray-800">
+    <div className="p-6 space-y-10 max-w-6xl mx-auto">
+      <h1 className="text-3xl font-black">
         👨‍💼 Quản trị hệ thống
       </h1>
 
-      {/* ===== STATISTICS ===== */}
+      {/* ===== STATS ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow hover:shadow-md transition">
-          <div className="text-sm text-gray-500 mb-1">
-            Tổng giáo viên
-          </div>
-          <div className="text-4xl font-extrabold text-indigo-600">
-            {totalTeachers}
-          </div>
-        </div>
+        <Stat title="Tổng giáo viên" value={teachers.length} />
+        <Stat title="Chờ duyệt" value={pendingTeachers.length} color="yellow" />
+        <Stat title="Đã duyệt" value={approvedTeachers.length} color="green" />
+      </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow hover:shadow-md transition">
-          <div className="text-sm text-gray-500 mb-1">
-            Chờ duyệt
-          </div>
-          <div className="text-4xl font-extrabold text-yellow-500">
-            {pendingTeachers.length}
-          </div>
-        </div>
+      {loading && <p>⏳ Đang tải dữ liệu…</p>}
 
-        <div className="bg-white rounded-2xl p-6 shadow hover:shadow-md transition">
-          <div className="text-sm text-gray-500 mb-1">
-            Đã duyệt
-          </div>
-          <div className="text-4xl font-extrabold text-emerald-600">
-            {approvedTeachers.length}
-          </div>
+      {/* ===== PENDING ===== */}
+      <Section title="⏳ Giáo viên chờ duyệt">
+        {pendingTeachers.map((t) => (
+          <TeacherRow
+            key={t.uid}
+            teacher={t}
+            onApprove={() => updateStatus(t.uid, AccountStatus.APPROVED)}
+            onReject={() => updateStatus(t.uid, AccountStatus.REJECTED)}
+          />
+        ))}
+      </Section>
+
+      {/* ===== APPROVED ===== */}
+      <Section title="✅ Giáo viên đã duyệt">
+        {approvedTeachers.map((t) => (
+          <TeacherRow
+            key={t.uid}
+            teacher={t}
+            onDelete={() => deleteTeacher(t.uid)}
+          />
+        ))}
+      </Section>
+    </div>
+  );
+}
+
+/* =========================
+   SUB COMPONENTS
+========================= */
+function Stat({ title, value, color = "indigo" }: any) {
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow">
+      <div className="text-sm text-gray-500">{title}</div>
+      <div className={`text-4xl font-black text-${color}-600`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: any) {
+  return (
+    <section>
+      <h2 className="text-lg font-black mb-4">{title}</h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function TeacherRow({ teacher, onApprove, onReject, onDelete }: any) {
+  return (
+    <div className="bg-white border p-4 rounded-xl flex justify-between items-center">
+      <div>
+        <div className="font-bold">{teacher.name}</div>
+        <div className="text-sm text-gray-500">
+          {teacher.school || "—"} · {teacher.email}
         </div>
       </div>
 
-      {loading && <p>⏳ Đang tải dữ liệu...</p>}
-
-      {/* ===== PENDING ===== */}
-      <section>
-        <h2 className="text-lg font-semibold mb-3">
-          ⏳ Giáo viên chờ duyệt
-        </h2>
-
-        {pendingTeachers.length === 0 && (
-          <p className="text-gray-500 italic">
-            Không có tài khoản chờ duyệt
-          </p>
+      <div className="flex gap-2">
+        {onApprove && (
+          <button className="btn-green" onClick={onApprove}>Duyệt</button>
         )}
-
-        <ul className="space-y-2">
-          {pendingTeachers.map((t) => (
-            <li
-              key={t.username}
-              className="bg-white border p-4 rounded-xl flex justify-between items-center shadow-sm"
-            >
-              <div>
-                <div className="font-semibold">{t.name}</div>
-                <div className="text-sm text-gray-500">
-                  {t.school} · {t.username}
-                </div>
-              </div>
-
-              <div className="space-x-2">
-                <button
-                  className="px-4 py-1 bg-green-600 text-white rounded-lg"
-                  onClick={() =>
-                    updateStatus(t.username, "APPROVED")
-                  }
-                >
-                  Duyệt
-                </button>
-
-                <button
-                  className="px-4 py-1 bg-red-600 text-white rounded-lg"
-                  onClick={() =>
-                    updateStatus(t.username, "REJECTED")
-                  }
-                >
-                  Từ chối
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* ===== APPROVED ===== */}
-      <section>
-        <h2 className="text-lg font-semibold mb-3">
-          ✅ Giáo viên đã duyệt
-        </h2>
-
-        <ul className="space-y-2">
-          {approvedTeachers.map((t) => (
-            <li
-              key={t.username}
-              className="bg-white border p-4 rounded-xl flex justify-between items-center shadow-sm"
-            >
-              <div>
-                <div className="font-semibold">{t.name}</div>
-                <div className="text-sm text-gray-500">
-                  {t.school} · {t.username}
-                </div>
-              </div>
-
-              <button
-                className="px-4 py-1 bg-gray-800 text-white rounded-lg"
-                onClick={() => deleteTeacher(t.username)}
-              >
-                Xóa
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+        {onReject && (
+          <button className="btn-red" onClick={onReject}>Từ chối</button>
+        )}
+        {onDelete && (
+          <button className="btn-dark" onClick={onDelete}>Xóa</button>
+        )}
+      </div>
     </div>
   );
 }
