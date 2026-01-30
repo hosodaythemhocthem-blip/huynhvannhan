@@ -16,11 +16,18 @@ export enum AccountStatus {
   SUSPENDED = "SUSPENDED",
 }
 
+/** 🔁 Alias để tương thích code cũ */
+export enum ApprovalStatus {
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
   role: UserRole;
-  status: AccountStatus;
+  status: AccountStatus | ApprovalStatus;
   displayName?: string;
   photoURL?: string;
   school?: string;
@@ -28,6 +35,18 @@ export interface UserProfile {
   requestedClassName?: string;
   createdAt: string;
   lastLoginAt?: string;
+}
+
+/** Legacy support */
+export interface User {
+  id: string;
+  email: string;
+  role: UserRole;
+  name?: string;
+  school?: string;
+  status?: ApprovalStatus;
+  classId?: string;
+  requestedClassName?: string;
 }
 
 /* ======================================================
@@ -65,14 +84,12 @@ export type LessonType =
 export interface Lesson {
   id: string;
   title: string;
-  type: LessonType;
-  content: string; // Markdown + LaTeX
+  content: string;
+  type?: LessonType;
   duration?: string;
   completed?: boolean;
-
   videoUrl?: string;
   attachments?: string[];
-
   aiSuggestedFocus?: string;
 }
 
@@ -86,39 +103,36 @@ export interface Module {
 export interface Course {
   id: string;
   title: string;
-  instructor: string;
-
+  instructor?: string;
+  teacherName?: string; // legacy
   imageUrl?: string;
+  thumbnail?: string;
   category?: string;
   description?: string;
-  level?: "Cơ bản" | "Trung cấp" | "Nâng cao" | "Chuyên sâu" | string;
-
-  progress?: number;
+  grade?: string;
+  level?: string;
   rating?: number;
   students?: number;
-
+  progress?: number;
+  lessonCount?: number;
+  lessons?: Lesson[]; // legacy
   modules?: Module[];
-
-  /** ⚠️ Legacy support */
-  lessons: Lesson[];
-
-  tags?: string[];
-  createdAt?: string;
+  createdAt?: any;
   updatedAt?: string;
 }
 
 /* ======================================================
-   HỆ THỐNG ĐỀ THI – CHUẨN THPT 2025
+   HỆ THỐNG ĐỀ THI – CHUẨN THPT
 ====================================================== */
 
 export enum QuestionType {
-  MULTIPLE_CHOICE = "mcq",
-  TRUE_FALSE = "tf",
-  SHORT_ANSWER = "short",
+  MULTIPLE_CHOICE = "multiple_choice",
+  TRUE_FALSE = "true_false",
+  SHORT_ANSWER = "short_answer",
 }
 
 export interface SubQuestion {
-  id: string; // a, b, c, d
+  id: string;
   text: string;
   correctAnswer: boolean;
 }
@@ -126,69 +140,53 @@ export interface SubQuestion {
 export interface Question {
   id: string;
   type: QuestionType;
-  section: 1 | 2 | 3;
-
+  section: number;
   text: string;
-  difficulty?: "Dễ" | "Trung bình" | "Khó" | "Cực khó";
-
   options?: string[];
   subQuestions?: SubQuestion[];
-
-  correctAnswer: number | boolean[] | string;
-
-  points?: number;
+  correctAnswer?: any;
+  difficulty?: string;
+  points: number;
   explanation?: string;
+}
+
+export interface ScoringConfig {
+  part1Points: number;
+  part2Points: number;
+  part3Points: number;
 }
 
 export interface Exam {
   id: string;
   title: string;
   createdAt: string;
-
   duration: number;
   maxScore: number;
-
   questionCount: number;
   questions: Question[];
-
   isLocked: boolean;
+  scoringConfig?: ScoringConfig;
   assignedClassIds?: string[];
-
-  scoringConfig: {
-    part1Points: number;
-    part2Points: number;
-    part3Points: number;
-  };
+  assignedClass?: string;
 }
 
 /* ======================================================
-   ĐIỂM SỐ – CHẤM BÀI – AI PHÂN TÍCH
+   ĐIỂM SỐ – CHẤM BÀI
 ====================================================== */
 
 export interface Grade {
   id: string;
-
-  studentId: string;
   studentName: string;
-  classId: string;
-
-  examId: string;
+  studentId?: string;
   examTitle: string;
-
+  examId?: string;
   score: number;
-  maxScore: number;
+  maxScore?: number;
   attempt: number;
-
+  cheatingRisk: string;
   submittedAt: string;
-  timeSpent: number;
-
-  cheatingRisk: "Low" | "Medium" | "High";
-
-  aiAnalysis?: {
-    weakPoints: string[];
-    improvementPlan: string;
-    recommendedLessons?: string[];
-  };
+  timeSpent?: number;
+  classId: string;
 }
 
 /* ======================================================
@@ -204,18 +202,17 @@ export interface Badge {
 }
 
 export interface StudentAccount {
-  uid: string;
+  uid?: string;
   username: string;
   name: string;
-
+  status?: ApprovalStatus;
   classId: string;
-  teacherUsername: string;
-
-  points: number;
-  badges: Badge[];
-  streak: number;
-
-  rank: "Đồng" | "Bạc" | "Vàng" | "Kim cương" | "Thách đấu";
+  requestedClassName?: string;
+  teacherUsername?: string;
+  points?: number;
+  badges?: Badge[];
+  streak?: number;
+  rank?: string;
 }
 
 /* ======================================================
@@ -225,14 +222,28 @@ export interface StudentAccount {
 export interface ProgressData {
   name: string;
   hours: number;
-  tasksCompleted?: number;
 }
 
 export interface DashboardStats {
-  totalStudents: number;
-  avgScore: number;
-  passRate: number;
-  activeLessons: number;
+  courses?: number;
+  exams?: number;
+  students?: number;
+  totalStudents?: number;
+  avgScore?: number;
+  passRate?: number;
+  activeLessons?: number;
+}
+
+/* ======================================================
+   LỚP HỌC
+====================================================== */
+
+export interface ClassItem {
+  id: string;
+  name: string;
+  grade: string;
+  teacher: string;
+  studentCount: number;
 }
 
 /* ======================================================
@@ -240,17 +251,10 @@ export interface DashboardStats {
 ====================================================== */
 
 export interface ChatMessage {
-  id: string;
-  role: "user" | "model" | "system";
-  text: string;
-  timestamp: Date;
+  id?: string;
+  role: "user" | "assistant" | "model" | "system";
+  content?: string;
+  text?: string;
+  timestamp?: Date;
   isMathFormula?: boolean;
-}
-// =========================
-// TRẠNG THÁI DUYỆT (GV / ADMIN)
-// =========================
-export enum ApprovalStatus {
-  PENDING = "pending",     // chờ duyệt
-  APPROVED = "approved",   // đã duyệt
-  REJECTED = "rejected",   // từ chối
 }
