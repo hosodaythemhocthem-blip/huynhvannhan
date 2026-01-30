@@ -53,7 +53,7 @@ function App() {
   /* =========================
      NOT LOGIN
   ========================= */
-  if (!user) {
+  if (!user || !user.role) {
     return (
       <LoginScreen
         onSelectRole={(role: UserRole, data: any) => {
