@@ -10,58 +10,106 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp
+  orderBy,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { Exam } from '../types';
 
 const EXAMS_COLLECTION = 'exams';
 
 export const ExamService = {
-  // ➕ Tạo đề thi
-  async createExam(exam: Exam) {
+  /* =========================
+     ➕ CREATE
+  ========================= */
+  async createExam(exam: Exam): Promise<string> {
+    if (!db) throw new Error('Firestore not initialized');
+
+    const { id, createdAt, updatedAt, ...data } = exam;
+
     const ref = await addDoc(collection(db, EXAMS_COLLECTION), {
-      ...exam,
+      ...data,
+      isArchived: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      isArchived: false
     });
+
     return ref.id;
   },
 
-  // ✏️ Cập nhật đề thi
-  async updateExam(examId: string, data: Partial<Exam>) {
+  /* =========================
+     ✏️ UPDATE
+  ========================= */
+  async updateExam(
+    examId: string,
+    data: Partial<Exam>
+  ): Promise<void> {
+    if (!db) throw new Error('Firestore not initialized');
+
+    const { id, createdAt, ...safeData } = data;
+
     const ref = doc(db, EXAMS_COLLECTION, examId);
+
     await updateDoc(ref, {
-      ...data,
-      updatedAt: serverTimestamp()
+      ...safeData,
+      updatedAt: serverTimestamp(),
     });
   },
 
-  // 📥 Lấy đề thi theo ID
+  /* =========================
+     📥 GET BY ID
+  ========================= */
   async getExamById(examId: string): Promise<Exam | null> {
+    if (!db) return null;
+
     const ref = doc(db, EXAMS_COLLECTION, examId);
     const snap = await getDoc(ref);
+
     if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as Exam;
+
+    const data = snap.data() as Exam;
+
+    if (data.isArchived) return null;
+
+    return {
+      ...data,
+      id: snap.id,
+    };
   },
 
-  // 📚 Lấy danh sách đề (cho GV / Admin)
-  async getExamsByTeacher(teacherId: string): Promise<Exam[]> {
+  /* =========================
+     📚 GET BY TEACHER
+  ========================= */
+  async getExamsByTeacher(
+    teacherId: string
+  ): Promise<Exam[]> {
+    if (!db) return [];
+
     const q = query(
       collection(db, EXAMS_COLLECTION),
       where('teacherId', '==', teacherId),
-      where('isArchived', '==', false)
+      where('isArchived', '==', false),
+      orderBy('createdAt', 'desc')
     );
+
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Exam));
+
+    return snap.docs.map((d) => ({
+      ...(d.data() as Exam),
+      id: d.id,
+    }));
   },
 
-  // 🗑️ Xóa mềm đề thi
-  async archiveExam(examId: string) {
+  /* =========================
+     🗑️ ARCHIVE (SOFT DELETE)
+  ========================= */
+  async archiveExam(examId: string): Promise<void> {
+    if (!db) throw new Error('Firestore not initialized');
+
     const ref = doc(db, EXAMS_COLLECTION, examId);
+
     await updateDoc(ref, {
       isArchived: true,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
     });
-  }
+  },
 };
