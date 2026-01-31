@@ -4,7 +4,7 @@ import { ProjectFile } from './types';
 import Button from './components/Button';
 import FileTree from './components/FileTree';
 import { generateCodeExpansion } from './services/geminiService';
-import JSZip from 'jszip';
+import JSZip from 'https://esm.sh/jszip@3.10.1';
 
 interface ParsedChange {
   fileName: string;
@@ -29,7 +29,6 @@ const App: React.FC = () => {
 
   const selectedFile = files.find(f => f.id === selectedFileId);
 
-  // Improved Regex to catch variations in AI output (case insensitive, handles spaces)
   const suggestedChanges = useMemo(() => {
     const changes: ParsedChange[] = [];
     const fileRegex = /(?:FILE|File|file):\s*([^\s\n]+)\n+```[a-z]*\n([\s\S]*?)```/gi;
