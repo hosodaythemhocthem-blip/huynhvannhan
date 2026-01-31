@@ -2,6 +2,7 @@
    AUTH + RBAC – PHÂN QUYỀN NGƯỜI DÙNG
 ====================================================== */
 
+/** ⚠️ KHÔNG đổi value string – đã dùng trong Firestore */
 export enum UserRole {
   GUEST = "guest",
   STUDENT = "student",
@@ -9,6 +10,7 @@ export enum UserRole {
   ADMIN = "admin",
 }
 
+/** Trạng thái tài khoản (chuẩn hoá) */
 export enum AccountStatus {
   PENDING = "PENDING",
   APPROVED = "APPROVED",
@@ -16,28 +18,37 @@ export enum AccountStatus {
   SUSPENDED = "SUSPENDED",
 }
 
-/** 🔁 Alias để tương thích code cũ */
+/** 🔁 Legacy alias – KHÔNG XOÁ */
 export enum ApprovalStatus {
   PENDING = "PENDING",
   APPROVED = "APPROVED",
   REJECTED = "REJECTED",
 }
 
+/** Firestore-safe timestamp */
+export type FirestoreTimestamp = string | number | any;
+
+/** Hồ sơ người dùng chuẩn */
 export interface UserProfile {
   uid: string;
   email: string;
   role: UserRole;
+
+  /** ưu tiên AccountStatus, fallback ApprovalStatus */
   status: AccountStatus | ApprovalStatus;
+
   displayName?: string;
   photoURL?: string;
+
   school?: string;
   classId?: string;
   requestedClassName?: string;
-  createdAt: string;
-  lastLoginAt?: string;
+
+  createdAt: FirestoreTimestamp;
+  lastLoginAt?: FirestoreTimestamp;
 }
 
-/** Legacy support */
+/** 🔁 User cũ – giữ để không vỡ code */
 export interface User {
   id: string;
   email: string;
@@ -68,7 +79,7 @@ export interface UIComponent {
   name: string;
   description: string;
   category: ComponentCategory;
-  code: string;
+  code: string; // JSX / TSX string
 }
 
 /* ======================================================
@@ -85,9 +96,11 @@ export interface Lesson {
   id: string;
   title: string;
   content: string;
+
   type?: LessonType;
   duration?: string;
   completed?: boolean;
+
   videoUrl?: string;
   attachments?: string[];
   aiSuggestedFocus?: string;
@@ -103,22 +116,28 @@ export interface Module {
 export interface Course {
   id: string;
   title: string;
+
   instructor?: string;
   teacherName?: string; // legacy
+
   imageUrl?: string;
   thumbnail?: string;
+
   category?: string;
   description?: string;
   grade?: string;
   level?: string;
+
   rating?: number;
   students?: number;
   progress?: number;
+
   lessonCount?: number;
   lessons?: Lesson[]; // legacy
   modules?: Module[];
-  createdAt?: any;
-  updatedAt?: string;
+
+  createdAt?: FirestoreTimestamp;
+  updatedAt?: FirestoreTimestamp;
 }
 
 /* ======================================================
@@ -141,11 +160,14 @@ export interface Question {
   id: string;
   type: QuestionType;
   section: number;
+
   text: string;
   options?: string[];
   subQuestions?: SubQuestion[];
-  correctAnswer?: any;
-  difficulty?: string;
+
+  correctAnswer?: string | number | boolean | null;
+  difficulty?: "easy" | "medium" | "hard";
+
   points: number;
   explanation?: string;
 }
@@ -159,12 +181,17 @@ export interface ScoringConfig {
 export interface Exam {
   id: string;
   title: string;
-  createdAt: string;
+
+  createdAt: FirestoreTimestamp;
+
   duration: number;
   maxScore: number;
   questionCount: number;
+
   questions: Question[];
+
   isLocked: boolean;
+
   scoringConfig?: ScoringConfig;
   assignedClassIds?: string[];
   assignedClass?: string;
@@ -176,16 +203,22 @@ export interface Exam {
 
 export interface Grade {
   id: string;
+
   studentName: string;
   studentId?: string;
+
   examTitle: string;
   examId?: string;
+
   score: number;
   maxScore?: number;
+
   attempt: number;
-  cheatingRisk: string;
-  submittedAt: string;
+  cheatingRisk: "LOW" | "MEDIUM" | "HIGH";
+
+  submittedAt: FirestoreTimestamp;
   timeSpent?: number;
+
   classId: string;
 }
 
@@ -205,10 +238,13 @@ export interface StudentAccount {
   uid?: string;
   username: string;
   name: string;
+
   status?: ApprovalStatus;
+
   classId: string;
   requestedClassName?: string;
   teacherUsername?: string;
+
   points?: number;
   badges?: Badge[];
   streak?: number;
@@ -229,6 +265,7 @@ export interface DashboardStats {
   exams?: number;
   students?: number;
   totalStudents?: number;
+
   avgScore?: number;
   passRate?: number;
   activeLessons?: number;
@@ -247,14 +284,16 @@ export interface ClassItem {
 }
 
 /* ======================================================
-   AI CHAT / TUTOR
+   AI CHAT / TUTOR (Gemini)
 ====================================================== */
 
 export interface ChatMessage {
   id?: string;
   role: "user" | "assistant" | "model" | "system";
+
   content?: string;
   text?: string;
+
   timestamp?: Date;
   isMathFormula?: boolean;
 }
