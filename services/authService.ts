@@ -37,36 +37,45 @@ const isAdminLogin = (email: string, password: string) =>
   password === ADMIN_ACCOUNT.password;
 
 /* =========================
-   MAP USER SAFE
+   INTERNAL ERROR HELPER
+========================= */
+const authError = (code: string) => {
+  const err = new Error(code);
+  (err as any).code = code;
+  return err;
+};
+
+/* =========================
+   MAP FIREBASE USER → APP USER
 ========================= */
 const mapFirebaseUser = async (
   fbUser: FirebaseUser
 ): Promise<AppUser> => {
-  if (!db) throw { code: "db-not-ready" };
+  if (!db) throw authError("db-not-ready");
 
-  const ref = doc(db, "users", fbUser.uid);
-  const snap = await getDoc(ref);
+  const userRef = doc(db, "users", fbUser.uid);
+  const snap = await getDoc(userRef);
 
   if (!snap.exists()) {
-    throw { code: "account-not-exist" };
+    throw authError("account-not-exist");
   }
 
   const data = snap.data();
 
   if (data.deleted === true) {
-    throw { code: "account-deleted" };
+    throw authError("account-deleted");
   }
 
   if (
     data.role === UserRole.TEACHER &&
     data.status !== AccountStatus.APPROVED
   ) {
-    throw { code: "teacher-pending" };
+    throw authError("teacher-pending");
   }
 
   return {
     uid: fbUser.uid,
-    email: fbUser.email || "",
+    email: fbUser.email ?? data.email ?? "",
     role: data.role,
     status: data.status,
   };
@@ -79,6 +88,7 @@ export const login = async (
   email: string,
   password: string
 ): Promise<AppUser> => {
+  /* ===== ADMIN LOCAL ===== */
   if (isAdminLogin(email, password)) {
     localStorage.setItem("ADMIN_LOGIN", "true");
     return {
@@ -88,6 +98,7 @@ export const login = async (
     };
   }
 
+  /* ===== FIREBASE AUTH ===== */
   const cred = await signInWithEmailAndPassword(
     auth,
     email,
@@ -98,7 +109,7 @@ export const login = async (
 };
 
 /* =========================
-   REGISTER
+   REGISTER (BASE)
 ========================= */
 export const register = async (
   email: string,
@@ -124,18 +135,26 @@ export const register = async (
   });
 };
 
-export const registerTeacher = (email: string, password: string) =>
-  register(email, password, UserRole.TEACHER);
+/* =========================
+   REGISTER HELPERS
+========================= */
+export const registerTeacher = (
+  email: string,
+  password: string
+) => register(email, password, UserRole.TEACHER);
 
-export const registerStudent = (email: string, password: string) =>
-  register(email, password, UserRole.STUDENT);
+export const registerStudent = (
+  email: string,
+  password: string
+) => register(email, password, UserRole.STUDENT);
 
 /* =========================
-   OBSERVE AUTH
+   OBSERVE AUTH STATE
 ========================= */
 export const observeAuth = (
   callback: (user: AppUser | null) => void
 ) => {
+  /* ===== ADMIN SESSION ===== */
   if (localStorage.getItem("ADMIN_LOGIN") === "true") {
     callback({
       uid: "ADMIN",
@@ -145,6 +164,7 @@ export const observeAuth = (
     return () => {};
   }
 
+  /* ===== FIREBASE SESSION ===== */
   return onAuthStateChanged(auth, async (fbUser) => {
     if (!fbUser) {
       callback(null);
@@ -154,7 +174,7 @@ export const observeAuth = (
     try {
       const user = await mapFirebaseUser(fbUser);
       callback(user);
-    } catch {
+    } catch (err) {
       await signOut(auth);
       callback(null);
     }
