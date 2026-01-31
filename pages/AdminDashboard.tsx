@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { TeacherAccount, AccountStatus } from "@/types";
 import { db } from "@/services/firebase";
 import {
@@ -13,6 +13,7 @@ import {
 
 /* =========================
    ADMIN LOGIN (CỐ ĐỊNH)
+   ⚠️ LƯU Ý: chỉ dùng tạm local
 ========================= */
 const ADMIN_CREDENTIAL = {
   username: "huynhvannhan",
@@ -32,21 +33,23 @@ export default function AdminDashboard() {
   ========================= */
   const [teachers, setTeachers] = useState<TeacherAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /* =========================
      LOGIN
   ========================= */
-  const handleLogin = () => {
+  const handleLogin = useCallback(() => {
     if (
       username.trim() === ADMIN_CREDENTIAL.username &&
       password === ADMIN_CREDENTIAL.password
     ) {
       setIsAuthenticated(true);
       setPassword("");
+      setError(null);
     } else {
-      alert("❌ Sai tài khoản hoặc mật khẩu Admin");
+      setError("Sai tài khoản hoặc mật khẩu Admin");
     }
-  };
+  }, [username, password]);
 
   /* =========================
      LOAD TEACHERS (REALTIME)
@@ -55,6 +58,9 @@ export default function AdminDashboard() {
   ========================= */
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    setLoading(true);
+    setError(null);
 
     const q = query(
       collection(db, "users"),
@@ -65,7 +71,7 @@ export default function AdminDashboard() {
       q,
       (snap) => {
         const list: TeacherAccount[] = snap.docs.map((d) => ({
-          uid: d.id,                 // 🔑 docId = uid
+          uid: d.id, // 🔑 docId = uid
           ...(d.data() as TeacherAccount),
         }));
         setTeachers(list);
@@ -73,6 +79,7 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error("Firestore error:", err);
+        setError("Không thể tải danh sách giáo viên");
         setLoading(false);
       }
     );
@@ -83,18 +90,30 @@ export default function AdminDashboard() {
   /* =========================
      ACTIONS
   ========================= */
-  const updateStatus = async (
-    uid: string,
-    status: AccountStatus
-  ) => {
-    await updateDoc(doc(db, "users", uid), { status });
+  const updateStatus = async (uid: string, status: AccountStatus) => {
+    try {
+      await updateDoc(doc(db, "users", uid), {
+        status,
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      console.error(err);
+      alert("❌ Không thể cập nhật trạng thái");
+    }
   };
 
   const deleteTeacher = async (uid: string) => {
-    const ok = window.confirm("⚠️ Xóa vĩnh viễn tài khoản giáo viên?");
+    const ok = window.confirm(
+      "⚠️ Xóa vĩnh viễn tài khoản giáo viên?\nHành động này không thể hoàn tác."
+    );
     if (!ok) return;
 
-    await deleteDoc(doc(db, "users", uid));
+    try {
+      await deleteDoc(doc(db, "users", uid));
+    } catch (err) {
+      console.error(err);
+      alert("❌ Không thể xóa giáo viên");
+    }
   };
 
   /* =========================
@@ -119,6 +138,12 @@ export default function AdminDashboard() {
         <h2 className="text-2xl font-black mb-6 text-center">
           🔐 Admin đăng nhập
         </h2>
+
+        {error && (
+          <div className="mb-4 text-sm text-red-600 font-bold text-center">
+            {error}
+          </div>
+        )}
 
         <input
           className="w-full border p-3 mb-4 rounded-xl"
@@ -159,26 +184,37 @@ export default function AdminDashboard() {
       {/* ===== STATS ===== */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <Stat title="Tổng giáo viên" value={teachers.length} />
-        <Stat title="Chờ duyệt" value={pendingTeachers.length} color="yellow" />
-        <Stat title="Đã duyệt" value={approvedTeachers.length} color="green" />
+        <Stat title="Chờ duyệt" value={pendingTeachers.length} color="amber" />
+        <Stat title="Đã duyệt" value={approvedTeachers.length} color="emerald" />
       </div>
 
       {loading && <p>⏳ Đang tải dữ liệu…</p>}
+      {error && <p className="text-red-600 font-bold">{error}</p>}
 
       {/* ===== PENDING ===== */}
       <Section title="⏳ Giáo viên chờ duyệt">
+        {pendingTeachers.length === 0 && (
+          <p className="text-sm text-gray-500">Không có giáo viên chờ duyệt</p>
+        )}
         {pendingTeachers.map((t) => (
           <TeacherRow
             key={t.uid}
             teacher={t}
-            onApprove={() => updateStatus(t.uid, AccountStatus.APPROVED)}
-            onReject={() => updateStatus(t.uid, AccountStatus.REJECTED)}
+            onApprove={() =>
+              updateStatus(t.uid, AccountStatus.APPROVED)
+            }
+            onReject={() =>
+              updateStatus(t.uid, AccountStatus.REJECTED)
+            }
           />
         ))}
       </Section>
 
       {/* ===== APPROVED ===== */}
       <Section title="✅ Giáo viên đã duyệt">
+        {approvedTeachers.length === 0 && (
+          <p className="text-sm text-gray-500">Chưa có giáo viên</p>
+        )}
         {approvedTeachers.map((t) => (
           <TeacherRow
             key={t.uid}
@@ -194,7 +230,16 @@ export default function AdminDashboard() {
 /* =========================
    SUB COMPONENTS
 ========================= */
-function Stat({ title, value, color = "indigo" }: any) {
+
+function Stat({
+  title,
+  value,
+  color = "indigo",
+}: {
+  title: string;
+  value: number;
+  color?: "indigo" | "emerald" | "amber" | "red";
+}) {
   return (
     <div className="bg-white rounded-2xl p-6 shadow">
       <div className="text-sm text-gray-500">{title}</div>
@@ -205,7 +250,13 @@ function Stat({ title, value, color = "indigo" }: any) {
   );
 }
 
-function Section({ title, children }: any) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section>
       <h2 className="text-lg font-black mb-4">{title}</h2>
@@ -214,11 +265,23 @@ function Section({ title, children }: any) {
   );
 }
 
-function TeacherRow({ teacher, onApprove, onReject, onDelete }: any) {
+function TeacherRow({
+  teacher,
+  onApprove,
+  onReject,
+  onDelete,
+}: {
+  teacher: TeacherAccount;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <div className="bg-white border p-4 rounded-xl flex justify-between items-center">
       <div>
-        <div className="font-bold">{teacher.name}</div>
+        <div className="font-bold">
+          {teacher.name || "Chưa đặt tên"}
+        </div>
         <div className="text-sm text-gray-500">
           {teacher.school || "—"} · {teacher.email}
         </div>
@@ -226,13 +289,28 @@ function TeacherRow({ teacher, onApprove, onReject, onDelete }: any) {
 
       <div className="flex gap-2">
         {onApprove && (
-          <button className="btn-green" onClick={onApprove}>Duyệt</button>
+          <button
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm"
+            onClick={onApprove}
+          >
+            Duyệt
+          </button>
         )}
         {onReject && (
-          <button className="btn-red" onClick={onReject}>Từ chối</button>
+          <button
+            className="px-4 py-2 rounded-lg bg-rose-600 text-white font-bold text-sm"
+            onClick={onReject}
+          >
+            Từ chối
+          </button>
         )}
         {onDelete && (
-          <button className="btn-dark" onClick={onDelete}>Xóa</button>
+          <button
+            className="px-4 py-2 rounded-lg bg-slate-800 text-white font-bold text-sm"
+            onClick={onDelete}
+          >
+            Xóa
+          </button>
         )}
       </div>
     </div>
