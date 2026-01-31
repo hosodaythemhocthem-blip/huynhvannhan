@@ -1,190 +1,86 @@
-import React, { useState } from 'react';
-import { 
-  Plus, Trash2, Settings2, Save 
-} from 'lucide-react';
-import { Question, QuestionType, Exam } from '../types';
-import { extractQuestionsFromText } from '../services/geminiService';
-import { createExam } from '../services/exam.service';
+import React from 'react';
+import { Plus, FileText, LayoutGrid } from 'lucide-react';
+import { Exam } from '../types';
+import ExamCard from './ExamCard';
+import ImportExamFromFile from './ImportExamFromFile';
+import AiExamGenerator from './AiExamGenerator';
 
-interface ExamEditorProps {
-  initialExam?: Exam;
-  isThptPreset?: boolean;
-  onCancel: () => void;
+interface Props {
+  exams: Exam[];
+  onCreate: () => void;
+  onAdd: (exam: Exam) => void; // Callback nhận đề thi từ AI hoặc File upload
+  onEdit: (exam: Exam) => void;
+  onDelete: (id: string) => void;
+  onView?: (exam: Exam) => void;
 }
 
-const ExamEditor: React.FC<ExamEditorProps> = ({
-  initialExam,
-  isThptPreset = false,
-  onCancel
-}) => {
-
-  /* ===================== STATE ===================== */
-  const [activeTab, setActiveTab] = useState<'manual' | 'quick'>('quick');
-  const [activeSection, setActiveSection] = useState<1 | 2 | 3>(1);
-
-  const [title, setTitle] = useState(
-    initialExam?.title || (isThptPreset ? 'Đề ôn tập THPT 2025' : '')
-  );
-  const [duration, setDuration] = useState(initialExam?.duration ?? 90);
-  const [maxScore, setMaxScore] = useState(initialExam?.maxScore ?? 10);
-
-  const [part1Points, setPart1Points] = useState(0.25);
-  const [part2Points, setPart2Points] = useState(1);
-  const [part3Points, setPart3Points] = useState(0.5);
-
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [rawText, setRawText] = useState('');
-  const [rawAnswers, setRawAnswers] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-
-  /* ===================== QUESTION ===================== */
-  const handleAddQuestion = (section: 1 | 2 | 3) => {
-    const id = crypto.randomUUID();
-    if (section === 1) {
-      setQuestions(q => [...q, {
-        id,
-        section,
-        type: QuestionType.MULTIPLE_CHOICE,
-        text: '',
-        options: ['', '', '', ''],
-        correctAnswer: 0
-      }]);
-    } else if (section === 2) {
-      setQuestions(q => [...q, {
-        id,
-        section,
-        type: QuestionType.TRUE_FALSE,
-        text: '',
-        options: [],
-        subQuestions: [
-          { id: 'a', text: '', correctAnswer: true },
-          { id: 'b', text: '', correctAnswer: false },
-          { id: 'c', text: '', correctAnswer: false },
-          { id: 'd', text: '', correctAnswer: false }
-        ],
-        correctAnswer: null
-      }]);
-    } else {
-      setQuestions(q => [...q, {
-        id,
-        section,
-        type: QuestionType.SHORT_ANSWER,
-        text: '',
-        options: [],
-        correctAnswer: ''
-      }]);
-    }
-    setActiveTab('manual');
-  };
-
-  const updateQuestion = (id: string, data: Partial<Question>) => {
-    setQuestions(q => q.map(i => i.id === id ? { ...i, ...data } : i));
-  };
-
-  /* ===================== AI ===================== */
-  const handleAiUpdate = async () => {
-    if (!rawText.trim()) return;
-    setIsAiLoading(true);
-    const text = `${rawText}\n\nĐÁP ÁN:\n${rawAnswers}`;
-    const aiQs = await extractQuestionsFromText(text);
-    setQuestions(q => [
-      ...q,
-      ...aiQs.map(i => ({
-        ...i,
-        id: crypto.randomUUID(),
-        section: activeSection
-      }))
-    ]);
-    setActiveTab('manual');
-    setIsAiLoading(false);
-  };
-
-  /* ===================== SAVE ===================== */
-  const handleSave = async () => {
-    if (!title.trim()) {
-      alert('Vui lòng nhập tên đề');
-      return;
-    }
-
-    await createExam({
-      title,
-      duration,
-      maxScore,
-      subject: 'Toán',
-      teacherId: 'TEMP_TEACHER_ID', // 👉 sau gắn auth.uid
-      questions: questions.map(q => ({
-        id: q.id,
-        type: q.type,
-        content: q.text,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        score:
-          q.section === 1 ? part1Points :
-          q.section === 2 ? part2Points :
-          part3Points
-      })),
-      createdAt: Date.now()
-    });
-
-    alert('✅ Đã lưu đề thi');
-    onCancel();
-  };
-
-  const list = questions.filter(q => q.section === activeSection);
-
-  /* ===================== UI ===================== */
+export default function ExamDashboard({
+  exams,
+  onCreate,
+  onAdd,
+  onEdit,
+  onDelete,
+  onView
+}: Props) {
   return (
-    <div className="fixed inset-0 bg-slate-50 z-50 p-8 overflow-auto">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* =========================
+          ACTION BAR
+      ========================= */}
+      <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
+        <div className="flex flex-wrap gap-3">
+          {/* Nút tạo thủ công */}
+          <button
+            onClick={onCreate}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
+          >
+            <Plus size={20} /> Soạn đề thủ công
+          </button>
 
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black">Biên soạn đề thi</h2>
-          <div className="flex gap-4">
-            <button onClick={onCancel} className="font-bold text-slate-400">Hủy</button>
-            <button onClick={handleSave} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black">
-              <Save size={18}/> Lưu đề
-            </button>
+          {/* Import từ file (Word/PDF) */}
+          <ImportExamFromFile />
+        </div>
+
+        {/* AI Generator - Truyền callback onAdd để nhận đề */}
+        <div className="w-full md:w-auto">
+          <AiExamGenerator onGenerate={onAdd} />
+        </div>
+      </div>
+
+      {/* =========================
+          EXAM LIST GRID
+      ========================= */}
+      {exams.length === 0 ? (
+        <div className="flex flex-col items-center justify-center text-slate-400 py-24 border-2 border-dashed border-slate-200 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 transition-colors">
+          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-6 border border-slate-100">
+            <FileText size={40} className="text-slate-300" />
+          </div>
+          <h3 className="font-black text-xl text-slate-600 mb-2">Chưa có đề thi nào</h3>
+          <p className="text-sm font-medium opacity-60 max-w-md text-center">
+            Hệ thống chưa ghi nhận đề thi nào. Hãy bắt đầu bằng cách tạo thủ công, tải file lên hoặc dùng <span className="text-indigo-500 font-bold">AI Genius</span> để biên soạn.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <div className="flex items-center gap-2 mb-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
+            <LayoutGrid size={14} />
+            Danh sách đề thi ({exams.length})
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {exams.map((exam) => (
+              <ExamCard
+                key={exam.id}
+                exam={exam}
+                // Adapter: ExamCard trả về ID khi click nút sửa/xóa
+                // Nhưng Dashboard cần object Exam cho hàm onEdit của cha
+                onEdit={() => onEdit(exam)}
+                onDelete={onDelete}
+              />
+            ))}
           </div>
         </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow space-y-4">
-          <input value={title} onChange={e => setTitle(e.target.value)}
-            placeholder="Tên đề thi"
-            className="w-full p-4 border rounded-xl font-bold" />
-        </div>
-
-        <div className="flex gap-3">
-          {[1,2,3].map(i => (
-            <button key={i}
-              onClick={() => setActiveSection(i as any)}
-              className={`px-6 py-3 rounded-xl font-black ${activeSection===i?'bg-blue-600 text-white':'bg-white'}`}>
-              Phần {i}
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl space-y-6">
-          {list.map((q, idx) => (
-            <div key={q.id} className="border rounded-2xl p-6 space-y-3">
-              <textarea
-                value={q.text}
-                onChange={e => updateQuestion(q.id,{text:e.target.value})}
-                className="w-full p-3 border rounded-xl font-bold"
-                placeholder={`Câu ${idx+1}`}
-              />
-            </div>
-          ))}
-
-          <button
-            onClick={() => handleAddQuestion(activeSection)}
-            className="w-full border-2 border-dashed p-6 rounded-2xl font-black text-blue-500">
-            <Plus/> Thêm câu hỏi
-          </button>
-        </div>
-
-      </div>
+      )}
     </div>
   );
-};
-
-export default ExamEditor;
+}
