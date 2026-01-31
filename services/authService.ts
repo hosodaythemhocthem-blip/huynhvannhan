@@ -25,41 +25,43 @@ export interface AppUser {
 }
 
 /* =========================
-   ADMIN BYPASS (LOCAL ONLY)
+   ⚠️ ADMIN LOCAL (DEV ONLY)
 ========================= */
 const ADMIN_ACCOUNT = {
   email: "huynhvannhan",
   password: "huynhvannhan2020",
 };
 
+const isAdminLogin = (email: string, password: string) =>
+  email === ADMIN_ACCOUNT.email &&
+  password === ADMIN_ACCOUNT.password;
+
 /* =========================
-   SAFE MAP FIREBASE USER
+   MAP USER SAFE
 ========================= */
 const mapFirebaseUser = async (
   fbUser: FirebaseUser
 ): Promise<AppUser> => {
-  if (!db) {
-    throw new Error("Firestore chưa được khởi tạo");
-  }
+  if (!db) throw { code: "db-not-ready" };
 
   const ref = doc(db, "users", fbUser.uid);
   const snap = await getDoc(ref);
 
   if (!snap.exists()) {
-    throw new Error("Tài khoản chưa có dữ liệu hệ thống");
+    throw { code: "account-not-exist" };
   }
 
   const data = snap.data();
 
   if (data.deleted === true) {
-    throw new Error("Tài khoản đã bị khóa");
+    throw { code: "account-deleted" };
   }
 
   if (
     data.role === UserRole.TEACHER &&
     data.status !== AccountStatus.APPROVED
   ) {
-    throw new Error("Giáo viên đang chờ duyệt");
+    throw { code: "teacher-pending" };
   }
 
   return {
@@ -77,11 +79,7 @@ export const login = async (
   email: string,
   password: string
 ): Promise<AppUser> => {
-  // ✅ ADMIN LOCAL LOGIN
-  if (
-    email === ADMIN_ACCOUNT.email &&
-    password === ADMIN_ACCOUNT.password
-  ) {
+  if (isAdminLogin(email, password)) {
     localStorage.setItem("ADMIN_LOGIN", "true");
     return {
       uid: "ADMIN",
@@ -100,7 +98,7 @@ export const login = async (
 };
 
 /* =========================
-   REGISTER CORE
+   REGISTER
 ========================= */
 export const register = async (
   email: string,
@@ -126,18 +124,11 @@ export const register = async (
   });
 };
 
-/* =========================
-   ALIAS (COMPAT CŨ)
-========================= */
-export const registerTeacher = (
-  email: string,
-  password: string
-) => register(email, password, UserRole.TEACHER);
+export const registerTeacher = (email: string, password: string) =>
+  register(email, password, UserRole.TEACHER);
 
-export const registerStudent = (
-  email: string,
-  password: string
-) => register(email, password, UserRole.STUDENT);
+export const registerStudent = (email: string, password: string) =>
+  register(email, password, UserRole.STUDENT);
 
 /* =========================
    OBSERVE AUTH
@@ -145,7 +136,6 @@ export const registerStudent = (
 export const observeAuth = (
   callback: (user: AppUser | null) => void
 ) => {
-  // ✅ ADMIN SESSION
   if (localStorage.getItem("ADMIN_LOGIN") === "true") {
     callback({
       uid: "ADMIN",
@@ -164,8 +154,8 @@ export const observeAuth = (
     try {
       const user = await mapFirebaseUser(fbUser);
       callback(user);
-    } catch (err) {
-      console.error("observeAuth error:", err);
+    } catch {
+      await signOut(auth);
       callback(null);
     }
   });
@@ -174,7 +164,7 @@ export const observeAuth = (
 /* =========================
    LOGOUT
 ========================= */
-export const logout = async (): Promise<void> => {
+export const logout = async () => {
   localStorage.removeItem("ADMIN_LOGIN");
   await signOut(auth);
 };
