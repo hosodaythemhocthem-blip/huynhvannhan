@@ -53,10 +53,12 @@ const mapAuthError = (code?: string) => {
 const validateInput = (email: string, password: string) => {
   const e = email.trim();
   const p = password.trim();
+
   if (!e) return "Vui lòng nhập email";
   if (!e.includes("@")) return "Email không hợp lệ";
   if (!p) return "Vui lòng nhập mật khẩu";
   if (p.length < 6) return "Mật khẩu tối thiểu 6 ký tự";
+
   return null;
 };
 
@@ -71,6 +73,9 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* =====================
+     Handlers
+  ===================== */
   const handleLogin = useCallback(async () => {
     if (loading) return;
 
@@ -86,13 +91,13 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
 
       const user = await login(email.trim(), password.trim());
 
-      if (!user?.role) {
+      if (!user || !user.role) {
         throw { code: "permission-denied" };
       }
 
       onSelectRole(user.role, user);
     } catch (err: any) {
-      setError(mapAuthError(err.code));
+      setError(mapAuthError(err?.code));
     } finally {
       setLoading(false);
     }
@@ -121,7 +126,7 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
 
       setMode("login");
     } catch (err: any) {
-      setError(mapAuthError(err.code));
+      setError(mapAuthError(err?.code));
     } finally {
       setLoading(false);
     }
@@ -133,10 +138,12 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
     }
   };
 
-  /* UI giữ nguyên như bạn */
+  /* =====================
+     UI (GIỮ NGUYÊN)
+  ===================== */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
-      {/* ... UI Y NGUYÊN ... */}
+      {/* UI giữ nguyên như bạn – phần này bạn đang làm rất đẹp */}
     </div>
   );
 };
