@@ -3,7 +3,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 /* =====================================================
    ENV – VITE / VERCEL
 ===================================================== */
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as
+  | string
+  | undefined;
 
 if (!API_KEY) {
   console.warn("⚠️ VITE_GEMINI_API_KEY chưa được cấu hình");
@@ -21,7 +23,8 @@ const ai = new GoogleGenAI({
 ===================================================== */
 const safeJSON = <T>(text?: string, fallback: T): T => {
   try {
-    return JSON.parse(text ?? "");
+    if (!text) return fallback;
+    return JSON.parse(text);
   } catch {
     return fallback;
   }
@@ -41,14 +44,16 @@ export const extractQuestionsFromVisual = async (
       model: "gemini-3-flash-preview",
       contents: [
         {
+          role: "user",
           parts: [
             {
               text: `
-Bạn là AI trích xuất đề thi Toán.
-Yêu cầu:
-- Chỉ trả về JSON array
-- Mỗi câu có nội dung LaTeX ($...$)
-- Không giải thích thêm
+Bạn là AI trích xuất đề thi Toán học.
+Yêu cầu nghiêm ngặt:
+- Chỉ trả về JSON array hợp lệ
+- Không markdown, không giải thích
+- Mỗi câu hỏi có nội dung LaTeX ($...$)
+- Không thêm lời giải
               `,
             },
             {
@@ -62,6 +67,7 @@ Yêu cầu:
       ],
       config: {
         responseMimeType: "application/json",
+        temperature: 0.2,
       },
     });
 
@@ -79,19 +85,25 @@ export const extractQuestionsFromText = async (
   rawText: string
 ): Promise<any[]> => {
   try {
+    if (!rawText.trim()) return [];
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
         {
+          role: "user",
           parts: [
             {
               text: `
-Chuyển nội dung sau thành đề thi Toán.
-Yêu cầu:
-- JSON array
-- Có LaTeX
-- Không thêm lời giải
+Chuyển nội dung sau thành đề thi Toán học.
 
+Yêu cầu:
+- Trả về JSON array duy nhất
+- Không markdown
+- Có LaTeX cho công thức
+- Không kèm lời giải
+
+NỘI DUNG:
 ${rawText}
               `,
             },
@@ -100,6 +112,7 @@ ${rawText}
       ],
       config: {
         responseMimeType: "application/json",
+        temperature: 0.3,
       },
     });
 
@@ -118,16 +131,21 @@ export const getAiTutorResponse = async (
   context?: string
 ): Promise<string> => {
   try {
+    if (!message.trim()) return "";
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
         {
+          role: "user",
           parts: [
             {
               text: `
-Bạn là trợ giảng Toán học THCS/THPT.
+Bạn là trợ giảng Toán học THCS & THPT.
+
 Ngữ cảnh: ${context || "Chung"}
-Câu hỏi học sinh: ${message}
+Câu hỏi học sinh:
+${message}
               `,
             },
           ],
@@ -135,7 +153,7 @@ Câu hỏi học sinh: ${message}
       ],
       config: {
         systemInstruction:
-          "Giải thích sư phạm, rõ ràng, ngắn gọn. Công thức dùng LaTeX.",
+          "Giải thích sư phạm, ngắn gọn, dễ hiểu. Công thức dùng LaTeX.",
         temperature: 0.6,
       },
     });
@@ -150,21 +168,36 @@ Câu hỏi học sinh: ${message}
 /* =====================================================
    BACKWARD COMPAT
 ===================================================== */
-export const askGemini = async (prompt: string): Promise<string> => {
+export const askGemini = async (
+  prompt: string
+): Promise<string> => {
   return getAiTutorResponse(prompt);
 };
 
 /* =====================================================
    SINH ĐỀ CƯƠNG KHÓA HỌC
 ===================================================== */
-export const generateCourseSyllabus = async (topic: string) => {
+export const generateCourseSyllabus = async (
+  topic: string
+) => {
   try {
+    if (!topic.trim()) return {};
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `
 Bạn là chuyên gia xây dựng chương trình Toán học.
 Tạo đề cương cho khóa học: "${topic}"
-      `,
+              `,
+            },
+          ],
+        },
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -179,10 +212,13 @@ Tạo đề cương cho khóa học: "${topic}"
                 properties: {
                   title: { type: Type.STRING },
                 },
+                required: ["title"],
               },
             },
           },
+          required: ["title", "lessons"],
         },
+        temperature: 0.4,
       },
     });
 
@@ -201,22 +237,38 @@ export const generateLessonContent = async (
   lessonTitle: string
 ): Promise<string> => {
   try {
+    if (!courseTitle || !lessonTitle) return "";
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `
 Viết bài giảng Toán học.
-- Khóa: ${courseTitle}
-- Bài: ${lessonTitle}
+
+Khóa: ${courseTitle}
+Bài: ${lessonTitle}
 
 Yêu cầu:
 - Markdown
-- Công thức dùng LaTeX
+- Công thức LaTeX
 - Phù hợp LMS
-      `,
+              `,
+            },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.5,
+      },
     });
 
     return response.text || "";
-  } catch {
+  } catch (err) {
+    console.error("❌ Lesson Content Error:", err);
     return "";
   }
 };
@@ -224,18 +276,35 @@ Yêu cầu:
 /* =====================================================
    SINH QUIZ TRẮC NGHIỆM
 ===================================================== */
-export const generateQuiz = async (lessonContent: string) => {
+export const generateQuiz = async (
+  lessonContent: string
+) => {
   try {
+    if (!lessonContent.trim()) return [];
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `
-Tạo 5 câu hỏi trắc nghiệm Toán từ nội dung sau.
-Chỉ trả về JSON array.
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `
+Tạo 5 câu hỏi trắc nghiệm Toán học từ nội dung sau.
+Yêu cầu:
+- Chỉ trả về JSON array
+- Không markdown, không giải thích
 
+NỘI DUNG:
 ${lessonContent}
-      `,
+              `,
+            },
+          ],
+        },
+      ],
       config: {
         responseMimeType: "application/json",
+        temperature: 0.3,
       },
     });
 
@@ -244,7 +313,8 @@ ${lessonContent}
       id: uid(),
       type: "mcq",
     }));
-  } catch {
+  } catch (err) {
+    console.error("❌ Quiz Generation Error:", err);
     return [];
   }
 };
