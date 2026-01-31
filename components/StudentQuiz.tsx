@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Clock, Trophy } from "lucide-react";
 import { Question, Exam, QuestionType } from "../types";
 import MathPreview from "./MathPreview";
@@ -26,6 +26,7 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
     score: 0,
   });
 
+  const finishOnceRef = useRef(false);
   const questions = exam.questions || [];
 
   /* ================= TIMER ================= */
@@ -46,7 +47,8 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
 
   /* ================= CHẤM ĐIỂM ================= */
   const handleFinish = () => {
-    if (isFinished) return;
+    if (finishOnceRef.current) return;
+    finishOnceRef.current = true;
 
     let totalScore = 0;
     let correctCount = 0;
@@ -88,15 +90,11 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
 
       // PHẦN III – TRẢ LỜI NGẮN
       else if (q.type === QuestionType.SHORT_ANSWER) {
+        const normalize = (v: any) =>
+          v?.toString().trim().replace(",", ".");
+
         if (
-          studentAns
-            ?.toString()
-            .trim()
-            .replace(",", ".") ===
-          q.correctAnswer
-            ?.toString()
-            .trim()
-            .replace(",", ".")
+          normalize(studentAns) === normalize(q.correctAnswer)
         ) {
           totalScore += config.part3Points;
           correctCount++;
@@ -178,12 +176,13 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="px-5 py-2 bg-blue-50 text-blue-600 rounded-full font-black">
+          <div className="flex items-center gap-2 px-5 py-2 bg-blue-50 text-blue-600 rounded-full font-black">
             <Clock size={16} /> {formatTime(timeLeft)}
           </div>
           <button
             onClick={handleFinish}
-            className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest"
+            disabled={isFinished}
+            className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest disabled:opacity-50"
           >
             Nộp bài
           </button>
@@ -195,21 +194,24 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
           <QuestionCard key={q.id} num={idx + 1} question={q}>
             {q.type === QuestionType.MULTIPLE_CHOICE && (
               <div className="grid md:grid-cols-2 gap-6">
-                {q.options?.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() =>
-                      setAnswers({ ...answers, [q.id]: i })
-                    }
-                    className={`p-5 rounded-2xl border-2 text-left ${
-                      answers[q.id] === i
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-slate-100"
-                    }`}
-                  >
-                    <MathPreview math={opt} />
-                  </button>
-                ))}
+                {q.options?.map((opt, i) => {
+                  const active = answers[q.id] === i;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() =>
+                        setAnswers({ ...answers, [q.id]: i })
+                      }
+                      className={`p-5 rounded-2xl border-2 text-left transition-all ${
+                        active
+                          ? "border-blue-500 bg-blue-50 shadow-sm"
+                          : "border-slate-100 hover:border-slate-200"
+                      }`}
+                    >
+                      <MathPreview math={opt} />
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -222,7 +224,7 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
                     [q.id]: e.target.value,
                   })
                 }
-                className="w-full p-6 bg-slate-900 text-white rounded-3xl text-2xl font-mono"
+                className="w-full p-6 bg-slate-900 text-white rounded-3xl text-2xl font-mono outline-none focus:ring-4 focus:ring-blue-500/20"
                 placeholder="Nhập kết quả"
               />
             )}
@@ -230,9 +232,7 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
         ))}
       </main>
 
-      <AiAssistant
-        currentContext={`Thi THPT 2025: ${exam.title}`}
-      />
+      <AiAssistant currentContext={`Thi THPT 2025: ${exam.title}`} />
     </div>
   );
 };
