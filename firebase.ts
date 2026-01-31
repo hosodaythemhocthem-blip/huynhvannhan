@@ -8,25 +8,28 @@ import { getAuth, Auth } from "firebase/auth";
 
 /* =========================
    FIREBASE CONFIG
+   ⚠️ LẤY TỪ ENV – KHÔNG HARD CODE
 ========================= */
 export const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDzLBvFEDEjTlvP-bYGE8gxB7Ce6-KwcXw",
-  authDomain: "hvnn-8c48e.firebaseapp.com",
-  projectId: "hvnn-8c48e",
-  storageBucket: "hvnn-8c48e.appspot.com",
-  messagingSenderId: "493379893878",
-  appId: "1:493379893878:web:6b5ad4930c220d12fafd57",
-  measurementId: "G-VBHS51JLC3",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 /* =========================
-   INIT APP (SAFE)
+   INIT APP (SAFE – SSR READY)
 ========================= */
 let app: FirebaseApp;
 
 if (!getApps().length) {
   app = initializeApp(FIREBASE_CONFIG);
-  console.info("🔥 Firebase initialized");
+  if (import.meta.env.DEV) {
+    console.info("🔥 Firebase initialized");
+  }
 } else {
   app = getApp();
 }
@@ -39,23 +42,21 @@ export const db: Firestore = getFirestore(app);
 
 /* =========================
    OFFLINE PERSISTENCE
-   ⚠️ PHẢI chạy SAU khi browser sẵn sàng
+   ⚠️ CHỈ CHẠY Ở CLIENT
 ========================= */
 if (typeof window !== "undefined") {
   enableIndexedDbPersistence(db).catch((err: any) => {
-    switch (err.code) {
-      case "failed-precondition":
-        console.warn(
-          "⚠️ Firestore persistence bị tắt (mở nhiều tab)"
-        );
-        break;
-      case "unimplemented":
-        console.warn(
-          "⚠️ Trình duyệt không hỗ trợ IndexedDB"
-        );
-        break;
-      default:
-        console.warn("⚠️ Firestore persistence error:", err);
+    if (import.meta.env.DEV) {
+      switch (err.code) {
+        case "failed-precondition":
+          console.warn("⚠️ Firestore persistence bị tắt (nhiều tab)");
+          break;
+        case "unimplemented":
+          console.warn("⚠️ Trình duyệt không hỗ trợ IndexedDB");
+          break;
+        default:
+          console.warn("⚠️ Firestore persistence error:", err);
+      }
     }
   });
 }
