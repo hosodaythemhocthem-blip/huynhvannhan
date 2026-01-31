@@ -1,5 +1,6 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 /**
  * Firebase config
@@ -15,10 +16,19 @@ const firebaseConfig = {
   measurementId: "G-VBHS51JLC3",
 };
 
-// Init Firebase
-const app = initializeApp(firebaseConfig);
+// =========================
+// Init Firebase (chống init trùng)
+// =========================
+const app =
+  getApps().length === 0
+    ? initializeApp(firebaseConfig)
+    : getApps()[0];
 
-// Init Firestore
+// =========================
+// Firebase services
+// =========================
 export const db = getFirestore(app);
+export const auth = getAuth(app);
 
+// Giữ lại để file khác dùng nếu cần
 export const FIREBASE_CONFIG = firebaseConfig;
