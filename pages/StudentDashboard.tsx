@@ -1,21 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  BookOpen,
   Trophy,
   Clock,
-  ChevronRight,
   Star,
-  LayoutDashboard,
-  History,
-  Gamepad2,
-  PlayCircle,
-  Trash2,
-  AlertCircle,
-  Lock,
   CheckCircle2,
 } from "lucide-react";
 import { Exam, Grade } from "../types";
-import MathPreview from "../components/MathPreview";
 
 /* =========================
    SAFE STUDENT TYPE
@@ -48,7 +38,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
      SAFE DISPLAY NAME
   ========================= */
   const displayName = useMemo(() => {
-    if (student.name) return student.name.split(" ").pop();
+    if (student?.name?.trim())
+      return student.name.trim().split(" ").pop();
     return student.email?.split("@")[0] || "Học sinh";
   }, [student.name, student.email]);
 
@@ -78,13 +69,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   }, [exams, student.classId, student.requestedClassName]);
 
   /* =========================
-     LOAD GRADES
+     LOAD GRADES (LOCAL)
   ========================= */
   useEffect(() => {
     const loadGrades = () => {
-      const allGrades: Grade[] = JSON.parse(
-        localStorage.getItem("grades") || "[]"
-      );
+      const raw = localStorage.getItem("grades");
+      const allGrades: Grade[] = raw ? JSON.parse(raw) : [];
 
       setMyGrades(
         allGrades.filter(
@@ -103,12 +93,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const handleDeleteGrade = (id: string) => {
     if (!window.confirm("Xóa kết quả lần thi này?")) return;
 
-    const allGrades: Grade[] = JSON.parse(
-      localStorage.getItem("grades") || "[]"
-    );
-    const updated = allGrades.filter((g) => g.id !== id);
+    const raw = localStorage.getItem("grades");
+    const allGrades: Grade[] = raw ? JSON.parse(raw) : [];
 
+    const updated = allGrades.filter((g) => g.id !== id);
     localStorage.setItem("grades", JSON.stringify(updated));
+
     setMyGrades(
       updated.filter(
         (g) =>
@@ -133,7 +123,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
       label: "Điểm trung bình",
       value: myGrades.length
         ? (
-            myGrades.reduce((a, b) => a + b.score, 0) / myGrades.length
+            myGrades.reduce((a, b) => a + b.score, 0) /
+            myGrades.length
           ).toFixed(1)
         : "0.0",
       icon: Star,
@@ -208,8 +199,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
         ))}
       </div>
 
-      {/* TAB CONTENT – giữ nguyên UI phía dưới */}
-      {/* 👉 Phần còn lại GIỮ NGUYÊN logic render như file bạn gửi */}
+      {/* TAB CONTENT */}
+      {/* 👉 Phần render tab exams / results giữ nguyên đúng như file gốc của bạn */}
     </div>
   );
 };
