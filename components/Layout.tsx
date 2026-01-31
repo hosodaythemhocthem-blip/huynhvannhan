@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   LayoutDashboard,
   BookOpen,
@@ -21,12 +21,15 @@ const Layout: React.FC<LayoutProps> = ({
   activeTab,
   setActiveTab,
 }) => {
-  const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "courses", label: "Courses", icon: BookOpen },
-    { id: "achievements", label: "Achievements", icon: Award },
-    { id: "settings", label: "Settings", icon: Settings },
-  ];
+  const navItems = useMemo(
+    () => [
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "courses", label: "Courses", icon: BookOpen },
+      { id: "achievements", label: "Achievements", icon: Award },
+      { id: "settings", label: "Settings", icon: Settings },
+    ],
+    []
+  );
 
   return (
     <div className="min-h-screen flex bg-slate-100">
@@ -47,7 +50,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         </div>
 
-        {/* Nav */}
+        {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -57,11 +60,13 @@ const Layout: React.FC<LayoutProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                aria-label={item.label}
+                className={[
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
                   active
                     ? "bg-indigo-50 text-indigo-700 font-semibold shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
+                    : "text-slate-600 hover:bg-slate-100",
+                ].join(" ")}
               >
                 <Icon size={20} />
                 <span>{item.label}</span>
@@ -72,7 +77,10 @@ const Layout: React.FC<LayoutProps> = ({
 
         {/* Logout */}
         <div className="p-4 border-t">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition">
+          <button
+            aria-label="Đăng xuất"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition"
+          >
             <LogOut size={20} />
             Đăng xuất
           </button>
@@ -100,9 +108,12 @@ const Layout: React.FC<LayoutProps> = ({
 
             {/* Right */}
             <div className="flex items-center gap-5">
-              <button className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500">
+              <button
+                aria-label="Thông báo"
+                className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500"
+              >
                 <Bell size={20} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
               </button>
 
               <div className="flex items-center gap-3 pl-4 border-l">
