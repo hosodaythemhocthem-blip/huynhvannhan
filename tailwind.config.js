@@ -11,7 +11,6 @@ export default {
          COLOR SYSTEM – PREMIUM LMS + EDU
       ================================================== */
       colors: {
-        /* Core brand */
         primary: {
           50: "#f5f7ff",
           500: "#4a67ee",
@@ -19,13 +18,11 @@ export default {
           950: "#161a4f",
         },
 
-        /* Semantic colors */
         secondary: "#16a34a", // green-600
         danger: "#dc2626",    // red-600
         warning: "#f59e0b",   // amber-500
         info: "#0ea5e9",      // sky-500
 
-        /* Neutral (dashboard, nền, text) */
         slate: {
           50: "#f8fafc",
           900: "#0f172a",
@@ -37,8 +34,17 @@ export default {
          FONT SYSTEM
       ================================================== */
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', "Inter", "system-ui", "sans-serif"],
-        mono: ['"Fira Code"', "JetBrains Mono", "monospace"],
+        sans: [
+          '"Plus Jakarta Sans"',
+          "Inter",
+          "system-ui",
+          "sans-serif",
+        ],
+        mono: [
+          '"Fira Code"',
+          "JetBrains Mono",
+          "monospace",
+        ],
       },
 
       /* ==================================================
@@ -48,7 +54,8 @@ export default {
         card: "0 4px 20px rgba(0,0,0,0.08)",
         soft: "0 2px 8px rgba(0,0,0,0.06)",
         premium: "0 20px 50px rgba(0,0,0,0.05)",
-        "premium-hover": "0 30px 60px rgba(99,102,241,0.1)",
+        "premium-hover":
+          "0 30px 60px rgba(99,102,241,0.12)",
       },
 
       borderRadius: {
@@ -61,12 +68,18 @@ export default {
       ================================================== */
       keyframes: {
         float: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-15px)" },
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-12px)" },
         },
         fadeIn: {
-          "0%": { opacity: "0", transform: "translateY(12px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+          "0%": {
+            opacity: "0",
+            transform: "translateY(12px)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
         },
       },
 
@@ -80,7 +93,7 @@ export default {
   },
 
   plugins: [
-    // Markdown, LaTeX, nội dung giải toán
+    // Typography cho nội dung dài, bài giải, LaTeX, AI tutor
     require("@tailwindcss/typography"),
   ],
 };
