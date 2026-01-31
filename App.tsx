@@ -2,167 +2,218 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ProjectFile } from './types';
 import Button from './components/Button';
-import FileTree from './components/FileTree';
 import { generateCodeExpansion } from './services/geminiService';
-import JSZip from 'https://esm.sh/jszip@3.10.1';
+import JSZip from 'jszip';
+
+// --- BẮT ĐẦU PHẦN COMPONENT FILE TREE NỘI BỘ ---
+interface TreeItem {
+  name: string;
+  path: string;
+  isFile: boolean;
+  fileId?: string;
+  isSelected?: boolean;
+  children: Record<string, TreeItem>;
+}
+
+const InternalFileTree: React.FC<{
+  files: ProjectFile[];
+  selectedFileId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onToggleContext: (id: string) => void;
+}> = ({ files, selectedFileId, onSelect, onDelete, onToggleContext }) => {
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({ 'root': true, 'src': true });
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const toggleFolder = (path: string) => {
+    setExpandedFolders(prev => ({ ...prev, [path]: !prev[path] }));
+  };
+
+  const treeData = useMemo(() => {
+    const root: TreeItem = { name: 'root', path: '', isFile: false, children: {} };
+    files.forEach(file => {
+      if (searchTerm && !file.path.toLowerCase().includes(searchTerm.toLowerCase())) return;
+      const parts = file.path.split('/');
+      let current = root;
+      let currentPath = '';
+      parts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const isLast = index === parts.length - 1;
+        if (!current.children[part]) {
+          current.children[part] = { name: part, path: currentPath, isFile: isLast, fileId: isLast ? file.id : undefined, isSelected: isLast ? file.isSelected : false, children: {} };
+        }
+        current = current.children[part];
+      });
+    });
+    return root;
+  }, [files, searchTerm]);
+
+  const renderTree = (item: TreeItem, depth: number = 0) => {
+    const sortedChildren = Object.values(item.children).sort((a, b) => {
+      if (a.isFile === b.isFile) return a.name.localeCompare(b.name);
+      return a.isFile ? 1 : -1;
+    });
+    const isCurrentFile = item.isFile && selectedFileId === item.fileId;
+
+    return (
+      <div key={item.path} className="select-none">
+        {item.path !== '' && (
+          <div 
+            className={`group flex items-center justify-between py-1 px-2 rounded-md cursor-pointer transition-all duration-150 ${
+              isCurrentFile ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-white/5 text-slate-400'
+            }`}
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+            onClick={() => item.isFile ? onSelect(item.fileId!) : toggleFolder(item.path)}
+          >
+            <div className="flex items-center gap-2 overflow-hidden flex-1">
+              {item.isFile ? (
+                <div className="flex items-center gap-2" onClick={(e) => { e.stopPropagation(); if (item.fileId) onToggleContext(item.fileId); }}>
+                  <div className={`w-3.5 h-3.5 border rounded flex items-center justify-center transition-all ${item.isSelected ? 'bg-blue-600 border-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]' : 'border-slate-700'}`}>
+                    {item.isSelected && <i className="fa-solid fa-check text-[8px] text-white"></i>}
+                  </div>
+                  <i className={`fa-solid ${item.name.endsWith('.tsx') ? 'fa-react text-cyan-400' : 'fa-file-code text-slate-500'} text-[11px]`}></i>
+                </div>
+              ) : (
+                <i className={`fa-solid ${expandedFolders[item.path] ? 'fa-chevron-down' : 'fa-chevron-right'} text-[8px] opacity-40 w-3`}></i>
+              )}
+              {!item.isFile && <i className={`fa-solid ${expandedFolders[item.path] ? 'fa-folder-open text-blue-400/60' : 'fa-folder text-blue-400/60'} text-[11px]`}></i>}
+              <span className={`text-[12px] truncate ${isCurrentFile ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
+            </div>
+            {item.isFile && (
+              <button onClick={(e) => { e.stopPropagation(); onDelete(item.fileId!); }} className="opacity-0 group-hover:opacity-100 hover:text-red-500 p-1 transition-opacity">
+                <i className="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            )}
+          </div>
+        )}
+        {(!item.isFile && (item.path === '' || expandedFolders[item.path])) && (
+          <div className="flex flex-col">{sortedChildren.map(child => renderTree(child, depth + (item.path === '' ? 0 : 1)))}</div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="p-4 pt-2">
+        <div className="relative group">
+          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-600 group-focus-within:text-blue-500 transition-colors"></i>
+          <input type="text" placeholder="Search files..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-lg pl-8 pr-3 py-2 text-[11px] outline-none focus:border-blue-500/30 transition-all placeholder:text-slate-800 text-slate-300" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4">{files.length === 0 ? <div className="p-8 text-center opacity-20 mt-4"><i className="fa-solid fa-folder-plus text-3xl mb-3"></i><p className="text-[10px] font-black uppercase tracking-widest">No Files Loaded</p></div> : renderTree(treeData)}</div>
+    </div>
+  );
+};
+// --- KẾT THÚC PHẦN COMPONENT FILE TREE NỘI BỘ ---
 
 interface ParsedChange {
   fileName: string;
   content: string;
 }
 
+declare const Prism: any;
+
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isProcessingZip, setIsProcessingZip] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState('');
-  const [newFileName, setNewFileName] = useState('');
-  const [newFileContent, setNewFileContent] = useState('');
-  const [isAddingFile, setIsAddingFile] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [lastUpdatedFileId, setLastUpdatedFileId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const responseEndRef = useRef<HTMLDivElement>(null);
 
-  const selectedFile = files.find(f => f.id === selectedFileId);
+  const selectedFile = useMemo(() => files.find(f => f.id === selectedFileId), [files, selectedFileId]);
+  const selectedContextCount = useMemo(() => files.filter(f => f.isSelected).length, [files]);
+
+  useEffect(() => {
+    if (selectedFile && !isEditMode && typeof Prism !== 'undefined') {
+      Prism.highlightAll();
+    }
+  }, [selectedFile, isEditMode, files]);
+
+  useEffect(() => {
+    if (aiResponse && typeof Prism !== 'undefined') {
+      Prism.highlightAll();
+    }
+  }, [aiResponse]);
 
   const suggestedChanges = useMemo(() => {
     const changes: ParsedChange[] = [];
     const fileRegex = /(?:FILE|File|file):\s*([^\s\n]+)\n+```[a-z]*\n([\s\S]*?)```/gi;
     let match;
-    
     while ((match = fileRegex.exec(aiResponse)) !== null) {
-      changes.push({
-        fileName: match[1],
-        content: match[2].trim()
-      });
+      changes.push({ fileName: match[1], content: match[2].trim() });
     }
     return changes;
   }, [aiResponse]);
 
   const handleApplyChange = (change: ParsedChange) => {
+    const isConfig = change.fileName.includes('vite.config') || change.fileName.includes('package.json');
+    if (isConfig && !confirm(`Phát hiện AI muốn thay đổi file hệ thống: ${change.fileName}. Áp dụng?`)) return;
+
     setFiles(prev => {
-      const existingFileIndex = prev.findIndex(f => f.name === change.fileName);
+      const existingFileIndex = prev.findIndex(f => f.path === change.fileName);
       if (existingFileIndex >= 0) {
         const newFiles = [...prev];
-        newFiles[existingFileIndex] = {
-          ...newFiles[existingFileIndex],
-          content: change.content
-        };
+        newFiles[existingFileIndex] = { ...newFiles[existingFileIndex], content: change.content, isSelected: true };
         setLastUpdatedFileId(newFiles[existingFileIndex].id);
         return newFiles;
       } else {
         const newFile: ProjectFile = {
           id: Math.random().toString(36).substr(2, 9),
-          name: change.fileName,
+          name: change.fileName.split('/').pop() || change.fileName,
+          path: change.fileName,
           content: change.content,
-          language: change.fileName.split('.').pop() || 'text'
+          language: change.fileName.split('.').pop() || 'text',
+          isSelected: true
         };
         setLastUpdatedFileId(newFile.id);
         return [...prev, newFile];
       }
     });
-    
     setTimeout(() => setLastUpdatedFileId(null), 2000);
   };
 
-  const handleApplyAll = () => {
-    suggestedChanges.forEach(handleApplyChange);
-  };
-
-  const handleExportZip = async () => {
-    if (files.length === 0) return;
-    setIsExporting(true);
-    try {
-      const zip = new JSZip();
-      files.forEach(file => {
-        zip.file(file.name, file.content);
-      });
-      const content = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `architect-project-${new Date().getTime()}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Export failed:", err);
-      alert("Lỗi khi đóng gói file ZIP.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleClearAll = () => {
-    if (confirm("Xác nhận xóa toàn bộ project hiện tại để bắt đầu mới?")) {
-      setFiles([]);
-      setSelectedFileId(null);
-      setAiResponse('');
-      setPrompt('');
-    }
-  };
-
-  const handleAddFile = () => {
-    if (!newFileName.trim()) return;
-    const newFile: ProjectFile = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newFileName,
-      content: newFileContent,
-      language: newFileName.split('.').pop() || 'text'
-    };
-    setFiles(prev => [...prev, newFile]);
-    setNewFileName('');
-    setNewFileContent('');
-    setIsAddingFile(false);
-    setSelectedFileId(newFile.id);
-  };
-
-  const handleRemoveFile = (id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
-    if (selectedFileId === id) setSelectedFileId(null);
+  const handleToggleContext = (id: string) => {
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, isSelected: !f.isSelected } : f));
   };
 
   const handleZipUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    setIsProcessingZip(true);
     try {
       const zip = new JSZip();
       const content = await zip.loadAsync(file);
       const extractedFiles: ProjectFile[] = [];
-      const textExtensions = ['ts', 'tsx', 'js', 'jsx', 'html', 'css', 'json', 'md', 'txt', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'php', 'rb', 'swift', 'kt', 'sql', 'sh', 'yml', 'yaml', 'xml', 'env'];
-
+      const textExtensions = ['ts', 'tsx', 'js', 'jsx', 'html', 'css', 'json', 'md', 'txt', 'env'];
+      
       for (const [path, zipEntry] of Object.entries(content.files)) {
-        const entry = zipEntry as any;
-        if (!entry.dir) {
+        if (!zipEntry.dir) {
           const extension = path.split('.').pop()?.toLowerCase() || '';
-          const isText = textExtensions.includes(extension) || path.startsWith('.') || !path.includes('.');
-          
-          if (isText) {
-            const fileData = await entry.async('string');
+          if (textExtensions.includes(extension) || path.startsWith('.')) {
+            const fileData = await zipEntry.async('string');
             extractedFiles.push({
               id: Math.random().toString(36).substr(2, 9),
-              name: path,
+              name: path.split('/').pop() || path,
+              path: path,
               content: fileData,
-              language: extension
+              language: extension,
+              isSelected: false
             });
           }
         }
       }
-
       if (extractedFiles.length > 0) {
-        setFiles(prev => [...prev, ...extractedFiles]);
-        if (!selectedFileId) setSelectedFileId(extractedFiles[0].id);
+        setFiles(extractedFiles);
+        setSelectedFileId(extractedFiles[0].id);
       }
     } catch (error) {
-      console.error("Error processing ZIP:", error);
-      alert("Lỗi khi đọc file ZIP.");
+      alert("Lỗi khi giải nén ZIP.");
     } finally {
-      setIsProcessingZip(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -172,280 +223,143 @@ const App: React.FC = () => {
     setIsGenerating(true);
     setAiResponse('');
     try {
-      await generateCodeExpansion(files, prompt, (chunk) => {
-        setAiResponse(prev => prev + chunk);
-      });
-    } catch (err) {
-      setAiResponse(prev => prev + "\n\n[LỖI: Không thể kết nối Gemini API. Vui lòng kiểm tra lại.]");
+      await generateCodeExpansion(files, prompt, (chunk) => setAiResponse(prev => prev + chunk));
+    } catch (err: any) {
+      setAiResponse(prev => prev + `\n\n[ERROR: ${err.message}]`);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleCopyFileContent = () => {
-    if (selectedFile) {
-      navigator.clipboard.writeText(selectedFile.content);
-      alert("Đã copy nội dung file!");
-    }
-  };
-
-  const handleCopyResponse = () => {
-    navigator.clipboard.writeText(aiResponse);
-    alert("Đã copy phản hồi của AI!");
-  };
-
-  useEffect(() => {
-    if (aiResponse) {
-      responseEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [aiResponse]);
-
   return (
-    <div className="flex h-screen w-full bg-[#0a0f1e] overflow-hidden text-slate-200">
+    <div className="flex h-screen w-full bg-[#050810] text-slate-300 overflow-hidden">
       <input type="file" accept=".zip" ref={fileInputRef} className="hidden" onChange={handleZipUpload} />
-
-      {/* Sidebar */}
-      <aside className="w-80 border-r border-slate-800/60 bg-[#0d1326] flex flex-col shadow-2xl z-20">
-        <div className="p-5 border-b border-slate-800/60 flex items-center justify-between bg-[#0d1326]/80 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 ring-1 ring-white/10">
-              <i className="fa-solid fa-wand-magic-sparkles text-white text-sm"></i>
-            </div>
-            <h1 className="font-black text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">ARCHITECT</h1>
-          </div>
-          <div className="flex gap-1">
-             <button onClick={handleClearAll} className="w-8 h-8 rounded-lg hover:bg-red-500/10 flex items-center justify-center transition-colors text-slate-500 hover:text-red-400" title="Xóa tất cả">
-              <i className="fa-solid fa-trash-can text-xs"></i>
-            </button>
-            <button onClick={() => fileInputRef.current?.click()} className="w-8 h-8 rounded-lg hover:bg-slate-800 flex items-center justify-center transition-colors text-blue-400" title="Tải ZIP">
-              <i className="fa-solid fa-file-zipper"></i>
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-2 py-3">
-          {isProcessingZip ? (
-            <div className="p-8 flex flex-col items-center gap-4 text-slate-500">
-              <div className="relative">
-                 <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 animate-pulse"></div>
-                 <i className="fa-solid fa-cog animate-spin text-2xl relative"></i>
-              </div>
-              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-blue-400/80">Indexing...</span>
-            </div>
-          ) : (
-            <div className={lastUpdatedFileId ? 'flash-update' : ''}>
-               <FileTree files={files} selectedFileId={selectedFileId} onSelect={setSelectedFileId} onDelete={handleRemoveFile} />
-            </div>
-          )}
+      
+      <aside className="w-[300px] border-r border-white/5 bg-[#0b1120] flex flex-col z-20">
+        <div className="p-5 border-b border-white/5 bg-black/40">
+          <h1 className="font-black text-[11px] tracking-[0.2em] text-white">LMS ARCHITECT</h1>
         </div>
         
-        <div className="p-5 border-t border-slate-800/60 bg-[#0d1326]/40 space-y-4">
-           <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-             <span>Project Assets</span>
-             <span className="text-blue-400">{files.length} Files</span>
-           </div>
-           <div className="h-1.5 w-full bg-slate-800/50 rounded-full overflow-hidden ring-1 ring-white/5">
-             <div className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(37,99,235,0.4)]" style={{ width: `${Math.min(files.length * 3, 100)}%` }}></div>
-           </div>
-           <Button 
-            variant="secondary" 
-            className="w-full text-[11px] h-10 font-bold uppercase tracking-wider border-slate-700/50 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all" 
-            onClick={handleExportZip}
-            disabled={files.length === 0 || isExporting}
-           >
-             {isExporting ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-down"></i>}
-             Export Project
-           </Button>
+        <div className="flex-1 overflow-hidden">
+          {/* Sử dụng component nội bộ */}
+          <InternalFileTree 
+            files={files} 
+            selectedFileId={selectedFileId} 
+            onSelect={setSelectedFileId} 
+            onDelete={(id) => setFiles(prev => prev.filter(f => f.id !== id))}
+            onToggleContext={handleToggleContext}
+          />
+        </div>
+
+        <div className="p-4 bg-black/40 border-t border-white/5 space-y-3">
+          <div className="flex items-center justify-between text-[10px] font-bold">
+            <span className="text-slate-600 uppercase tracking-widest">Context</span>
+            <span className="text-blue-400">{selectedContextCount} Linked</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" className="h-8 text-[10px]" onClick={() => fileInputRef.current?.click()}>ZIP IN</Button>
+            <Button variant="primary" className="h-8 text-[10px]" onClick={() => {
+              const zip = new JSZip();
+              files.forEach(f => zip.file(f.path, f.content));
+              zip.generateAsync({type:"blob"}).then(c => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(c); a.download = 'project.zip'; a.click();
+              });
+            }}>ZIP OUT</Button>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col bg-[#0a0f1e] relative">
-        <header className="h-14 border-b border-slate-800/60 flex items-center px-8 bg-[#0d1326]/20 justify-between backdrop-blur-xl z-10">
-          <div className="flex items-center gap-4">
-             {selectedFile ? (
-               <div className="flex items-center gap-3">
-                  <div className="px-3 py-1 bg-blue-500/10 rounded-full border border-blue-500/20 text-[10px] font-mono text-blue-400">
-                    {selectedFile.name.split('.').pop()?.toUpperCase() || 'FILE'}
-                  </div>
-                  <span className="text-[11px] font-mono text-slate-400 truncate max-w-xs">{selectedFile.name}</span>
-               </div>
-             ) : (
-               <span className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-600">Development Environment</span>
-             )}
+      <main className="flex-1 flex flex-col bg-[#070b14] relative">
+        <header className="h-14 border-b border-white/5 flex items-center px-6 bg-[#0d1326]/40 justify-between">
+          <div className="text-[12px] font-mono text-slate-500 truncate max-w-lg font-bold">
+             {selectedFile ? selectedFile.path : "STANDBY"}
           </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className={`h-2 w-2 rounded-full ${isGenerating ? 'bg-blue-500 animate-ping' : 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}></div>
-              <span className="text-[10px] uppercase tracking-widest font-black text-slate-500">{isGenerating ? 'AI Architect processing' : 'Core Ready'}</span>
-            </div>
+          <div className="flex items-center gap-3">
+             {selectedFile && (
+               <div className="flex bg-black/60 p-1 rounded-lg border border-white/5">
+                 <button onClick={() => setIsEditMode(false)} className={`px-3 py-1 rounded text-[10px] font-black ${!isEditMode ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>VIEW</button>
+                 <button onClick={() => setIsEditMode(true)} className={`px-3 py-1 rounded text-[10px] font-black ${isEditMode ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>EDIT</button>
+               </div>
+             )}
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-8 relative">
-            {isAddingFile ? (
-              <div className="max-w-3xl mx-auto bg-[#0d1326]/90 border border-slate-800/50 p-10 rounded-[2.5rem] shadow-2xl backdrop-blur-3xl ring-1 ring-white/5 transition-all">
-                <h2 className="text-2xl font-black mb-8 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-600/10 flex items-center justify-center border border-blue-500/20 shadow-inner">
-                    <i className="fa-solid fa-file-circle-plus text-blue-500"></i>
-                  </div>
-                  Create Resource
-                </h2>
-                <div className="space-y-6">
-                  <div>
-                    <label className="text-[10px] uppercase font-black text-slate-500 ml-1 mb-2 block tracking-widest">Entry Name</label>
-                    <input type="text" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} className="w-full bg-[#050810] border border-slate-800 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-600/30 outline-none transition-all border-slate-800/50 placeholder:text-slate-700" placeholder="e.g., src/components/Header.tsx" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-black text-slate-500 ml-1 mb-2 block tracking-widest">Initial Content</label>
-                    <textarea value={newFileContent} onChange={(e) => setNewFileContent(e.target.value)} className="w-full h-80 bg-[#050810] border border-slate-800 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-600/30 outline-none code-font text-sm leading-relaxed border-slate-800/50" placeholder="Paste your source code..." />
-                  </div>
-                  <div className="flex justify-end gap-3 pt-4">
-                    <Button variant="ghost" className="rounded-xl px-6" onClick={() => setIsAddingFile(false)}>Cancel</Button>
-                    <Button variant="primary" className="px-10 rounded-xl font-black shadow-blue-600/10" onClick={handleAddFile}>Deploy File</Button>
-                  </div>
-                </div>
-              </div>
-            ) : selectedFile ? (
-              <div className="h-full flex flex-col animate-in fade-in duration-500">
-                <div className="bg-[#0d1326]/40 rounded-3xl border border-slate-800/60 overflow-hidden flex-1 flex flex-col shadow-2xl backdrop-blur-sm group">
-                   <div className="px-6 py-4 bg-[#0d1326]/80 border-b border-slate-800/60 flex justify-between items-center">
-                     <div className="flex items-center gap-3">
-                        <i className="fa-solid fa-code text-blue-500 text-sm"></i>
-                        <span className="text-[12px] font-mono text-slate-300 font-bold">{selectedFile.name}</span>
-                     </div>
-                     <div className="flex gap-2">
-                        <Button variant="ghost" className="!p-0 h-8 w-8 hover:bg-slate-700/50" title="Copy Content" onClick={handleCopyFileContent}>
-                           <i className="fa-solid fa-copy text-xs"></i>
-                        </Button>
-                     </div>
-                   </div>
-                   <textarea value={selectedFile.content} readOnly className="flex-1 w-full bg-transparent p-8 outline-none resize-none code-font text-[13px] leading-relaxed text-slate-400 custom-scrollbar selection:bg-blue-500/20" />
-                </div>
+          <div className="flex-1 overflow-auto p-6 bg-dots">
+            {selectedFile ? (
+              <div className={`h-full bg-[#0d1326]/40 rounded-xl border border-white/5 flex flex-col overflow-hidden shadow-2xl ${lastUpdatedFileId === selectedFile.id ? 'ring-2 ring-blue-500' : ''}`}>
+                 <div className="flex-1 p-6 overflow-auto custom-scrollbar">
+                    {isEditMode ? (
+                      <textarea 
+                        value={selectedFile.content} 
+                        onChange={(e) => setFiles(prev => prev.map(f => f.id === selectedFileId ? { ...f, content: e.target.value } : f))} 
+                        className="w-full h-full bg-transparent outline-none resize-none code-font text-[13px] text-slate-300" 
+                        spellCheck={false} 
+                      />
+                    ) : (
+                      <pre className={`language-${selectedFile.language}`}><code className={`language-${selectedFile.language}`}>{selectedFile.content}</code></pre>
+                    )}
+                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center max-w-2xl mx-auto">
-                <div className="relative mb-12">
-                   <div className="absolute inset-0 bg-blue-600 blur-[100px] opacity-10 animate-pulse"></div>
-                   <div className="w-32 h-32 bg-gradient-to-tr from-blue-600/10 to-indigo-600/10 rounded-[3rem] flex items-center justify-center border border-white/5 rotate-3 shadow-2xl relative z-10 backdrop-blur-3xl ring-1 ring-white/10">
-                    <i className="fa-solid fa-microchip text-7xl text-blue-500 -rotate-3 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]"></i>
-                  </div>
-                </div>
-                <h2 className="text-5xl font-black mb-6 tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-slate-600">Gemini Architect</h2>
-                <p className="text-slate-400 mb-12 text-xl font-medium leading-relaxed opacity-80">
-                  Hệ thống hỗ trợ lập trình thông minh. Tải project từ GitHub để phân tích, sửa lỗi hoặc mở rộng tính năng với sức mạnh của Gemini 3 Pro.
-                </p>
-                <div className="flex gap-5">
-                  <Button variant="primary" className="h-16 px-12 rounded-2xl shadow-2xl shadow-blue-600/20 text-lg font-black group" onClick={() => fileInputRef.current?.click()}>
-                    <i className="fa-solid fa-upload group-hover:-translate-y-1 transition-transform"></i> Tải Project ZIP
-                  </Button>
-                  <Button variant="secondary" className="h-16 px-12 rounded-2xl border-slate-800 bg-white/5 hover:bg-white/10 text-lg font-black" onClick={() => setIsAddingFile(true)}>
-                    <i className="fa-solid fa-plus"></i> Manual Add
-                  </Button>
-                </div>
+              <div className="h-full flex flex-col items-center justify-center text-center opacity-30">
+                 <i className="fa-solid fa-code text-5xl mb-4"></i>
+                 <p className="text-sm font-bold uppercase tracking-widest">Select file to preview</p>
               </div>
             )}
           </div>
 
-          {/* AI Suggestions Panel */}
-          <div className="w-[540px] border-l border-slate-800/60 flex flex-col bg-[#0d1326]/40 backdrop-blur-3xl z-20 shadow-[-20px_0_50px_rgba(0,0,0,0.3)]">
-            <div className="p-5 border-b border-slate-800/60 bg-[#0d1326]/60 flex justify-between items-center">
-               <h3 className="font-black text-[11px] uppercase tracking-[0.25em] text-slate-500 flex items-center gap-3">
-                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
-                 Cognitive Feed
-               </h3>
-               <div className="flex gap-2">
-                {aiResponse && (
-                   <Button variant="ghost" className="h-8 !py-0 !px-3 text-[10px] font-bold border border-slate-800/50 hover:bg-slate-800" onClick={handleCopyResponse}>
-                    <i className="fa-solid fa-copy"></i> Copy
-                   </Button>
-                )}
-                {suggestedChanges.length > 0 && (
-                  <Button variant="primary" className="!py-1 !px-4 text-[11px] h-8 rounded-xl font-black shadow-lg shadow-blue-600/30 animate-pulse" onClick={handleApplyAll}>
-                      Sync All ({suggestedChanges.length})
-                  </Button>
-                )}
-               </div>
+          <div className="w-[450px] border-l border-white/5 flex flex-col bg-[#0b1120]/90">
+            <div className="p-4 border-b border-white/5 bg-black/30 flex justify-between items-center">
+               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">AI ARCHITECT</span>
+               {suggestedChanges.length > 0 && (
+                 <button onClick={() => suggestedChanges.forEach(handleApplyChange)} className="px-3 py-1 bg-blue-600 text-white rounded text-[10px] font-black uppercase">SYNC ALL</button>
+               )}
             </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[#050810]/30">
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
               {aiResponse ? (
-                <div className="space-y-8">
-                  <div className="bg-[#0d1326]/60 border border-slate-800/40 rounded-3xl p-7 whitespace-pre-wrap text-[13px] leading-relaxed code-font shadow-2xl text-slate-300 relative selection:bg-blue-600/30">
+                <div className="space-y-4">
+                  <div className="bg-[#050810] border border-white/5 rounded-xl p-4 text-[12px] leading-relaxed text-slate-400 whitespace-pre-wrap code-font">
                     {aiResponse}
                     <div ref={responseEndRef} />
                   </div>
                   
-                  {suggestedChanges.length > 0 && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between px-3">
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Deployment Proposals</p>
-                        <span className="bg-blue-600/10 text-blue-400 text-[10px] px-3 py-1 rounded-full border border-blue-500/20 font-black tracking-tighter shadow-inner">
-                          {suggestedChanges.length} OBJECTS
-                        </span>
+                  {suggestedChanges.map((change, idx) => (
+                    <div key={idx} className="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between group hover:border-blue-500/40">
+                      <div className="flex flex-col overflow-hidden mr-2">
+                        <span className="text-[11px] font-bold text-slate-300 truncate">{change.fileName.split('/').pop()}</span>
+                        <span className="text-[8px] text-slate-600 truncate">{change.fileName}</span>
                       </div>
-                      <div className="grid gap-3">
-                        {suggestedChanges.map((change, idx) => (
-                          <div key={idx} className="bg-[#0d1326] border border-slate-800 rounded-2xl p-5 flex items-center justify-between hover:border-blue-500/40 transition-all group/item shadow-lg relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/50"></div>
-                            <div className="flex items-center gap-4 overflow-hidden">
-                              <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center group-hover/item:bg-blue-600/10 transition-colors border border-slate-800">
-                                <i className="fa-solid fa-file-code text-blue-500/40 group-hover/item:text-blue-400"></i>
-                              </div>
-                              <div className="flex flex-col overflow-hidden">
-                                <span className="text-[12px] font-mono text-slate-300 truncate w-48 font-bold">{change.fileName}</span>
-                                <span className="text-[9px] text-slate-600 font-black uppercase tracking-widest mt-0.5">Analysis Complete</span>
-                              </div>
-                            </div>
-                            <Button variant="ghost" className="h-9 !py-0 !px-4 text-[11px] font-black border border-slate-800 hover:bg-blue-600 hover:text-white hover:border-blue-600 rounded-xl transition-all" onClick={() => handleApplyChange(change)}>
-                              Update
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+                      <button onClick={() => handleApplyChange(change)} className="text-[9px] font-black text-blue-400 border border-blue-400/20 px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition-all">APPLY</button>
                     </div>
-                  )}
+                  ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-14 text-slate-700 space-y-6 opacity-40">
-                  <div className="w-20 h-20 border-2 border-dashed border-slate-800 rounded-[2rem] flex items-center justify-center">
-                    <i className="fa-solid fa-terminal text-3xl"></i>
-                  </div>
-                  <p className="text-sm font-black uppercase tracking-[0.2em]">Standby for instruction</p>
+                <div className="h-full flex flex-col items-center justify-center opacity-10">
+                  <i className="fa-solid fa-brain text-4xl mb-4"></i>
+                  <p className="text-[10px] font-black uppercase tracking-widest">Awaiting Command</p>
                 </div>
               )}
             </div>
 
-            <div className="p-6 border-t border-slate-800/60 bg-[#0d1326] shadow-[0_-20px_50px_rgba(0,0,0,0.6)] z-10">
-              <div className="relative group">
+            <div className="p-4 border-t border-white/5 bg-black/60">
+              <div className="relative">
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && handleProcessCode()}
-                  className="w-full bg-[#050810] border border-slate-800 rounded-3xl p-6 pr-20 focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600/60 outline-none transition-all min-h-[180px] text-sm resize-none shadow-inner placeholder:text-slate-700 text-slate-300"
-                  placeholder="Ví dụ: 'Phân tích file App.tsx và thêm Dark Mode', 'Optimize thuật toán xử lý dữ liệu', 'Viết tiếp chức năng login sử dụng Firebase'..."
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl p-4 pr-12 focus:border-blue-500/50 outline-none min-h-[120px] text-xs text-slate-300 placeholder:text-slate-800"
+                  placeholder="Enter instruction..."
                   disabled={isGenerating}
                 />
                 <button 
                   onClick={handleProcessCode}
-                  disabled={isGenerating || !prompt.trim() || files.length === 0}
-                  className="absolute bottom-6 right-6 h-14 w-14 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-800 rounded-[1.25rem] flex items-center justify-center transition-all text-white shadow-2xl shadow-blue-600/30 active:scale-90 group"
+                  disabled={isGenerating || !prompt.trim()}
+                  className="absolute bottom-4 right-4 h-8 w-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-500"
                 >
-                  {isGenerating ? (
-                    <i className="fa-solid fa-circle-notch animate-spin text-xl"></i>
-                  ) : (
-                    <i className="fa-solid fa-paper-plane-top group-hover:scale-110 group-hover:-rotate-12 transition-all"></i>
-                  )}
+                  <i className={`fa-solid ${isGenerating ? 'fa-circle-notch animate-spin' : 'fa-bolt'}`}></i>
                 </button>
-              </div>
-              <div className="mt-4 flex items-center justify-between text-[10px] text-slate-600 px-2 font-black uppercase tracking-[0.15em]">
-                <div className="flex items-center gap-4">
-                   <span>CTRL + ENTER TO SEND</span>
-                   <span className="text-blue-900/40">|</span>
-                   <span className="flex items-center gap-2"><i className="fa-solid fa-bolt text-amber-900/40"></i> Gemini 3 Pro Engine</span>
-                </div>
-                <span className="flex items-center gap-2 text-emerald-900/40"><i className="fa-solid fa-circle-check"></i> Project Synced</span>
               </div>
             </div>
           </div>
@@ -453,16 +367,11 @@ const App: React.FC = () => {
       </main>
       
       <style>{`
+        .bg-dots { background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 20px 20px; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(59, 130, 246, 0.3); }
-        .flash-update { animation: flash-glow 2s cubic-bezier(0.4, 0, 0.2, 1); }
-        @keyframes flash-glow {
-          0% { background-color: rgba(59, 130, 246, 0.15); box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1); }
-          100% { background-color: transparent; box-shadow: none; }
-        }
-        ::selection { background-color: rgba(59, 130, 246, 0.3); color: white; }
+        pre[class*="language-"] { padding: 0 !important; margin: 0 !important; background: transparent !important; }
       `}</style>
     </div>
   );
