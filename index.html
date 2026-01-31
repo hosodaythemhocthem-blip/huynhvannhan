@@ -10,10 +10,13 @@
       name="description"
       content="Hệ thống LMS Toán học tích hợp AI, hỗ trợ LaTeX, quản lý lớp học, đề thi và bảng điểm."
     />
+    <meta name="robots" content="index, follow" />
+    <meta name="color-scheme" content="light dark" />
 
     <!-- ================= PWA ================= -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563eb" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
 
     <!-- ================= FONTS ================= -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -24,11 +27,11 @@
     />
   </head>
 
-  <body class="antialiased bg-slate-50 text-slate-900">
+  <body class="antialiased">
     <!-- ================= APP ROOT ================= -->
     <div id="root"></div>
 
     <!-- ================= ENTRY (VITE) ================= -->
-   <script type="module" src="/main.tsx"></script>
+    <script type="module" src="/main.tsx"></script>
   </body>
 </html>
