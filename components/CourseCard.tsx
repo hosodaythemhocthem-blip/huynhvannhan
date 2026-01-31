@@ -1,5 +1,12 @@
 import React from "react";
-import { Book, Edit, Trash2, User, BookOpen, GraduationCap } from "lucide-react";
+import {
+  Book,
+  Edit,
+  Trash2,
+  User,
+  BookOpen,
+  GraduationCap,
+} from "lucide-react";
 
 /* =========================
    KIỂU DỮ LIỆU
@@ -11,7 +18,7 @@ export interface Course {
   description?: string;
   teacherName?: string;
   lessonCount?: number;
-  createdAt?: any;
+  createdAt?: unknown; // an toàn hơn any
 }
 
 /* =========================
@@ -35,10 +42,12 @@ const CourseCard: React.FC<CourseCardProps> = ({
   onDelete,
   role = "STUDENT",
 }) => {
+  const canEdit = role === "TEACHER" || role === "ADMIN";
+
   return (
     <div className="group relative bg-white border border-slate-200 rounded-[20px] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between h-full">
       
-      {/* Decorative Gradient Blob (Optional) */}
+      {/* Decorative Gradient */}
       <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-bl-[40px] rounded-tr-[20px] -z-0 opacity-50 group-hover:opacity-100 transition-opacity" />
 
       {/* HEADER */}
@@ -63,7 +72,7 @@ const CourseCard: React.FC<CourseCardProps> = ({
               <span>GV: {course.teacherName}</span>
             </div>
           )}
-          
+
           {course.description && (
             <p className="text-sm text-slate-500 font-medium line-clamp-2 leading-relaxed">
               {course.description}
@@ -84,26 +93,32 @@ const CourseCard: React.FC<CourseCardProps> = ({
         <div className="flex gap-3">
           <button
             onClick={() => onOpen?.(course)}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all active:scale-95 flex items-center justify-center gap-2"
+            disabled={!onOpen}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            aria-label="Vào học"
           >
             <GraduationCap size={16} />
             Vào học
           </button>
 
-          {(role === "TEACHER" || role === "ADMIN") && (
+          {canEdit && (
             <>
               <button
                 onClick={() => onEdit?.(course)}
-                className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                disabled={!onEdit}
+                className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Chỉnh sửa"
+                aria-label="Chỉnh sửa khóa học"
               >
                 <Edit size={18} />
               </button>
 
               <button
                 onClick={() => onDelete?.(course)}
-                className="p-2.5 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 hover:border-red-200 transition-all"
+                disabled={!onDelete}
+                className="p-2.5 rounded-xl border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Xóa khóa học"
+                aria-label="Xóa khóa học"
               >
                 <Trash2 size={18} />
               </button>
