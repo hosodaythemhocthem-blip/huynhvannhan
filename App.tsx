@@ -22,15 +22,12 @@ const InternalFileTree: React.FC<{
   lastUpdatedId,
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(
-    {
-      root: true,
-      src: true,
-    }
+    { root: true, src: true }
   );
   const [searchTerm, setSearchTerm] = useState("");
 
   const toggleFolder = (path: string) => {
-    setExpandedFolders((prev) => ({ ...prev, [path]: !prev[path] }));
+    setExpandedFolders((p) => ({ ...p, [path]: !p[path] }));
   };
 
   const treeData = useMemo(() => {
@@ -47,9 +44,9 @@ const InternalFileTree: React.FC<{
       let current = root;
       let currentPath = "";
 
-      parts.forEach((part, index) => {
+      parts.forEach((part, idx) => {
         currentPath = currentPath ? `${currentPath}/${part}` : part;
-        const isLast = index === parts.length - 1;
+        const isLast = idx === parts.length - 1;
 
         if (!current.children[part]) {
           current.children[part] = {
@@ -69,10 +66,13 @@ const InternalFileTree: React.FC<{
   }, [files, searchTerm]);
 
   const renderTree = (item: any, depth = 0) => {
-    const children = Object.values(item.children).sort((a: any, b: any) => {
-      if (a.isFile === b.isFile) return a.name.localeCompare(b.name);
-      return a.isFile ? 1 : -1;
-    });
+    const children = Object.values(item.children).sort((a: any, b: any) =>
+      a.isFile === b.isFile
+        ? a.name.localeCompare(b.name)
+        : a.isFile
+        ? 1
+        : -1
+    );
 
     const isCurrent = item.isFile && selectedFileId === item.fileId;
     const isUpdated = item.isFile && lastUpdatedId === item.fileId;
@@ -94,56 +94,8 @@ const InternalFileTree: React.FC<{
             style={{ paddingLeft: depth * 12 + 8 }}
           >
             <div className="flex items-center gap-2 overflow-hidden">
-              {item.isFile ? (
-                <div
-                  className="flex items-center gap-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleContext(item.fileId);
-                  }}
-                >
-                  <div
-                    className={`w-3.5 h-3.5 border rounded flex items-center justify-center ${
-                      item.isSelected
-                        ? "bg-blue-600 border-blue-600"
-                        : "border-slate-700"
-                    }`}
-                  >
-                    {item.isSelected && (
-                      <i className="fa-solid fa-check text-[8px] text-white" />
-                    )}
-                  </div>
-                  <i
-                    className={`fa-solid ${
-                      item.name.endsWith(".tsx")
-                        ? "fa-react text-cyan-400"
-                        : "fa-file-code text-slate-500"
-                    } text-[11px]`}
-                  />
-                </div>
-              ) : (
-                <i
-                  className={`fa-solid ${
-                    expandedFolders[item.path]
-                      ? "fa-chevron-down"
-                      : "fa-chevron-right"
-                  } text-[8px] opacity-40`}
-                />
-              )}
               <span className="text-[12px] truncate">{item.name}</span>
             </div>
-
-            {item.isFile && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(item.fileId);
-                }}
-                className="opacity-0 group-hover:opacity-100 hover:text-red-500"
-              >
-                <i className="fa-solid fa-xmark text-[10px]" />
-              </button>
-            )}
           </div>
         )}
 
@@ -167,7 +119,9 @@ const InternalFileTree: React.FC<{
       </div>
       <div className="flex-1 overflow-y-auto px-2">
         {files.length === 0 ? (
-          <div className="text-center opacity-20 mt-10">DROP ZIP HERE</div>
+          <div className="text-center opacity-20 mt-10">
+            ZIP upload disabled (build-safe)
+          </div>
         ) : (
           renderTree(treeData)
         )}
@@ -185,10 +139,8 @@ const App: React.FC = () => {
   const [prompt, setPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [lastUpdatedFileId, setLastUpdatedFileId] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [lastUpdatedFileId, setLastUpdatedFileId] =
+    useState<string | null>(null);
 
   const selectedFile = useMemo(
     () => files.find((f) => f.id === selectedFileId),
@@ -196,52 +148,61 @@ const App: React.FC = () => {
   );
 
   useEffect(() => {
-    if (selectedFile && !isEditMode && (window as any).Prism) {
+    if ((window as any).Prism) {
       requestAnimationFrame(() =>
         (window as any).Prism.highlightAll()
       );
     }
-  }, [selectedFileId, isEditMode, selectedFile]);
+  }, [selectedFileId]);
 
-  /* ✅ FIX CHÍNH: dynamic import jszip */
-  const handleZipUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleProcessCode = async () => {
+    if (!prompt.trim() || files.length === 0) return;
 
-    const { default: JSZip } = await import("jszip");
-    const zip = await JSZip.loadAsync(file);
+    setIsGenerating(true);
+    setAiResponse("");
 
-    const list: ProjectFile[] = [];
-
-    for (const [path, entry] of Object.entries(zip.files)) {
-      if (!entry.dir) {
-        list.push({
-          id: crypto.randomUUID(),
-          name: path.split("/").pop() || path,
-          path,
-          content: await entry.async("string"),
-          language: path.split(".").pop() || "text",
-          isSelected: false,
-        });
-      }
+    try {
+      await generateCodeExpansion(files, prompt, (chunk) =>
+        setAiResponse((p) => p + chunk)
+      );
+    } finally {
+      setIsGenerating(false);
     }
-
-    setFiles(list);
-    setSelectedFileId(list[0]?.id ?? null);
   };
 
   return (
-    <div className="h-screen w-screen bg-[#03060b] text-slate-300">
-      {/* UI giữ nguyên theo project của bạn */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".zip"
-        hidden
-        onChange={handleZipUpload}
-      />
+    <div className="h-screen w-screen bg-[#03060b] text-slate-300 flex">
+      <div className="w-64 border-r border-white/5">
+        <InternalFileTree
+          files={files}
+          selectedFileId={selectedFileId}
+          onSelect={setSelectedFileId}
+          onDelete={() => {}}
+          onToggleContext={() => {}}
+          lastUpdatedId={lastUpdatedFileId}
+        />
+      </div>
+
+      <div className="flex-1 p-6">
+        <textarea
+          className="w-full h-32 bg-black/40 border border-white/5 rounded-lg p-3 text-sm"
+          placeholder="Describe what you want AI to change..."
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+        />
+
+        <Button
+          className="mt-4"
+          onClick={handleProcessCode}
+          disabled={isGenerating}
+        >
+          {isGenerating ? "Generating..." : "Run AI"}
+        </Button>
+
+        <pre className="mt-6 text-xs whitespace-pre-wrap">
+          {aiResponse}
+        </pre>
+      </div>
     </div>
   );
 };
