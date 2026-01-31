@@ -23,11 +23,19 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   /* Auto scroll xuống cuối khi có tin nhắn mới */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, isOpen]);
+
+  /* Focus input khi mở chat */
+  useEffect(() => {
+    if (isOpen) {
+      inputRef.current?.focus();
+    }
+  }, [isOpen]);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -38,8 +46,13 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setLoading(true);
 
     try {
-      // Gọi service Gemini kèm theo context (ví dụ: tên bài học, nội dung đề thi)
-      const reply = await askGemini(userMsg, context); // Đảm bảo askGemini xử lý tham số thứ 2 nếu service hỗ trợ, hoặc nối chuỗi
+      // Nối context an toàn (không phụ thuộc service có hỗ trợ param 2 hay không)
+      const finalPrompt = context
+        ? `Ngữ cảnh: ${context}\n\nCâu hỏi: ${userMsg}`
+        : userMsg;
+
+      const reply = await askGemini(finalPrompt);
+
       setMessages(prev => [...prev, { role: 'ai', text: reply }]);
     } catch (error) {
       console.error(error);
@@ -85,11 +98,11 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
             </button>
           </header>
 
-          {/* Messages Area */}
+          {/* Messages */}
           <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50 scroll-smooth">
             {messages.map((msg, i) => (
               <div
-                key={i}
+                key={`${msg.role}-${i}`}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
@@ -101,7 +114,6 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
                 >
                   {msg.role === 'ai' ? (
                     <div className="prose prose-sm max-w-none">
-                      {/* Sử dụng MathPreview với prop 'math' đúng chuẩn */}
                       <MathPreview math={msg.text} />
                     </div>
                   ) : (
@@ -125,17 +137,17 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input Area */}
+          {/* Input */}
           <div className="p-4 border-t bg-white">
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-transparent focus-within:border-indigo-200 focus-within:bg-white transition-all">
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl focus-within:border-indigo-200 focus-within:bg-white transition-all">
               <input
+                ref={inputRef}
                 value={input}
                 disabled={loading}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Nhập câu hỏi Toán học..."
                 className="flex-1 bg-transparent outline-none px-4 py-2 text-sm font-semibold text-slate-700 placeholder:text-slate-400"
-                autoFocus
               />
               <button
                 onClick={handleSend}
@@ -150,7 +162,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
             {context && (
               <div className="mt-2 flex items-center justify-center gap-1.5 opacity-60">
                 <Bot size={10} className="text-indigo-500" />
-                <p className="text-[9px] text-center uppercase font-bold text-indigo-500 truncate max-w-[250px]">
+                <p className="text-[9px] uppercase font-bold text-indigo-500 truncate max-w-[250px]">
                   Ngữ cảnh: {context}
                 </p>
               </div>
