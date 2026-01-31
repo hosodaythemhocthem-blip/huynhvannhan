@@ -26,8 +26,7 @@ const TeacherPortal: React.FC<Props> = ({ user, onCreateExam }) => {
      SAFE STATUS
   ========================= */
   const status = useMemo<ApprovalStatus>(() => {
-    if (!user) return ApprovalStatus.PENDING;
-    return user.status ?? ApprovalStatus.PENDING;
+    return user?.status ?? ApprovalStatus.PENDING;
   }, [user]);
 
   const isApproved = status === ApprovalStatus.APPROVED;
@@ -99,7 +98,7 @@ const TeacherPortal: React.FC<Props> = ({ user, onCreateExam }) => {
 
             <button
               type="button"
-              onClick={onCreateExam}
+              onClick={() => onCreateExam?.()}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-5 rounded-[24px] font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100 transition-all transform hover:scale-105 active:scale-95 relative z-10"
             >
               + TẠO ĐỀ THI MỚI
@@ -126,7 +125,7 @@ const TeacherPortal: React.FC<Props> = ({ user, onCreateExam }) => {
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-              />
+            />
             </svg>
           </div>
 
