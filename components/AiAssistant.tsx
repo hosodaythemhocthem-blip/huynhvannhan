@@ -17,17 +17,17 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'ai',
-      text: 'Hello! I am **Lumina AI** ✨\nHow can I help you today?'
+      text: 'Xin chào! Tôi là **Lumina AI** ✨\nTôi có thể giúp gì cho bạn về Toán học hôm nay?'
     }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  /* Auto scroll */
+  /* Auto scroll xuống cuối khi có tin nhắn mới */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, isOpen]);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -38,12 +38,14 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setLoading(true);
 
     try {
-      const reply = await askGemini(userMsg, context);
+      // Gọi service Gemini kèm theo context (ví dụ: tên bài học, nội dung đề thi)
+      const reply = await askGemini(userMsg, context); // Đảm bảo askGemini xử lý tham số thứ 2 nếu service hỗ trợ, hoặc nối chuỗi
       setMessages(prev => [...prev, { role: 'ai', text: reply }]);
-    } catch {
+    } catch (error) {
+      console.error(error);
       setMessages(prev => [
         ...prev,
-        { role: 'ai', text: '⚠️ System busy. Please try again later.' }
+        { role: 'ai', text: '⚠️ Hệ thống đang bận. Vui lòng thử lại sau.' }
       ]);
     } finally {
       setLoading(false);
@@ -55,58 +57,66 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
-          className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl hover:scale-110 transition-all"
+          className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl hover:scale-110 transition-all hover:rotate-3"
+          title="Hỏi trợ lý AI"
         >
           <MessageCircle size={28} />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full animate-pulse" />
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
         </button>
       ) : (
-        <div className="w-[380px] h-[550px] bg-white rounded-[32px] shadow-2xl border flex flex-col overflow-hidden">
+        <div className="w-[380px] h-[600px] max-h-[80vh] bg-white rounded-[32px] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
           
           {/* Header */}
-          <header className="p-5 bg-slate-900 text-white flex justify-between items-center">
+          <header className="p-5 bg-slate-900 text-white flex justify-between items-center shadow-md z-10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
-                <Bot size={20} />
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-white/10">
+                <Sparkles size={20} className="text-yellow-300" />
               </div>
               <div>
-                <h4 className="font-bold text-sm">Lumina AI</h4>
-                <p className="text-[10px] uppercase opacity-60">Expert Assistant</p>
+                <h4 className="font-bold text-sm">Lumina AI Tutor</h4>
+                <p className="text-[10px] uppercase opacity-60 font-bold tracking-wider">Trợ lý học tập</p>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)}>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+            >
               <X size={18} />
             </button>
           </header>
 
-          {/* Messages */}
-          <div className="flex-1 p-5 overflow-y-auto space-y-4 bg-slate-50">
+          {/* Messages Area */}
+          <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50 scroll-smooth">
             {messages.map((msg, i) => (
               <div
                 key={i}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] p-4 rounded-2xl text-sm ${
+                  className={`max-w-[85%] p-4 rounded-2xl text-sm shadow-sm ${
                     msg.role === 'user'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white border'
+                      ? 'bg-indigo-600 text-white rounded-br-none'
+                      : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none'
                   }`}
                 >
-                  {msg.role === 'ai'
-                    ? <MathPreview content={msg.text} />
-                    : <p className="font-semibold">{msg.text}</p>
-                  }
+                  {msg.role === 'ai' ? (
+                    <div className="prose prose-sm max-w-none">
+                      {/* Sử dụng MathPreview với prop 'math' đúng chuẩn */}
+                      <MathPreview math={msg.text} />
+                    </div>
+                  ) : (
+                    <p className="font-semibold whitespace-pre-wrap">{msg.text}</p>
+                  )}
                 </div>
               </div>
             ))}
 
             {loading && (
-              <div className="flex">
-                <div className="bg-white border p-4 rounded-2xl flex items-center gap-2">
+              <div className="flex justify-start">
+                <div className="bg-white border p-4 rounded-2xl rounded-bl-none flex items-center gap-3 shadow-sm">
                   <Loader2 size={16} className="animate-spin text-indigo-600" />
-                  <span className="text-[10px] uppercase font-bold text-slate-400">
-                    Lumina is thinking...
+                  <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider">
+                    AI đang suy nghĩ...
                   </span>
                 </div>
               </div>
@@ -115,30 +125,35 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input */}
+          {/* Input Area */}
           <div className="p-4 border-t bg-white">
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl">
+            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-transparent focus-within:border-indigo-200 focus-within:bg-white transition-all">
               <input
                 value={input}
                 disabled={loading}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Ask something..."
-                className="flex-1 bg-transparent outline-none px-3 text-sm font-semibold"
+                placeholder="Nhập câu hỏi Toán học..."
+                className="flex-1 bg-transparent outline-none px-4 py-2 text-sm font-semibold text-slate-700 placeholder:text-slate-400"
+                autoFocus
               />
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className="w-9 h-9 bg-indigo-600 text-white rounded-lg flex items-center justify-center disabled:opacity-50"
+                className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-indigo-200"
               >
-                <Send size={14} />
+                <Send size={16} className={loading ? 'opacity-0' : 'opacity-100'} />
+                {loading && <Loader2 size={16} className="absolute animate-spin" />}
               </button>
             </div>
 
             {context && (
-              <p className="mt-2 text-[9px] text-center uppercase font-bold text-indigo-400 truncate">
-                Context: {context}
-              </p>
+              <div className="mt-2 flex items-center justify-center gap-1.5 opacity-60">
+                <Bot size={10} className="text-indigo-500" />
+                <p className="text-[9px] text-center uppercase font-bold text-indigo-500 truncate max-w-[250px]">
+                  Ngữ cảnh: {context}
+                </p>
+              </div>
             )}
           </div>
         </div>
