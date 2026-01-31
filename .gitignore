@@ -8,6 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+firebase-debug.log*
 
 # ======================
 # DEPENDENCIES
@@ -34,6 +35,8 @@ dist-ssr/
 .cache/
 .eslintcache
 .vite/
+*.tsbuildinfo
+.firestore/
 
 # ======================
 # EDITORS
