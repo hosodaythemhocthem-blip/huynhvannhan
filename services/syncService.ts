@@ -1,75 +1,153 @@
+import { db } from "./firebase";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
-import { db } from './firebase';
-import { 
-  doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+/* =====================================================
+   TYPES
+===================================================== */
+export type AccountType = "teachers" | "students";
+export type TeacherStatus = "PENDING" | "APPROVED" | "REJECTED";
 
+/* =====================================================
+   SYNC SERVICE
+===================================================== */
 export const SyncService = {
+  /* =========================
+     Generate Sync ID
+  ========================= */
   generateSyncId: (username: string): string => {
-    return `user_data_${username.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}`;
+    return `user_data_${username
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "_")}`;
   },
 
-  // Lưu hoặc cập nhật tài khoản (Giáo viên/Học sinh)
-  saveAccount: async (type: 'teachers' | 'students', data: any) => {
+  /* =========================
+     Save / Update Account
+  ========================= */
+  saveAccount: async (
+    type: AccountType,
+    data: { username: string; [key: string]: any }
+  ): Promise<boolean> => {
     try {
-      console.log("Đang gửi dữ liệu lên Firebase:", data);
+      if (!data?.username) {
+        throw new Error("Thiếu username khi lưu account");
+      }
+
       const docRef = doc(db, type, data.username);
-      await setDoc(docRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+
+      await setDoc(
+        docRef,
+        {
+          ...data,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       return true;
-    } catch (e) {
-      console.error("Lỗi chi tiết từ Firebase:", e);
+    } catch (error) {
+      console.error("❌ saveAccount error:", error);
       return false;
     }
   },
 
-  // Lấy danh sách giáo viên chờ duyệt
-  getPendingTeachers: async () => {
+  /* =========================
+     Get Pending Teachers
+  ========================= */
+  getPendingTeachers: async (): Promise<any[]> => {
     try {
-      const q = query(collection(db, "teachers"), where("status", "==", "PENDING"));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    } catch (e) {
-      console.error("Error fetching pending teachers:", e);
+      const q = query(
+        collection(db, "teachers"),
+        where("status", "==", "PENDING")
+      );
+
+      const snapshot = await getDocs(q);
+
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error("❌ getPendingTeachers error:", error);
       return [];
     }
   },
 
-  // Phê duyệt hoặc từ chối giáo viên
-  updateTeacherStatus: async (username: string, status: 'APPROVED' | 'REJECTED') => {
+  /* =========================
+     Update Teacher Status
+  ========================= */
+  updateTeacherStatus: async (
+    username: string,
+    status: TeacherStatus
+  ): Promise<boolean> => {
     try {
+      if (!username) throw new Error("Thiếu username");
+
       const docRef = doc(db, "teachers", username);
-      await updateDoc(docRef, { status });
+
+      await updateDoc(docRef, {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+
       return true;
-    } catch (e) {
-      console.error("Error updating status:", e);
+    } catch (error) {
+      console.error("❌ updateTeacherStatus error:", error);
       return false;
     }
   },
 
+  /* =========================
+     Push Sync Data
+  ========================= */
   pushData: async (syncId: string, data: any): Promise<boolean> => {
     try {
-      const docRef = doc(db, 'app_sync', syncId);
-      await setDoc(docRef, {
-        payload: data,
-        updatedAt: serverTimestamp(),
-        source: "Vercel-App"
-      }, { merge: true });
+      if (!syncId) throw new Error("Thiếu syncId");
+
+      const docRef = doc(db, "app_sync", syncId);
+
+      await setDoc(
+        docRef,
+        {
+          payload: data,
+          updatedAt: serverTimestamp(),
+          source: "Vercel-App",
+        },
+        { merge: true }
+      );
+
       return true;
     } catch (error) {
+      console.error("❌ pushData error:", error);
       return false;
     }
   },
 
-  pullData: async (syncId: string): Promise<any> => {
+  /* =========================
+     Pull Sync Data
+  ========================= */
+  pullData: async (syncId: string): Promise<any | null> => {
     try {
-      const docRef = doc(db, 'app_sync', syncId);
-      const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? docSnap.data().payload : null;
+      if (!syncId) throw new Error("Thiếu syncId");
+
+      const docRef = doc(db, "app_sync", syncId);
+      const snapshot = await getDoc(docRef);
+
+      if (!snapshot.exists()) return null;
+
+      return snapshot.data()?.payload ?? null;
     } catch (error) {
+      console.error("❌ pullData error:", error);
       return null;
     }
-  }
+  },
 };
