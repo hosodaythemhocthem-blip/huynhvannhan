@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, X, Sparkles, MessageCircle, Loader2, Paperclip } from 'lucide-react';
+import { Send, X, Sparkles, MessageCircle, Loader2, Paperclip, Trash2 } from 'lucide-react';
 import { askGemini } from '../services/geminiService';
 import MathPreview from './MathPreview';
+import * as pdfjsLib from "pdfjs-dist";
+import mammoth from "mammoth";
+import { saveMessage, fetchMessages, clearMessages } from '../services/chatService';
 
 interface Message {
   role: 'user' | 'ai';
@@ -13,54 +16,100 @@ interface Props {
 }
 
 const AiAssistant: React.FC<Props> = ({ context = "" }) => {
+
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'ai',
-      text: 'Xin chào! Tôi là **Lumina AI** ✨\nTôi có thể giúp gì cho bạn về Toán học hôm nay?'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* Auto scroll */
+  /* ===== LOAD CHAT VĨNH VIỄN ===== */
+  useEffect(() => {
+    const load = async () => {
+      const data = await fetchMessages();
+      if (data.length) {
+        setMessages(data.map((m: any) => ({
+          role: m.role,
+          text: m.text
+        })));
+      } else {
+        setMessages([
+          {
+            role: 'ai',
+            text: 'Xin chào! Tôi là **Lumina AI** ✨\nTôi có thể giúp gì cho bạn?'
+          }
+        ]);
+      }
+    };
+    load();
+  }, []);
+
+  /* ===== AUTO SCROLL ===== */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading, isOpen]);
+  }, [messages, loading]);
 
-  /* Focus input */
-  useEffect(() => {
-    if (isOpen) inputRef.current?.focus();
-  }, [isOpen]);
+  /* ===== FILE PARSER ===== */
+  const extractText = async (file: File) => {
 
-  /* ===== HANDLE FILE UPLOAD ===== */
+    if (file.size > 5_000_000) {
+      throw new Error("File quá lớn (tối đa 5MB)");
+    }
+
+    let text = "";
+
+    if (file.type === "application/pdf") {
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map((item: any) => item.str).join(" ");
+      }
+    }
+
+    else if (file.type.includes("wordprocessingml")) {
+      const buffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+      text = result.value;
+    }
+
+    else {
+      throw new Error("Chỉ hỗ trợ PDF hoặc DOCX");
+    }
+
+    return text;
+  };
+
+  /* ===== HANDLE FILE ===== */
   const handleFileUpload = async (file: File) => {
-    if (!file) return;
 
     setFileName(file.name);
     setLoading(true);
 
     try {
-      const text = await file.text(); // đọc nội dung file
-      const prompt = `Phân tích nội dung đề sau và hỗ trợ giải:\n\n${text}`;
+      const text = await extractText(file);
 
-      const reply = await askGemini(prompt);
+      const reply = await askGemini(`Phân tích và giải đề sau:\n\n${text}`);
 
-      setMessages(prev => [
-        ...prev,
-        { role: 'user', text: `📎 Đã gửi file: ${file.name}` },
-        { role: 'ai', text: reply || 'AI không trả lời.' }
-      ]);
-    } catch (err) {
-      console.error(err);
-      setMessages(prev => [
-        ...prev,
-        { role: 'ai', text: '⚠️ Không thể đọc file. Vui lòng kiểm tra định dạng.' }
-      ]);
+      const newMessages = [
+        { role: 'user' as const, text: `📎 ${file.name}` },
+        { role: 'ai' as const, text: reply || 'AI không trả lời.' }
+      ];
+
+      setMessages(prev => [...prev, ...newMessages]);
+
+      for (const m of newMessages) {
+        await saveMessage(m.role, m.text);
+      }
+
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setLoading(false);
     }
@@ -68,11 +117,16 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
   /* ===== HANDLE SEND ===== */
   const handleSend = async () => {
+
     if (!input.trim() || loading) return;
 
     const userMsg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+
+    const userMessage = { role: 'user' as const, text: userMsg };
+    setMessages(prev => [...prev, userMessage]);
+    await saveMessage('user', userMsg);
+
     setLoading(true);
 
     try {
@@ -82,19 +136,25 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
       const reply = await askGemini(finalPrompt);
 
-      setMessages(prev => [
-        ...prev,
-        { role: 'ai', text: reply || '⚠️ AI không trả về nội dung.' }
-      ]);
-    } catch (error) {
-      console.error(error);
-      setMessages(prev => [
-        ...prev,
-        { role: 'ai', text: '⚠️ Lỗi kết nối AI. Kiểm tra cấu hình API.' }
-      ]);
+      const aiMessage = {
+        role: 'ai' as const,
+        text: reply || '⚠️ AI không trả lời.'
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+      await saveMessage('ai', aiMessage.text);
+
+    } catch {
+      alert("Lỗi AI");
     } finally {
       setLoading(false);
     }
+  };
+
+  /* ===== CLEAR CHAT ===== */
+  const handleClear = async () => {
+    await clearMessages();
+    setMessages([]);
   };
 
   return (
@@ -102,108 +162,84 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
-          className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl hover:scale-110 transition-all hover:rotate-3"
+          className="w-16 h-16 bg-indigo-600 text-white rounded-[24px]"
         >
           <MessageCircle size={28} />
         </button>
       ) : (
-        <div className="w-[380px] h-[600px] max-h-[80vh] bg-white rounded-[32px] shadow-2xl border flex flex-col overflow-hidden">
+        <div className="w-[380px] h-[600px] bg-white rounded-[32px] shadow-2xl flex flex-col">
 
-          {/* HEADER */}
           <header className="p-5 bg-slate-900 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <Sparkles size={20} className="text-yellow-300" />
-              <div>
-                <h4 className="font-bold text-sm">Lumina AI Tutor</h4>
-                <p className="text-[10px] opacity-60 uppercase">Trợ lý học tập</p>
-              </div>
+              <Sparkles size={20} />
+              <h4 className="font-bold text-sm">Lumina AI Tutor</h4>
             </div>
-            <button onClick={() => setIsOpen(false)}>
-              <X size={18} />
-            </button>
+
+            <div className="flex gap-3">
+              <button onClick={handleClear}>
+                <Trash2 size={18} />
+              </button>
+              <button onClick={() => setIsOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
           </header>
 
-          {/* MESSAGES */}
-          <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50">
+          <div className="flex-1 p-5 overflow-y-auto bg-slate-50 space-y-4">
             {messages.map((msg, i) => (
-              <div
-                key={`${msg.role}-${i}`}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[85%] p-4 rounded-2xl text-sm shadow ${
-                    msg.role === 'user'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white border'
-                  }`}
-                >
-                  {msg.role === 'ai' ? (
-                    <MathPreview math={msg.text} />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                  )}
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`p-4 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>
+                  {msg.role === 'ai'
+                    ? <MathPreview math={msg.text} />
+                    : <p className="whitespace-pre-wrap">{msg.text}</p>}
                 </div>
               </div>
             ))}
 
-            {loading && (
-              <div className="flex justify-start">
-                <Loader2 size={18} className="animate-spin text-indigo-600" />
-              </div>
-            )}
-
+            {loading && <Loader2 className="animate-spin" />}
             <div ref={chatEndRef} />
           </div>
 
-          {/* INPUT */}
-          <div className="p-4 border-t bg-white">
-            <div className="flex items-center gap-2">
+          <div className="p-4 border-t flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-10 h-10 bg-slate-200 rounded-xl"
+            >
+              <Paperclip size={16} />
+            </button>
 
-              {/* FILE BUTTON */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-10 h-10 bg-slate-200 hover:bg-slate-300 rounded-xl flex items-center justify-center"
-              >
-                <Paperclip size={16} />
-              </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              hidden
+              onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+            />
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    handleFileUpload(e.target.files[0]);
-                  }
-                }}
-              />
+            <input
+              ref={inputRef}
+              value={input}
+              disabled={loading}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Nhập câu hỏi..."
+              className="flex-1 border rounded-xl px-4"
+            />
 
-              <input
-                ref={inputRef}
-                value={input}
-                disabled={loading}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Nhập câu hỏi Toán học..."
-                className="flex-1 border rounded-xl px-4 py-2 text-sm"
-              />
-
-              <button
-                onClick={handleSend}
-                disabled={loading || !input.trim()}
-                className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center"
-              >
-                <Send size={16} />
-              </button>
-            </div>
-
-            {fileName && (
-              <p className="text-[10px] mt-2 text-slate-400">
-                📎 File đã chọn: {fileName}
-              </p>
-            )}
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              className="w-10 h-10 bg-indigo-600 text-white rounded-xl"
+            >
+              <Send size={16} />
+            </button>
           </div>
+
+          {fileName && (
+            <p className="text-[10px] p-2 text-slate-400">
+              📎 {fileName}
+            </p>
+          )}
         </div>
       )}
     </div>
