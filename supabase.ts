@@ -1,49 +1,42 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = "YOUR_SUPABASE_URL";
+const supabaseAnonKey = "YOUR_PUBLIC_ANON_KEY";
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing Supabase ENV");
-}
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  }
-);
+export default supabase;
 
-/* ================= STORAGE ================= */
-
+/* =============================
+   Upload File
+============================= */
 export const uploadExamFile = async (file: File) => {
-  const ext = file.name.split(".").pop();
-  const fileName = `exam-${Date.now()}.${ext}`;
+  const fileName = `${Date.now()}-${file.name}`;
 
   const { error } = await supabase.storage
     .from("exam-files")
     .upload(fileName, file);
 
-  if (error) throw error;
+  if (error) {
+    alert(error.message);
+    return null;
+  }
 
   const { data } = supabase.storage
     .from("exam-files")
     .getPublicUrl(fileName);
 
   return {
-    fileName,
     url: data.publicUrl,
+    fileName,
   };
 };
 
+/* =============================
+   Delete File
+============================= */
 export const deleteExamFile = async (fileName: string) => {
   await supabase.storage
     .from("exam-files")
     .remove([fileName]);
 };
-
-export default supabase;
