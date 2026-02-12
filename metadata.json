@@ -5,14 +5,19 @@
   "description": "Hệ thống LMS Toán học tích hợp AI, hỗ trợ LaTeX, quản lý lớp học, đề thi và bảng điểm.",
 
   "lang": "vi",
+  "dir": "ltr",
+
   "start_url": "/",
   "scope": "/",
 
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
 
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
+
+  "categories": ["education", "productivity"],
 
   "icons": [
     {
