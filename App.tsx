@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase, uploadExamFile, deleteExamFile } from "./supabase";
 import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
+
+/* ================= TYPES ================= */
 
 interface Exam {
   id: string;
@@ -10,7 +12,10 @@ interface Exam {
   file_url: string | null;
   file_name: string | null;
   created_at: string;
+  user_id: string;
 }
+
+/* ================= APP ================= */
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -46,34 +51,39 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    setLoading(false);
 
-    if (error) alert(error.message);
+    if (error) {
+      alert(error.message);
+    }
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
 
-  /* ================= LOAD ================= */
+  /* ================= LOAD DATA ================= */
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!session) return;
 
     const { data, error } = await supabase
       .from("exams")
       .select("*")
+      .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
 
     if (!error) setExams(data || []);
-  };
+  }, [session]);
 
   useEffect(() => {
     if (session) loadData();
-  }, [session]);
+  }, [session, loadData]);
 
   /* ================= SAVE ================= */
 
@@ -104,6 +114,7 @@ export default function App() {
         content,
         file_url: fileUrl,
         file_name: fileName,
+        user_id: session.user.id,
       });
     }
 
@@ -116,7 +127,9 @@ export default function App() {
     if (!confirm("Xác nhận xóa?")) return;
 
     if (exam.file_name) await deleteExamFile(exam.file_name);
+
     await supabase.from("exams").delete().eq("id", exam.id);
+
     await loadData();
   };
 
@@ -185,10 +198,11 @@ export default function App() {
           />
 
           <button
+            disabled={loading}
             onClick={handleLogin}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-xl w-full"
+            className="bg-indigo-600 text-white px-6 py-3 rounded-xl w-full disabled:opacity-50"
           >
-            Đăng nhập
+            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </div>
       </div>
@@ -213,8 +227,8 @@ export default function App() {
           </button>
         </div>
 
-        {/* FORM + LIST giữ nguyên như trước */}
-        {/* ... phần còn lại giữ như bạn đã có ... */}
+        {/* Bạn giữ nguyên form + list như cũ */}
+
       </div>
     </div>
   );
