@@ -1,63 +1,144 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-/* ===============================
-   ENV
-================================= */
+/* =====================================================
+   ENV CONFIG
+===================================================== */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Thiếu biến môi trường Supabase");
+  throw new Error("❌ Thiếu biến môi trường Supabase");
 }
 
-export const supabase = createClient(
-  supabaseUrl || "",
-  supabaseAnonKey || ""
+/* =====================================================
+   CLIENT
+===================================================== */
+
+export const supabase: SupabaseClient = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
 );
 
-/* ===============================
-   STORAGE
-================================= */
+/* =====================================================
+   STORAGE CONFIG
+===================================================== */
 
 const BUCKET = "exam-files";
 
-/* ---------- Upload ---------- */
+/* =====================================================
+   HELPER: Validate File Type
+===================================================== */
+
+const allowedTypes = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "image/png",
+  "image/jpeg",
+];
+
+function validateFile(file: File) {
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("File không được hỗ trợ. Chỉ chấp nhận PDF, Word, PNG, JPG");
+  }
+}
+
+/* =====================================================
+   UPLOAD FILE (PRO)
+===================================================== */
 
 export const uploadExamFile = async (file: File) => {
-  const fileExt = file.name.split(".").pop();
-  const fileName = `${crypto.randomUUID()}.${fileExt}`;
+  try {
+    validateFile(file);
 
-  const { error } = await supabase.storage
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    return {
+      fileName,
+    };
+  } catch (error: any) {
+    console.error("❌ Upload error:", error.message);
+    throw error;
+  }
+};
+
+/* =====================================================
+   REPLACE FILE
+===================================================== */
+
+export const replaceExamFile = async (
+  oldFileName: string | null,
+  newFile: File
+) => {
+  if (oldFileName) {
+    await deleteExamFile(oldFileName);
+  }
+
+  return await uploadExamFile(newFile);
+};
+
+/* =====================================================
+   GET SIGNED URL (SECURE)
+===================================================== */
+
+export const getSignedFileUrl = async (fileName: string) => {
+  const { data, error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, file, {
-      cacheControl: "3600",
-      upsert: false,
-    });
+    .createSignedUrl(fileName, 60 * 60); // 1 hour
 
   if (error) {
-    console.error("Upload error:", error.message);
+    console.error("❌ Signed URL error:", error.message);
     return null;
   }
 
-  const { data } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(fileName);
-
-  return {
-    url: data.publicUrl,
-    fileName,
-  };
+  return data.signedUrl;
 };
 
-/* ---------- Delete ---------- */
+/* =====================================================
+   DELETE FILE
+===================================================== */
 
 export const deleteExamFile = async (fileName: string) => {
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .remove([fileName]);
+  try {
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .remove([fileName]);
 
-  if (error) {
-    console.error("Delete file error:", error.message);
+    if (error) throw error;
+
+    return true;
+  } catch (error: any) {
+    console.error("❌ Delete file error:", error.message);
+    return false;
   }
+};
+
+/* =====================================================
+   AUTH HELPERS (UNIFIED)
+===================================================== */
+
+export const getCurrentSession = async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session;
+};
+
+export const signOut = async () => {
+  await supabase.auth.signOut();
 };
