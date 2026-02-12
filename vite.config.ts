@@ -7,12 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  plugins: [
-    react({
-      fastRefresh: true,
-      jsxRuntime: "automatic",
-    }),
-  ],
+  plugins: [react()],
 
   resolve: {
     alias: {
@@ -22,38 +17,25 @@ export default defineConfig({
 
   build: {
     outDir: "dist",
-    target: "esnext",
+    target: "es2018",
     minify: "esbuild",
-    cssCodeSplit: true,
     sourcemap: false,
 
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id) return;
+
           if (id.includes("node_modules")) {
-            if (id.includes("react")) return "vendor-core";
-            if (id.includes("firebase")) return "vendor-firebase";
-            if (id.includes("@google/genai")) return "vendor-ai";
-            if (id.includes("jszip")) return "vendor-utils";
-            return "vendor-others";
+            if (id.includes("react")) return "vendor-react";
+            if (id.includes("@supabase")) return "vendor-supabase";
+            if (id.includes("pdfjs")) return "vendor-pdf";
+            if (id.includes("mammoth")) return "vendor-docx";
+            return "vendor";
           }
         },
-        chunkFileNames: "assets/js/[name]-[hash].js",
-        entryFileNames: "assets/js/[name]-[hash].js",
-        assetFileNames: "assets/[ext]/[name]-[hash].[ext]",
       },
     },
-
-    chunkSizeWarningLimit: 2000,
-  },
-
-  esbuild: {
-    drop:
-      process.env.NODE_ENV === "production"
-        ? ["console", "debugger"]
-        : [],
-    legalComments: "none",
   },
 
   server: {
