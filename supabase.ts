@@ -1,26 +1,47 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+/* ===============================
+   ENV CHECK
+================================= */
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("❌ Thiếu biến môi trường Supabase (.env)");
+}
+
+/* ===============================
+   CLIENT
+================================= */
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default supabase;
 
 /* ===============================
-   STORAGE - Upload / Delete file
+   STORAGE
 ================================= */
 
 const BUCKET = "exam-files";
 
+/* ---------- Upload ---------- */
+
 export const uploadExamFile = async (file: File) => {
-  const fileName = `${Date.now()}-${file.name}`;
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, file);
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Upload error:", error.message);
+    throw error;
+  }
 
   const { data } = supabase.storage
     .from(BUCKET)
@@ -32,6 +53,15 @@ export const uploadExamFile = async (file: File) => {
   };
 };
 
+/* ---------- Delete ---------- */
+
 export const deleteExamFile = async (fileName: string) => {
-  await supabase.storage.from(BUCKET).remove([fileName]);
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .remove([fileName]);
+
+  if (error) {
+    console.error("Delete file error:", error.message);
+    throw error;
+  }
 };
