@@ -1,17 +1,4 @@
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut,
-  User as FirebaseUser,
-} from "firebase/auth";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { supabase } from "../supabaseClient";
 import { UserRole, AccountStatus } from "../types";
 
 /* =========================
@@ -46,21 +33,18 @@ const authError = (code: string) => {
 };
 
 /* =========================
-   MAP FIREBASE USER → APP USER
+   MAP SUPABASE USER → APP USER
 ========================= */
-const mapFirebaseUser = async (
-  fbUser: FirebaseUser
-): Promise<AppUser> => {
-  if (!db) throw authError("db-not-ready");
+const mapSupabaseUser = async (userId: string): Promise<AppUser> => {
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("uid", userId)
+    .single();
 
-  const userRef = doc(db, "users", fbUser.uid);
-  const snap = await getDoc(userRef);
-
-  if (!snap.exists()) {
+  if (error || !data) {
     throw authError("account-not-exist");
   }
-
-  const data = snap.data();
 
   if (data.deleted === true) {
     throw authError("account-deleted");
@@ -74,8 +58,8 @@ const mapFirebaseUser = async (
   }
 
   return {
-    uid: fbUser.uid,
-    email: fbUser.email ?? data.email ?? "",
+    uid: data.uid,
+    email: data.email,
     role: data.role,
     status: data.status,
   };
@@ -98,32 +82,38 @@ export const login = async (
     };
   }
 
-  /* ===== FIREBASE AUTH ===== */
-  const cred = await signInWithEmailAndPassword(
-    auth,
+  /* ===== SUPABASE AUTH ===== */
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
-    password
-  );
+    password,
+  });
 
-  return await mapFirebaseUser(cred.user);
+  if (error || !data.user) {
+    throw authError("invalid-credentials");
+  }
+
+  return await mapSupabaseUser(data.user.id);
 };
 
 /* =========================
-   REGISTER (BASE)
+   REGISTER BASE
 ========================= */
 export const register = async (
   email: string,
   password: string,
   role: UserRole
 ): Promise<void> => {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
+  const { data, error } = await supabase.auth.signUp({
     email,
-    password
-  );
+    password,
+  });
 
-  await setDoc(doc(db, "users", cred.user.uid), {
-    uid: cred.user.uid,
+  if (error || !data.user) {
+    throw authError("register-failed");
+  }
+
+  const { error: insertError } = await supabase.from("users").insert({
+    uid: data.user.id,
     email,
     role,
     status:
@@ -131,8 +121,12 @@ export const register = async (
         ? AccountStatus.PENDING
         : AccountStatus.APPROVED,
     deleted: false,
-    createdAt: serverTimestamp(),
+    created_at: new Date().toISOString(),
   });
+
+  if (insertError) {
+    throw authError("user-profile-create-failed");
+  }
 };
 
 /* =========================
@@ -164,21 +158,27 @@ export const observeAuth = (
     return () => {};
   }
 
-  /* ===== FIREBASE SESSION ===== */
-  return onAuthStateChanged(auth, async (fbUser) => {
-    if (!fbUser) {
-      callback(null);
-      return;
-    }
+  /* ===== SUPABASE SESSION ===== */
+  const { data: listener } = supabase.auth.onAuthStateChange(
+    async (_event, session) => {
+      if (!session?.user) {
+        callback(null);
+        return;
+      }
 
-    try {
-      const user = await mapFirebaseUser(fbUser);
-      callback(user);
-    } catch (err) {
-      await signOut(auth);
-      callback(null);
+      try {
+        const user = await mapSupabaseUser(session.user.id);
+        callback(user);
+      } catch (err) {
+        await supabase.auth.signOut();
+        callback(null);
+      }
     }
-  });
+  );
+
+  return () => {
+    listener.subscription.unsubscribe();
+  };
 };
 
 /* =========================
@@ -186,5 +186,5 @@ export const observeAuth = (
 ========================= */
 export const logout = async () => {
   localStorage.removeItem("ADMIN_LOGIN");
-  await signOut(auth);
+  await supabase.auth.signOut();
 };
