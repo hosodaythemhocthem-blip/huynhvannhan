@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
-import supabase, {
-  uploadExamFile,
-  deleteExamFile,
-} from "./supabase";
-
-import { BlockMath, InlineMath } from "react-katex";
+import supabase, { uploadExamFile, deleteExamFile } from "./supabase";
+import { BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 
 interface Exam {
@@ -22,70 +18,79 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
   /* ================= LOAD DATA ================= */
 
   const loadData = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("exams")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Load error:", error.message);
+      return;
+    }
 
     setExams(data || []);
   };
 
   useEffect(() => {
     loadData();
-
-    const channel = supabase
-      .channel("realtime-exams")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "exams" },
-        loadData
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   /* ================= SAVE ================= */
 
   const handleSave = async () => {
-    if (!title) return alert("Nhập tiêu đề");
+    if (!title.trim()) return alert("Nhập tiêu đề");
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    let fileData = null;
+      let fileUrl = editingExam?.file_url || null;
+      let fileName = editingExam?.file_name || null;
 
-    if (file) {
-      fileData = await uploadExamFile(file);
-    }
+      if (file) {
+        const uploaded = await uploadExamFile(file);
 
-    if (editingId) {
-      await supabase
-        .from("exams")
-        .update({
+        if (!uploaded) throw new Error("Upload thất bại");
+
+        fileUrl = uploaded.url;
+        fileName = uploaded.fileName;
+      }
+
+      if (editingExam) {
+        const { error } = await supabase
+          .from("exams")
+          .update({
+            title,
+            content,
+            file_url: fileUrl,
+            file_name: fileName,
+          })
+          .eq("id", editingExam.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("exams").insert({
           title,
           content,
-          file_url: fileData?.url,
-          file_name: fileData?.fileName,
-        })
-        .eq("id", editingId);
-    } else {
-      await supabase.from("exams").insert({
-        title,
-        content,
-        file_url: fileData?.url,
-        file_name: fileData?.fileName,
-      });
-    }
+          file_url: fileUrl,
+          file_name: fileName,
+        });
 
-    resetForm();
-    setLoading(false);
+        if (error) throw error;
+      }
+
+      await loadData();
+      resetForm();
+    } catch (err: any) {
+      console.error(err);
+      alert("Lỗi khi lưu dữ liệu");
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ================= DELETE ================= */
@@ -93,11 +98,23 @@ export default function App() {
   const handleDelete = async (exam: Exam) => {
     if (!confirm("Xác nhận xóa?")) return;
 
-    if (exam.file_name) {
-      await deleteExamFile(exam.file_name);
-    }
+    try {
+      if (exam.file_name) {
+        await deleteExamFile(exam.file_name);
+      }
 
-    await supabase.from("exams").delete().eq("id", exam.id);
+      const { error } = await supabase
+        .from("exams")
+        .delete()
+        .eq("id", exam.id);
+
+      if (error) throw error;
+
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Xóa thất bại");
+    }
   };
 
   /* ================= EDIT ================= */
@@ -105,28 +122,32 @@ export default function App() {
   const handleEdit = (exam: Exam) => {
     setTitle(exam.title);
     setContent(exam.content);
-    setEditingId(exam.id);
+    setEditingExam(exam);
   };
 
   const resetForm = () => {
     setTitle("");
     setContent("");
     setFile(null);
-    setEditingId(null);
+    setEditingExam(null);
   };
 
   /* ================= RENDER MATH ================= */
 
   const renderMath = (text: string) => {
-    const blocks = text.split("$$");
+    try {
+      const blocks = text.split("$$");
 
-    return blocks.map((block, index) =>
-      index % 2 === 1 ? (
-        <BlockMath key={index} math={block} />
-      ) : (
-        <span key={index}>{block}</span>
-      )
-    );
+      return blocks.map((block, index) =>
+        index % 2 === 1 ? (
+          <BlockMath key={index} math={block} />
+        ) : (
+          <span key={index}>{block}</span>
+        )
+      );
+    } catch {
+      return <span>{text}</span>;
+    }
   };
 
   /* ================= UI ================= */
@@ -135,7 +156,6 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-slate-100 p-10">
       <div className="max-w-6xl mx-auto space-y-8">
 
-        {/* FORM */}
         <div className="bg-white p-8 rounded-3xl shadow-xl space-y-5">
           <h2 className="text-3xl font-bold text-indigo-600">
             🚀 Quản lý đề thi Supabase PRO
@@ -159,21 +179,19 @@ export default function App() {
           <input
             type="file"
             accept=".pdf,.doc,.docx"
-            onChange={(e) =>
-              setFile(e.target.files?.[0] || null)
-            }
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
 
           <div className="flex gap-4">
             <button
               onClick={handleSave}
               disabled={loading}
-              className="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-500 transition"
+              className="bg-indigo-600 text-white px-6 py-3 rounded-xl"
             >
               {loading ? "Đang lưu..." : "💾 Lưu"}
             </button>
 
-            {editingId && (
+            {editingExam && (
               <button
                 onClick={resetForm}
                 className="bg-gray-400 text-white px-6 py-3 rounded-xl"
@@ -184,15 +202,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* LIST */}
         {exams.map((exam) => (
           <div
             key={exam.id}
             className="bg-white p-8 rounded-3xl shadow-md space-y-4"
           >
-            <h3 className="text-2xl font-semibold">
-              {exam.title}
-            </h3>
+            <h3 className="text-2xl font-semibold">{exam.title}</h3>
 
             {exam.content && (
               <div className="bg-slate-50 p-4 rounded-xl text-lg">
@@ -201,22 +216,21 @@ export default function App() {
             )}
 
             {exam.file_url && (
-              <div>
-                {exam.file_url.endsWith(".pdf") ? (
-                  <iframe
-                    src={exam.file_url}
-                    className="w-full h-[600px] rounded-xl border"
-                  />
-                ) : (
-                  <a
-                    href={exam.file_url}
-                    target="_blank"
-                    className="text-indigo-600 underline"
-                  >
-                    📄 Tải file Word
-                  </a>
-                )}
-              </div>
+              exam.file_url.endsWith(".pdf") ? (
+                <iframe
+                  src={exam.file_url}
+                  className="w-full h-[600px] rounded-xl border"
+                />
+              ) : (
+                <a
+                  href={exam.file_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-indigo-600 underline"
+                >
+                  📄 Tải file Word
+                </a>
+              )
             )}
 
             <div className="flex gap-4">
