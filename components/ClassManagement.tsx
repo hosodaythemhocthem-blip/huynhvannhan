@@ -1,27 +1,26 @@
-// FULL SUPABASE UPGRADE - PRO VERSION
-
-import React, { useState, useEffect, useRef } from "react";
+// components/ClassManagement.tsx
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Trash2,
-  Users,
   GraduationCap,
-  Search,
-  X,
   Loader2,
-  Upload,
-  FileText
+  Upload
 } from "lucide-react";
 
 import { supabase } from "../services/supabaseClient";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
+import { v4 as uuidv4 } from "uuid";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface ClassItem {
   id: string;
   name: string;
   grade: string;
-  teacher: string;
+  teacher_id: string;
   student_count: number;
 }
 
@@ -30,47 +29,63 @@ const ClassManagement: React.FC = () => {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [newClassGrade, setNewClassGrade] = useState("12");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingClassId, setUploadingClassId] = useState<string | null>(null);
 
   /* =========================
-     LOAD DATA REALTIME
+     INIT USER + LOAD CLASSES
   ========================= */
 
   useEffect(() => {
 
-    const fetchData = async () => {
-      const { data } = await supabase
-        .from("classes")
-        .select("*")
-        .order("created_at", { ascending: false });
+    const init = async () => {
 
-      setClasses(data || []);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setUserId(user.id);
+
+      await fetchClasses(user.id);
       setLoading(false);
     };
 
-    fetchData();
-
-    const channel = supabase
-      .channel("realtime-classes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "classes" },
-        fetchData
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    init();
 
   }, []);
+
+  const fetchClasses = async (uid: string) => {
+
+    const { data, error } = await supabase
+      .from("classes")
+      .select(`
+        id,
+        name,
+        grade,
+        teacher_id,
+        class_members(count)
+      `)
+      .eq("teacher_id", uid)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+
+      const formatted = data.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        grade: c.grade,
+        teacher_id: c.teacher_id,
+        student_count: c.class_members?.length || 0
+      }));
+
+      setClasses(formatted);
+    }
+  };
 
   /* =========================
      ADD CLASS
@@ -79,15 +94,14 @@ const ClassManagement: React.FC = () => {
   const handleAddClass = async (e: React.FormEvent) => {
 
     e.preventDefault();
-    if (!newClassName.trim() || isSubmitting) return;
+    if (!newClassName.trim() || !userId || isSubmitting) return;
 
     setIsSubmitting(true);
 
     const { error } = await supabase.from("classes").insert({
       name: newClassName.trim(),
       grade: newClassGrade,
-      teacher: "Huỳnh Văn Nhẫn",
-      student_count: 0
+      teacher_id: userId
     });
 
     if (error) {
@@ -95,7 +109,7 @@ const ClassManagement: React.FC = () => {
     } else {
       setIsModalOpen(false);
       setNewClassName("");
-      setNewClassGrade("12");
+      await fetchClasses(userId);
     }
 
     setIsSubmitting(false);
@@ -109,15 +123,29 @@ const ClassManagement: React.FC = () => {
 
     if (!confirm("⚠️ Bạn chắc chắn muốn xóa lớp này?")) return;
 
+    // Xóa materials trước
+    const { data: materials } = await supabase
+      .from("class_materials")
+      .select("file_url")
+      .eq("class_id", id);
+
+    if (materials) {
+      for (const m of materials) {
+        const path = m.file_url.split("/class-materials/")[1];
+        await supabase.storage
+          .from("class-materials")
+          .remove([path]);
+      }
+    }
+
+    await supabase.from("class_materials").delete().eq("class_id", id);
     await supabase.from("classes").delete().eq("id", id);
 
-    await supabase.storage
-      .from("class-materials")
-      .remove([`${id}`]);
+    if (userId) await fetchClasses(userId);
   };
 
   /* =========================
-     FILE UPLOAD
+     FILE TEXT EXTRACT
   ========================= */
 
   const extractText = async (file: File) => {
@@ -125,28 +153,39 @@ const ClassManagement: React.FC = () => {
     let text = "";
 
     if (file.type === "application/pdf") {
+
       const buffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const pdf = await pdfjsLib.getDocument({
+        data: new Uint8Array(buffer)
+      }).promise;
 
       for (let i = 1; i <= pdf.numPages; i++) {
+
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        text += content.items.map((item: any) => item.str).join(" ");
-      }
-    }
 
-    else if (file.type.includes("wordprocessingml")) {
+        text +=
+          content.items
+            .map((item: any) => ("str" in item ? item.str : ""))
+            .join(" ") + "\n";
+      }
+
+    } else if (file.type.includes("wordprocessingml")) {
+
       const buffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer: buffer });
       text = result.value;
-    }
 
-    else {
+    } else {
       throw new Error("Chỉ hỗ trợ PDF hoặc DOCX");
     }
 
     return text;
   };
+
+  /* =========================
+     FILE UPLOAD
+  ========================= */
 
   const handleUpload = async (classId: string, file: File) => {
 
@@ -155,16 +194,18 @@ const ClassManagement: React.FC = () => {
     try {
 
       const extracted = await extractText(file);
+      const filePath = `${classId}/${uuidv4()}-${file.name}`;
 
-      const filePath = `${classId}/${Date.now()}-${file.name}`;
-
-      const { data } = await supabase.storage
+      const { error } = await supabase.storage
         .from("class-materials")
         .upload(filePath, file);
 
-      const publicUrl = supabase.storage
-        .from("class-materials")
-        .getPublicUrl(data?.path || "").data.publicUrl;
+      if (error) throw error;
+
+      const { data: { publicUrl } } =
+        supabase.storage
+          .from("class-materials")
+          .getPublicUrl(filePath);
 
       await supabase.from("class_materials").insert({
         class_id: classId,
@@ -189,15 +230,13 @@ const ClassManagement: React.FC = () => {
   );
 
   /* =========================
-     UI
+     UI (KHÔNG ĐỔI STRUCTURE)
   ========================= */
 
   return (
     <div className="space-y-6">
 
-      {/* HEADER */}
       <div className="flex justify-between items-center">
-
         <h2 className="text-2xl font-black flex items-center gap-2">
           <GraduationCap className="text-indigo-600" />
           Quản lý Lớp học
@@ -211,7 +250,6 @@ const ClassManagement: React.FC = () => {
         </button>
       </div>
 
-      {/* TABLE */}
       <div className="bg-white rounded-3xl shadow overflow-hidden">
 
         {loading ? (
@@ -226,7 +264,7 @@ const ClassManagement: React.FC = () => {
             <div>
               <div className="font-bold">{c.name}</div>
               <div className="text-xs text-slate-400">
-                Lớp {c.grade} · {c.teacher}
+                Lớp {c.grade} · {c.student_count} học sinh
               </div>
             </div>
 
@@ -235,21 +273,25 @@ const ClassManagement: React.FC = () => {
               <input
                 type="file"
                 hidden
-                ref={fileInputRef}
                 onChange={(e) =>
                   e.target.files &&
                   handleUpload(c.id, e.target.files[0])
                 }
               />
 
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 border rounded-xl"
-              >
+              <label className="p-2 border rounded-xl cursor-pointer">
                 {uploadingClassId === c.id
                   ? <Loader2 className="animate-spin" size={16} />
                   : <Upload size={16} />}
-              </button>
+                <input
+                  type="file"
+                  hidden
+                  onChange={(e) =>
+                    e.target.files &&
+                    handleUpload(c.id, e.target.files[0])
+                  }
+                />
+              </label>
 
               <button
                 onClick={() => handleDelete(c.id)}
@@ -264,7 +306,6 @@ const ClassManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* MODAL ADD CLASS (GIỮ NGUYÊN CẤU TRÚC CỦA BẠN) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center">
           <form
