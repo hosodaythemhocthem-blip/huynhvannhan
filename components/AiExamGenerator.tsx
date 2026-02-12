@@ -10,13 +10,19 @@ import {
   Trash2,
   Save,
   FileText,
+  X
 } from "lucide-react";
+import * as pdfjsLib from "pdfjs-dist";
+import mammoth from "mammoth";
+import {
+  loadDraft,
+  saveDraft,
+  clearDraft
+} from "../services/supabaseExamService";
 
 interface Props {
   onGenerate: (exam: Exam) => void;
 }
-
-const STORAGE_KEY = "ai_exam_draft";
 
 const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
   const [topic, setTopic] = useState("");
@@ -26,57 +32,80 @@ const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
   const [fileName, setFileName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  /* ===============================
-     LOAD DRAFT VĨNH VIỄN
-  =============================== */
+  /* LOAD VĨNH VIỄN */
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setTopic(parsed.topic || "");
-      setGrade(parsed.grade || "12");
-      setFileName(parsed.fileName || null);
-    }
+    const init = async () => {
+      const draft = await loadDraft();
+      if (draft) {
+        setTopic(draft.topic || "");
+        setGrade(draft.grade || "12");
+        setFileName(draft.file_name || null);
+      }
+    };
+    init();
   }, []);
 
-  /* ===============================
-     LƯU VĨNH VIỄN
-  =============================== */
-  const handleSave = () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ topic, grade, fileName })
-    );
-  };
+  /* AUTO SAVE */
+  useEffect(() => {
+    saveDraft(topic, grade, fileName);
+  }, [topic, grade, fileName]);
 
-  /* ===============================
-     XÓA TOÀN BỘ
-  =============================== */
-  const handleClear = () => {
+  /* CLEAR */
+  const handleClear = async () => {
     setTopic("");
     setFileName(null);
     setError("");
-    localStorage.removeItem(STORAGE_KEY);
+    await clearDraft();
   };
 
-  /* ===============================
-     UPLOAD FILE WORD / PDF
-  =============================== */
+  /* FILE PARSER */
+  const extractText = async (file: File) => {
+    if (file.size > 10_000_000) {
+      throw new Error("File tối đa 10MB");
+    }
+
+    let text = "";
+
+    if (file.type === "application/pdf") {
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map((item: any) => item.str).join(" ");
+      }
+    }
+
+    else if (file.type.includes("wordprocessingml")) {
+      const buffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+      text = result.value;
+    }
+
+    else {
+      throw new Error("Chỉ hỗ trợ PDF hoặc DOCX");
+    }
+
+    return text;
+  };
+
+  /* UPLOAD FILE */
   const handleFileUpload = async (file: File) => {
     setFileName(file.name);
     setLoading(true);
     setError("");
 
     try {
-      const text = await file.text();
+      const text = await extractText(file);
 
       const ai = new GoogleGenAI({
-        apiKey: process.env.API_KEY,
+        apiKey: process.env.API_KEY!,
       });
 
       const prompt = `
 Trích xuất và chuẩn hóa đề thi từ nội dung sau.
-Chỉ trả về JSON đúng format Exam.
+Chỉ trả JSON đúng format Exam.
 
 ${text}
 `;
@@ -93,27 +122,20 @@ ${text}
         .trim();
 
       const parsed: Exam = JSON.parse(clean);
-
       onGenerate(parsed);
+
     } catch (err: any) {
       console.error(err);
-      setError("Không thể xử lý file. Kiểm tra định dạng PDF/DOCX.");
+      setError("Không thể xử lý file PDF/DOCX.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ===============================
-     SINH ĐỀ TỪ CHỦ ĐỀ
-  =============================== */
+  /* GENERATE */
   const handleGenerateFromTopic = async () => {
     if (!topic.trim()) {
-      setError("Vui lòng nhập chủ đề Toán");
-      return;
-    }
-
-    if (!process.env.API_KEY) {
-      setError("Thiếu API_KEY cho Gemini");
+      setError("Vui lòng nhập chủ đề");
       return;
     }
 
@@ -122,7 +144,7 @@ ${text}
 
     try {
       const ai = new GoogleGenAI({
-        apiKey: process.env.API_KEY,
+        apiKey: process.env.API_KEY!,
       });
 
       const prompt = `
@@ -144,37 +166,23 @@ Chỉ trả JSON chuẩn Exam.
 
       const parsed: Exam = JSON.parse(clean);
 
-      const validTypes: QuestionType[] = [
-        "multiple_choice",
-        "true_false",
-        "short_answer",
-      ];
+      onGenerate(parsed);
 
-      const questions: Question[] = (parsed.questions || []).filter(
-        (q: Question) => validTypes.includes(q.type)
-      );
-
-      if (!questions.length) {
-        throw new Error("AI không sinh được câu hợp lệ");
-      }
-
-      onGenerate({
-        title: parsed.title || "Đề thi AI",
-        questions,
-      });
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Không thể sinh đề");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ===============================
-     UI
-  =============================== */
   return (
-    <div className="bg-white border rounded-2xl p-6 shadow-lg space-y-4 transition-all">
+    <div className="bg-white border rounded-2xl p-6 shadow-xl space-y-4 relative">
+
+      {loading && (
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+          <Loader2 className="animate-spin text-indigo-600" size={28} />
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -184,7 +192,7 @@ Chỉ trả JSON chuẩn Exam.
 
         <div className="flex gap-2">
           <button
-            onClick={handleSave}
+            onClick={() => saveDraft(topic, grade, fileName)}
             className="p-2 rounded-lg bg-green-100 hover:bg-green-200"
           >
             <Save size={16} />
@@ -206,7 +214,6 @@ Chỉ trả JSON chuẩn Exam.
         </div>
       )}
 
-      {/* INPUT */}
       <div className="flex gap-2">
         <input
           value={topic}
@@ -214,6 +221,7 @@ Chỉ trả JSON chuẩn Exam.
           placeholder="VD: Hàm số, tích phân..."
           className="flex-1 border rounded-xl px-4 py-2 text-sm"
         />
+
         <select
           value={grade}
           onChange={(e) => setGrade(e.target.value as any)}
@@ -225,14 +233,13 @@ Chỉ trả JSON chuẩn Exam.
         </select>
       </div>
 
-      {/* BUTTONS */}
       <div className="flex gap-2">
         <button
           onClick={handleGenerateFromTopic}
           disabled={loading}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 flex items-center justify-center gap-2"
         >
-          {loading ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
+          <Wand2 size={18} />
           Sinh từ chủ đề
         </button>
 
@@ -249,11 +256,7 @@ Chỉ trả JSON chuẩn Exam.
           type="file"
           accept=".pdf,.doc,.docx"
           hidden
-          onChange={(e) => {
-            if (e.target.files?.[0]) {
-              handleFileUpload(e.target.files[0]);
-            }
-          }}
+          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
         />
       </div>
 
@@ -261,6 +264,9 @@ Chỉ trả JSON chuẩn Exam.
         <div className="flex items-center gap-2 text-sm text-slate-600">
           <FileText size={14} />
           {fileName}
+          <button onClick={() => setFileName(null)}>
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>
