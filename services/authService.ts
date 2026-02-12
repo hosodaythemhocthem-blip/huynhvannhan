@@ -1,87 +1,87 @@
-import { supabase } from "../supabase";
+import { supabase } from "./supabaseClient";
+import { AppUser, UserRole } from "../types";
 
-const toEmail = (username: string) => {
-  return `${username.trim().toLowerCase()}@lms.local`;
-};
-
-/* =====================================================
-   REGISTER STUDENT
-===================================================== */
-
-export const registerStudent = async (
-  fullName: string,
-  username: string,
-  password: string
-) => {
-  if (!fullName || !username || !password) {
-    throw new Error("Vui lòng nhập đầy đủ thông tin");
-  }
-
-  const email = toEmail(username);
-
-  // Tạo tài khoản auth
+/* ===============================
+   REGISTER
+================================ */
+export async function registerUser(
+  email: string,
+  password: string,
+  full_name: string,
+  role: UserRole
+) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name,
+        role,
+        approved: role === "teacher" ? true : false,
+      },
+    },
   });
 
-  if (error) throw new Error(error.message);
-  if (!data.user) throw new Error("Không tạo được tài khoản");
+  if (error) throw error;
+  return data;
+}
 
-  // Tạo profile
-  const { error: profileError } = await supabase.from("profiles").insert({
-    id: data.user.id,
-    username: username.trim().toLowerCase(),
-    full_name: fullName,
-    role: "student",
-  });
-
-  if (profileError) throw profileError;
-
-  return data.user;
-};
-
-/* =====================================================
-   LOGIN (USERNAME)
-===================================================== */
-
-export const login = async (username: string, password: string) => {
-  if (!username || !password) {
-    throw new Error("Vui lòng nhập đầy đủ thông tin");
-  }
-
-  const email = toEmail(username);
-
+/* ===============================
+   LOGIN
+================================ */
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<AppUser> {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
-  if (error || !data.user) {
-    throw new Error("Sai tài khoản hoặc mật khẩu");
-  }
+  if (error) throw error;
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, full_name")
-    .eq("id", data.user.id)
-    .single();
+  const user = data.user;
+  if (!user) throw new Error("User not found");
 
-  if (profileError || !profile) {
-    throw new Error("Không tìm thấy role người dùng");
+  const role = user.user_metadata?.role as UserRole;
+  const approved = user.user_metadata?.approved ?? false;
+
+  if (!role) throw new Error("Role not found");
+
+  if (role === "student" && !approved) {
+    throw new Error("Tài khoản đang chờ giáo viên duyệt");
   }
 
   return {
-    user: data.user,
-    role: profile.role,
-    fullName: profile.full_name,
+    id: user.id,
+    email: user.email!,
+    full_name: user.user_metadata?.full_name || "",
+    role,
+    approved,
   };
-};
+}
 
-/* =====================================================
+/* ===============================
+   CURRENT USER
+================================ */
+export async function getCurrentUser(): Promise<AppUser | null> {
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email!,
+    full_name: user.user_metadata?.full_name || "",
+    role: user.user_metadata?.role,
+    approved: user.user_metadata?.approved,
+  };
+}
+
+/* ===============================
    LOGOUT
-===================================================== */
-
-export const logout = async () => {
+================================ */
+export async function logoutUser() {
   await supabase.auth.signOut();
-};
+}
