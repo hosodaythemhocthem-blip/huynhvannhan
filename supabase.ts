@@ -1,13 +1,14 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /* =====================================================
-   ENV CONFIG
+   ENV CONFIG – Production Safe
 ===================================================== */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("❌ Supabase ENV chưa cấu hình");
   throw new Error("Supabase ENV chưa cấu hình");
 }
 
@@ -20,11 +21,16 @@ export const supabase: SupabaseClient = createClient(
       autoRefreshToken: true,
       detectSessionInUrl: false,
     },
+    global: {
+      headers: {
+        "X-Client-Info": "math-lms-ai",
+      },
+    },
   }
 );
 
 /* =====================================================
-   STORAGE CONFIG
+   STORAGE CONFIG – LMS EXAM FILES
 ===================================================== */
 
 const BUCKET = "exam-files";
@@ -40,9 +46,7 @@ const allowedTypes = [
 
 function validateFile(file: File) {
   if (!allowedTypes.includes(file.type)) {
-    throw new Error(
-      "Chỉ chấp nhận PDF, Word, PNG, JPG"
-    );
+    throw new Error("Chỉ chấp nhận PDF, Word, PNG, JPG");
   }
 
   if (file.size > MAX_FILE_SIZE) {
@@ -51,40 +55,59 @@ function validateFile(file: File) {
 }
 
 /* =====================================================
-   UPLOAD FILE
+   STORAGE HELPERS
 ===================================================== */
 
 export const uploadExamFile = async (file: File) => {
   validateFile(file);
 
+  const session = await supabase.auth.getUser();
+  const userId = session.data.user?.id;
+
+  if (!userId) {
+    throw new Error("Bạn chưa đăng nhập");
+  }
+
   const fileExt = file.name.split(".").pop();
   const fileName = `${crypto.randomUUID()}.${fileExt}`;
+  const filePath = `${userId}/${fileName}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, file);
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Upload lỗi:", error.message);
+    throw new Error("Upload file thất bại");
+  }
 
-  return fileName;
+  return filePath;
 };
 
-export const getSignedFileUrl = async (fileName: string) => {
+export const getSignedFileUrl = async (filePath: string) => {
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(fileName, 60 * 60 * 24);
+    .createSignedUrl(filePath, 60 * 60 * 24);
 
-  if (error) throw error;
+  if (error || !data?.signedUrl) {
+    throw new Error("Không tạo được link tải file");
+  }
 
   return data.signedUrl;
 };
 
-export const deleteExamFile = async (fileName: string) => {
+export const deleteExamFile = async (filePath: string) => {
   const { error } = await supabase.storage
     .from(BUCKET)
-    .remove([fileName]);
+    .remove([filePath]);
 
-  if (error) throw error;
+  if (error) {
+    console.error("Delete lỗi:", error.message);
+    throw new Error("Xóa file thất bại");
+  }
 };
 
 /* =====================================================
@@ -92,10 +115,79 @@ export const deleteExamFile = async (fileName: string) => {
 ===================================================== */
 
 export const getCurrentSession = async () => {
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error("Lỗi session:", error.message);
+    return null;
+  }
   return data.session;
 };
 
-export const signOut = async () => {
-  await supabase.auth.signOut();
+export const getCurrentUser = async () => {
+  const { data } = await supabase.auth.getUser();
+  return data.user ?? null;
 };
+
+export const signOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("SignOut lỗi:", error.message);
+  }
+};
+
+/* =====================================================
+   GENERIC DB HELPERS – LMS READY
+===================================================== */
+
+export async function dbInsert<T>(
+  table: string,
+  payload: T
+) {
+  const { data, error } = await supabase
+    .from(table)
+    .insert(payload)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`Insert ${table} lỗi:`, error.message);
+    throw new Error("Không lưu được dữ liệu");
+  }
+
+  return data;
+}
+
+export async function dbUpdate<T>(
+  table: string,
+  id: string,
+  payload: Partial<T>
+) {
+  const { data, error } = await supabase
+    .from(table)
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`Update ${table} lỗi:`, error.message);
+    throw new Error("Không cập nhật được dữ liệu");
+  }
+
+  return data;
+}
+
+export async function dbDelete(
+  table: string,
+  id: string
+) {
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(`Delete ${table} lỗi:`, error.message);
+    throw new Error("Không xóa được dữ liệu");
+  }
+}
