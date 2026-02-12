@@ -1,18 +1,17 @@
-import typography from "@tailwindcss/typography";
+import typography from '@tailwindcss/typography';
 
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
-    "./App.{js,ts,jsx,tsx}",
-    "./main.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
-    "./pages/**/*.{js,ts,jsx,tsx}",
-    "./services/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
 
   theme: {
     extend: {
+      /* ==================================================
+         COLOR SYSTEM – PREMIUM LMS + EDU
+      ================================================== */
       colors: {
         primary: {
           50: "#f5f7ff",
@@ -85,5 +84,7 @@ export default {
     },
   },
 
-  plugins: [typography],
+  plugins: [
+    typography,
+  ],
 };
