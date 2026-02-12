@@ -1,194 +1,158 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { ProjectFile } from "./types";
-import { generateCodeExpansion } from "./services/geminiService";
-import JSZip from "jszip";
+import { useEffect, useState } from "react";
+import { BlockMath } from "react-katex";
+import "katex/dist/katex.min.css";
 
-/* ===============================
-   FILE TREE
-================================ */
-const FileTree: React.FC<{
-  files: ProjectFile[];
-  selectedFileId: string | null;
-  onSelect: (id: string) => void;
-}> = ({ files, selectedFileId, onSelect }) => {
-  return (
-    <div className="space-y-1">
-      {files.map((f) => (
-        <div
-          key={f.id}
-          onClick={() => onSelect(f.id)}
-          className={`px-3 py-2 rounded cursor-pointer text-sm truncate
-            ${
-              selectedFileId === f.id
-                ? "bg-blue-600/20 text-blue-400"
-                : "hover:bg-white/5 text-slate-400"
-            }`}
-        >
-          {f.path}
-        </div>
-      ))}
-    </div>
-  );
-};
+import supabase, {
+  uploadExamFile,
+  deleteExamFile,
+} from "./supabase";
 
-/* ===============================
-   MAIN APP
-================================ */
-const App: React.FC = () => {
-  const [files, setFiles] = useState<ProjectFile[]>([]);
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+export default function App() {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [exams, setExams] = useState<any[]>([]);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadData = async () => {
+    const { data } = await supabase
+      .from("exams")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const selectedFile = useMemo(
-    () => files.find((f) => f.id === selectedFileId),
-    [files, selectedFileId]
-  );
-
-  /* ===============================
-     ZIP UPLOAD
-  ================================ */
-  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const zip = await JSZip.loadAsync(file);
-    const list: ProjectFile[] = [];
-
-    for (const [path, entry] of Object.entries(zip.files)) {
-      if (!entry.dir) {
-        list.push({
-          id: crypto.randomUUID(),
-          name: path.split("/").pop() || path,
-          path,
-          content: await entry.async("string"),
-          language: path.split(".").pop() || "text",
-          isSelected: false,
-        });
-      }
-    }
-
-    setFiles(list);
-    setSelectedFileId(list[0]?.id ?? null);
+    setExams(data || []);
   };
 
-  /* ===============================
-     RUN AI
-  ================================ */
-  const runAI = async () => {
-    if (!prompt.trim() || files.length === 0) return;
+  useEffect(() => {
+    loadData();
 
-    setIsGenerating(true);
-    setAiResponse("");
+    const channel = supabase
+      .channel("realtime-exams")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "exams" },
+        loadData
+      )
+      .subscribe();
 
-    try {
-      await generateCodeExpansion(files, prompt, (chunk) =>
-        setAiResponse((prev) => prev + chunk)
-      );
-    } finally {
-      setIsGenerating(false);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleSave = async () => {
+    if (!title) return alert("Nhập tiêu đề");
+
+    let fileData = null;
+
+    if (file) {
+      fileData = await uploadExamFile(file);
     }
+
+    await supabase.from("exams").insert({
+      title,
+      content,
+      file_url: fileData?.url || null,
+      file_name: fileData?.fileName || null,
+    });
+
+    setTitle("");
+    setContent("");
+    setFile(null);
   };
 
-  /* ===============================
-     UI
-  ================================ */
-  return (
-    <div className="h-screen w-screen bg-[#0b0f17] text-slate-200 flex">
-      {/* LEFT SIDEBAR */}
-      <aside className="w-80 border-r border-white/5 flex flex-col">
-        <div className="p-4 border-b border-white/5">
-          <h1 className="text-sm font-semibold text-white mb-3">
-            Project Files
-          </h1>
+  const handleDelete = async (exam: any) => {
+    if (exam.file_name) {
+      await deleteExamFile(exam.file_name);
+    }
 
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full py-2 text-xs rounded bg-blue-600 hover:bg-blue-500 transition"
-          >
-            Upload ZIP
-          </button>
+    await supabase
+      .from("exams")
+      .delete()
+      .eq("id", exam.id);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-8">
+
+      <div className="max-w-4xl mx-auto space-y-6">
+
+        {/* FORM */}
+        <div className="bg-white p-6 rounded-2xl shadow-card space-y-4">
+          <h2 className="text-2xl font-bold text-primary-600">
+            Quản lý đề thi
+          </h2>
 
           <input
-            ref={fileInputRef}
-            type="file"
-            accept=".zip"
-            className="hidden"
-            onChange={handleZipUpload}
+            className="w-full border p-3 rounded-xl"
+            placeholder="Tiêu đề đề"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
           />
-        </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
-          {files.length === 0 ? (
-            <div className="text-center text-xs opacity-30 mt-10">
-              No files loaded
-            </div>
-          ) : (
-            <FileTree
-              files={files}
-              selectedFileId={selectedFileId}
-              onSelect={setSelectedFileId}
-            />
-          )}
-        </div>
-      </aside>
-
-      {/* MAIN */}
-      <main className="flex-1 flex flex-col">
-        {/* PROMPT */}
-        <div className="p-4 border-b border-white/5">
           <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe what you want AI to change..."
-            className="w-full h-24 bg-black/40 border border-white/10 rounded p-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full border p-3 rounded-xl"
+            rows={4}
+            placeholder="Nhập nội dung (vd: $$x^2 + y^2 = z^2$$)"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
           />
 
-          <div className="flex justify-end mt-2">
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={(e) =>
+              setFile(e.target.files?.[0] || null)
+            }
+          />
+
+          <button
+            onClick={handleSave}
+            className="bg-primary-600 text-white px-6 py-3 rounded-xl hover:bg-primary-500 transition"
+          >
+            💾 Lưu đề
+          </button>
+        </div>
+
+        {/* LIST */}
+        {exams.map((exam) => (
+          <div
+            key={exam.id}
+            className="bg-white p-6 rounded-2xl shadow-soft"
+          >
+            <h3 className="text-xl font-semibold">
+              {exam.title}
+            </h3>
+
+            {exam.content && (
+              <div className="mt-3">
+                {exam.content.includes("$$") ? (
+                  <BlockMath
+                    math={exam.content.replace(/\$\$/g, "")}
+                  />
+                ) : (
+                  <p>{exam.content}</p>
+                )}
+              </div>
+            )}
+
+            {exam.file_url && (
+              <div className="mt-4">
+                <iframe
+                  src={exam.file_url}
+                  className="w-full h-[400px] rounded-xl border"
+                />
+              </div>
+            )}
+
             <button
-              onClick={runAI}
-              disabled={isGenerating}
-              className="px-4 py-2 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+              onClick={() => handleDelete(exam)}
+              className="mt-4 bg-danger text-white px-4 py-2 rounded-xl"
             >
-              {isGenerating ? "Running AI..." : "Run AI"}
+              ❌ Xóa
             </button>
           </div>
-        </div>
-
-        {/* CONTENT */}
-        <div className="flex-1 grid grid-cols-2 divide-x divide-white/5">
-          {/* FILE VIEW */}
-          <section className="p-4 overflow-auto">
-            <h2 className="text-xs uppercase tracking-wider opacity-50 mb-2">
-              Selected File
-            </h2>
-
-            {selectedFile ? (
-              <pre className="text-xs bg-black/40 p-4 rounded overflow-auto">
-                {selectedFile.content}
-              </pre>
-            ) : (
-              <div className="text-xs opacity-30">No file selected</div>
-            )}
-          </section>
-
-          {/* AI OUTPUT */}
-          <section className="p-4 overflow-auto">
-            <h2 className="text-xs uppercase tracking-wider opacity-50 mb-2">
-              AI Output
-            </h2>
-
-            <pre className="text-xs bg-black/40 p-4 rounded whitespace-pre-wrap">
-              {aiResponse || "AI output will appear here..."}
-            </pre>
-          </section>
-        </div>
-      </main>
+        ))}
+      </div>
     </div>
   );
-};
-
-export default App;
+}
