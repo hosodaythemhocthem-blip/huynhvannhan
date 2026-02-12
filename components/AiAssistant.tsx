@@ -1,12 +1,28 @@
+// AiAssistant.tsx FULL UPGRADE VERSION
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, Sparkles, MessageCircle, Loader2, Paperclip, Trash2 } from 'lucide-react';
+import {
+  Send,
+  X,
+  Sparkles,
+  MessageCircle,
+  Loader2,
+  Paperclip,
+  Trash2
+} from 'lucide-react';
 import { askGemini } from '../services/geminiService';
 import MathPreview from './MathPreview';
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
-import { saveMessage, fetchMessages, clearMessages } from '../services/chatService';
+import {
+  saveMessage,
+  fetchMessages,
+  clearMessages,
+  initConversation
+} from '../services/chatService';
 
 interface Message {
+  id?: string;
   role: 'user' | 'ai';
   text: string;
 }
@@ -22,20 +38,20 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* ===== LOAD CHAT VĨNH VIỄN ===== */
+  /* INIT CONVERSATION */
   useEffect(() => {
     const load = async () => {
+      await initConversation();
       const data = await fetchMessages();
+
       if (data.length) {
-        setMessages(data.map((m: any) => ({
-          role: m.role,
-          text: m.text
-        })));
+        setMessages(data);
       } else {
         setMessages([
           {
@@ -48,16 +64,16 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     load();
   }, []);
 
-  /* ===== AUTO SCROLL ===== */
+  /* AUTO SCROLL */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  /* ===== FILE PARSER ===== */
+  /* FILE PARSER */
   const extractText = async (file: File) => {
 
-    if (file.size > 5_000_000) {
-      throw new Error("File quá lớn (tối đa 5MB)");
+    if (file.size > 10_000_000) {
+      throw new Error("File quá lớn (tối đa 10MB)");
     }
 
     let text = "";
@@ -86,16 +102,18 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     return text;
   };
 
-  /* ===== HANDLE FILE ===== */
+  /* HANDLE FILE */
   const handleFileUpload = async (file: File) => {
 
+    setUploading(true);
     setFileName(file.name);
-    setLoading(true);
 
     try {
       const text = await extractText(file);
 
-      const reply = await askGemini(`Phân tích và giải đề sau:\n\n${text}`);
+      const reply = await askGemini(
+        `Phân tích và giải chi tiết đề sau:\n\n${text}`
+      );
 
       const newMessages = [
         { role: 'user' as const, text: `📎 ${file.name}` },
@@ -111,11 +129,11 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     } catch (err: any) {
       alert(err.message);
     } finally {
-      setLoading(false);
+      setUploading(false);
     }
   };
 
-  /* ===== HANDLE SEND ===== */
+  /* HANDLE SEND */
   const handleSend = async () => {
 
     if (!input.trim() || loading) return;
@@ -130,6 +148,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setLoading(true);
 
     try {
+
       const finalPrompt = context
         ? `Ngữ cảnh: ${context}\n\nCâu hỏi: ${userMsg}`
         : userMsg;
@@ -151,7 +170,6 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     }
   };
 
-  /* ===== CLEAR CHAT ===== */
   const handleClear = async () => {
     await clearMessages();
     setMessages([]);
@@ -162,14 +180,14 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
-          className="w-16 h-16 bg-indigo-600 text-white rounded-[24px]"
+          className="w-16 h-16 bg-indigo-600 text-white rounded-3xl shadow-xl hover:scale-110 transition"
         >
           <MessageCircle size={28} />
         </button>
       ) : (
-        <div className="w-[380px] h-[600px] bg-white rounded-[32px] shadow-2xl flex flex-col">
+        <div className="w-[380px] h-[600px] bg-white rounded-3xl shadow-2xl flex flex-col animate-fade-in">
 
-          <header className="p-5 bg-slate-900 text-white flex justify-between items-center">
+          <header className="p-5 bg-slate-900 text-white flex justify-between items-center rounded-t-3xl">
             <div className="flex items-center gap-3">
               <Sparkles size={20} />
               <h4 className="font-bold text-sm">Lumina AI Tutor</h4>
@@ -188,7 +206,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
           <div className="flex-1 p-5 overflow-y-auto bg-slate-50 space-y-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`p-4 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>
+                <div className={`p-4 rounded-2xl text-sm shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>
                   {msg.role === 'ai'
                     ? <MathPreview math={msg.text} />
                     : <p className="whitespace-pre-wrap">{msg.text}</p>}
@@ -196,14 +214,17 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
               </div>
             ))}
 
-            {loading && <Loader2 className="animate-spin" />}
+            {(loading || uploading) && (
+              <Loader2 className="animate-spin text-indigo-600" />
+            )}
+
             <div ref={chatEndRef} />
           </div>
 
           <div className="p-4 border-t flex gap-2">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-10 h-10 bg-slate-200 rounded-xl"
+              className="w-10 h-10 bg-slate-200 rounded-xl hover:bg-slate-300 transition"
             >
               <Paperclip size={16} />
             </button>
@@ -223,13 +244,13 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Nhập câu hỏi..."
-              className="flex-1 border rounded-xl px-4"
+              className="flex-1 border rounded-xl px-4 focus:ring-2 focus:ring-indigo-400"
             />
 
             <button
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="w-10 h-10 bg-indigo-600 text-white rounded-xl"
+              className="w-10 h-10 bg-indigo-600 text-white rounded-xl hover:scale-105 transition"
             >
               <Send size={16} />
             </button>
