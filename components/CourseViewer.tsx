@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Sparkles,
-  CheckCircle2,
-  XCircle,
   Trash2,
   Upload,
+  Loader2,
+  FileText,
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
@@ -17,6 +17,8 @@ interface Props {
   onBack: () => void;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   const lessons = useMemo(() => course.lessons ?? [], [course]);
 
@@ -26,9 +28,11 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
 
   const [quiz, setQuiz] = useState<any>(null);
   const [score, setScore] = useState<number | null>(null);
-  const [selectedAnswers, setSelectedAnswers] = useState<
-    Record<number, number>
-  >({});
+  const [selectedAnswers, setSelectedAnswers] =
+    useState<Record<number, number>>({});
+
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const activeLesson = lessons.find(
     (l: any) => l.id === activeLessonId
@@ -44,39 +48,55 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
      LƯU ĐIỂM VĨNH VIỄN
   ========================= */
   const saveResult = async (scoreValue: number) => {
-    const { data: user } =
-      await supabase.auth.getUser();
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data?.user) return;
 
-    if (!user?.user) return;
-
-    await supabase.from("quiz_results").insert({
-      lesson_id: activeLessonId,
-      user_id: user.user.id,
-      score: scoreValue,
-    });
+      await supabase.from("quiz_results").insert({
+        lesson_id: activeLessonId,
+        user_id: data.user.id,
+        score: scoreValue,
+      });
+    } catch (error) {
+      console.error("Save result error:", error);
+    }
   };
 
   /* =========================
-     SINH QUIZ
+     SINH QUIZ AI
   ========================= */
   const handleGenQuiz = async () => {
     if (!activeLesson) return;
 
-    const questions = await generateQuiz(
-      activeLesson.content
-    );
+    try {
+      setLoadingQuiz(true);
 
-    setQuiz({
-      title: activeLesson.title,
-      questions,
-    });
+      const questions = await generateQuiz(
+        activeLesson.content
+      );
+
+      if (!questions || questions.length === 0) {
+        alert("AI không tạo được câu hỏi.");
+        return;
+      }
+
+      setQuiz({
+        title: activeLesson.title,
+        questions,
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi tạo quiz.");
+    } finally {
+      setLoadingQuiz(false);
+    }
   };
 
   /* =========================
      NỘP BÀI
   ========================= */
   const submitQuiz = async () => {
-    if (!quiz) return;
+    if (!quiz || quiz.questions.length === 0) return;
 
     let correct = 0;
 
@@ -90,7 +110,6 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
     );
 
     setScore(finalScore);
-
     await saveResult(finalScore);
   };
 
@@ -100,27 +119,42 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   const handleUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    if (!e.target.files?.[0]) return;
+    if (!e.target.files?.[0] || !activeLesson)
+      return;
 
     const file = e.target.files[0];
 
-    const filePath = `lessons/${activeLessonId}/${file.name}`;
+    if (file.size > MAX_FILE_SIZE) {
+      alert("File quá lớn (tối đa 10MB)");
+      return;
+    }
 
-    await supabase.storage
-      .from("lesson-files")
-      .upload(filePath, file, {
-        upsert: true,
-      });
+    try {
+      setUploading(true);
 
-    const { data } = supabase.storage
-      .from("lesson-files")
-      .getPublicUrl(filePath);
+      const filePath = `lessons/${activeLessonId}/${Date.now()}-${file.name}`;
 
-    await supabase.from("lessons").update({
-      file_url: data.publicUrl,
-    }).eq("id", activeLessonId);
+      const { error } = await supabase.storage
+        .from("lesson-files")
+        .upload(filePath, file, { upsert: true });
 
-    alert("Upload thành công!");
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("lesson-files")
+        .getPublicUrl(filePath);
+
+      await supabase.from("lessons").update({
+        file_url: data.publicUrl,
+      }).eq("id", activeLessonId);
+
+      alert("Upload thành công!");
+    } catch (error) {
+      console.error(error);
+      alert("Upload thất bại");
+    } finally {
+      setUploading(false);
+    }
   };
 
   /* =========================
@@ -132,30 +166,39 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
     const confirmDelete = confirm(
       "Bạn có chắc muốn xóa file?"
     );
-
     if (!confirmDelete) return;
 
-    const path =
-      activeLesson.file_url.split(
+    try {
+      const url = new URL(activeLesson.file_url);
+      const path = url.pathname.split(
         "/lesson-files/"
       )[1];
 
-    await supabase.storage
-      .from("lesson-files")
-      .remove([path]);
+      await supabase.storage
+        .from("lesson-files")
+        .remove([path]);
 
-    await supabase.from("lessons")
-      .update({ file_url: null })
-      .eq("id", activeLessonId);
+      await supabase.from("lessons")
+        .update({ file_url: null })
+        .eq("id", activeLessonId);
 
-    alert("Đã xóa file");
+      alert("Đã xóa file");
+    } catch (error) {
+      console.error(error);
+      alert("Xóa thất bại");
+    }
   };
 
   return (
     <div className="flex gap-8">
-      <aside className="w-72">
-        <button onClick={onBack}>
-          <ChevronLeft /> Quay lại
+      {/* SIDEBAR */}
+      <aside className="w-72 space-y-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-indigo-600 font-semibold"
+        >
+          <ChevronLeft size={18} />
+          Quay lại
         </button>
 
         {lessons.map((l: any) => (
@@ -164,42 +207,63 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
             onClick={() =>
               setActiveLessonId(l.id)
             }
+            className={`block w-full text-left p-2 rounded-lg transition ${
+              l.id === activeLessonId
+                ? "bg-indigo-100 text-indigo-700"
+                : "hover:bg-slate-100"
+            }`}
           >
             {l.title}
           </button>
         ))}
       </aside>
 
-      <main className="flex-1">
+      {/* MAIN */}
+      <main className="flex-1 space-y-6">
         {activeLesson && (
           <>
-            <h2>{activeLesson.title}</h2>
+            <h2 className="text-2xl font-bold">
+              {activeLesson.title}
+            </h2>
 
+            {/* HIỂN THỊ CÔNG THỨC */}
             <MathPreview
               math={activeLesson.content}
             />
 
-            {/* FILE */}
-            <div className="mt-6">
+            {/* FILE SECTION */}
+            <div className="bg-slate-50 p-4 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 font-semibold">
+                <FileText size={18} />
+                Tài liệu
+              </div>
+
               <input
                 type="file"
                 accept=".pdf,.doc,.docx"
                 onChange={handleUpload}
               />
 
+              {uploading && (
+                <Loader2 className="animate-spin" />
+              )}
+
               {activeLesson.file_url && (
-                <div>
+                <div className="flex items-center gap-4">
                   <a
                     href={activeLesson.file_url}
                     target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-600 underline"
                   >
                     Xem file
                   </a>
 
                   <button
                     onClick={handleDeleteFile}
+                    className="text-red-500"
                   >
-                    <Trash2 />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               )}
@@ -207,19 +271,35 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
 
             {/* QUIZ */}
             {!quiz ? (
-              <button onClick={handleGenQuiz}>
-                <Sparkles />
-                Sinh đề
+              <button
+                onClick={handleGenQuiz}
+                disabled={loadingQuiz}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2"
+              >
+                {loadingQuiz ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Sparkles size={18} />
+                )}
+                Sinh đề AI
               </button>
             ) : (
-              <>
+              <div className="space-y-6">
                 {quiz.questions.map(
                   (q: any, i: number) => (
-                    <div key={i}>
-                      <p>{q.question}</p>
+                    <div
+                      key={i}
+                      className="p-4 border rounded-xl"
+                    >
+                      <p className="font-semibold mb-3">
+                        {q.question}
+                      </p>
 
                       {q.options.map(
-                        (opt: string, oi: number) => (
+                        (
+                          opt: string,
+                          oi: number
+                        ) => (
                           <button
                             key={oi}
                             onClick={() =>
@@ -230,6 +310,12 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
                                 })
                               )
                             }
+                            className={`block w-full text-left p-2 rounded-lg mb-2 ${
+                              selectedAnswers[i] ===
+                              oi
+                                ? "bg-indigo-100"
+                                : "hover:bg-slate-100"
+                            }`}
                           >
                             {opt}
                           </button>
@@ -240,15 +326,18 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
                 )}
 
                 {score === null ? (
-                  <button onClick={submitQuiz}>
+                  <button
+                    onClick={submitQuiz}
+                    className="bg-green-600 text-white px-4 py-2 rounded-xl"
+                  >
                     Nộp bài
                   </button>
                 ) : (
-                  <div>
+                  <div className="text-xl font-bold text-indigo-600">
                     Điểm: {score}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </>
         )}
