@@ -1,24 +1,13 @@
-import { db } from "./firebase";
-import {
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  collection,
-  query,
-  where,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { supabase } from "./supabaseClient";
 
 /* =====================================================
    TYPES
 ===================================================== */
-export type AccountType = "teachers" | "students";
+export type AccountType = "TEACHER" | "STUDENT";
 export type TeacherStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 /* =====================================================
-   SYNC SERVICE
+   SYNC SERVICE (SUPABASE)
 ===================================================== */
 export const SyncService = {
   /* =========================
@@ -34,24 +23,26 @@ export const SyncService = {
      Save / Update Account
   ========================= */
   saveAccount: async (
-    type: AccountType,
-    data: { username: string; [key: string]: any }
+    role: AccountType,
+    data: { username: string; full_name?: string }
   ): Promise<boolean> => {
     try {
       if (!data?.username) {
         throw new Error("Thiếu username khi lưu account");
       }
 
-      const docRef = doc(db, type, data.username);
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({
+          username: data.username,
+          full_name: data.full_name ?? "",
+          role,
+          status: role === "TEACHER" ? "PENDING" : "APPROVED",
+          updated_at: new Date().toISOString(),
+        })
+        .select();
 
-      await setDoc(
-        docRef,
-        {
-          ...data,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (error) throw error;
 
       return true;
     } catch (error) {
@@ -65,17 +56,15 @@ export const SyncService = {
   ========================= */
   getPendingTeachers: async (): Promise<any[]> => {
     try {
-      const q = query(
-        collection(db, "teachers"),
-        where("status", "==", "PENDING")
-      );
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("role", "TEACHER")
+        .eq("status", "PENDING");
 
-      const snapshot = await getDocs(q);
+      if (error) throw error;
 
-      return snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      return data ?? [];
     } catch (error) {
       console.error("❌ getPendingTeachers error:", error);
       return [];
@@ -92,12 +81,15 @@ export const SyncService = {
     try {
       if (!username) throw new Error("Thiếu username");
 
-      const docRef = doc(db, "teachers", username);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("username", username);
 
-      await updateDoc(docRef, {
-        status,
-        updatedAt: serverTimestamp(),
-      });
+      if (error) throw error;
 
       return true;
     } catch (error) {
@@ -113,17 +105,16 @@ export const SyncService = {
     try {
       if (!syncId) throw new Error("Thiếu syncId");
 
-      const docRef = doc(db, "app_sync", syncId);
-
-      await setDoc(
-        docRef,
-        {
+      const { error } = await supabase
+        .from("app_sync")
+        .upsert({
+          id: syncId,
           payload: data,
-          updatedAt: serverTimestamp(),
           source: "Vercel-App",
-        },
-        { merge: true }
-      );
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
 
       return true;
     } catch (error) {
@@ -139,12 +130,15 @@ export const SyncService = {
     try {
       if (!syncId) throw new Error("Thiếu syncId");
 
-      const docRef = doc(db, "app_sync", syncId);
-      const snapshot = await getDoc(docRef);
+      const { data, error } = await supabase
+        .from("app_sync")
+        .select("payload")
+        .eq("id", syncId)
+        .single();
 
-      if (!snapshot.exists()) return null;
+      if (error) return null;
 
-      return snapshot.data()?.payload ?? null;
+      return data?.payload ?? null;
     } catch (error) {
       console.error("❌ pullData error:", error);
       return null;
