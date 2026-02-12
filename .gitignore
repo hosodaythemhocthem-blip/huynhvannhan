@@ -8,7 +8,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-firebase-debug.log*
 
 # ======================
 # DEPENDENCIES
@@ -20,6 +19,7 @@ node_modules/
 # ======================
 dist/
 dist-ssr/
+build/
 .vercel/
 
 # ======================
@@ -30,13 +30,18 @@ dist-ssr/
 *.local
 
 # ======================
+# SUPABASE
+# ======================
+.supabase/
+.supabase-cache/
+
+# ======================
 # CACHE / TEMP
 # ======================
 .cache/
 .eslintcache
 .vite/
 *.tsbuildinfo
-.firestore/
 
 # ======================
 # EDITORS
@@ -58,8 +63,16 @@ coverage/
 *.lcov
 
 # ======================
-# AI / EXPORT FILES
+# UPLOADED FILES (AI / EXPORT)
 # ======================
+uploads/
+exports/
 *.pdf
+*.doc
 *.docx
 *.xlsx
+
+# ======================
+# OS FILES
+# ======================
+Thumbs.db
