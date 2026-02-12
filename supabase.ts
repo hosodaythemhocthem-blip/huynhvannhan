@@ -1,29 +1,29 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = "YOUR_SUPABASE_URL";
-const supabaseAnonKey = "YOUR_PUBLIC_ANON_KEY";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default supabase;
 
-/* =============================
-   Upload File
-============================= */
+/* ===============================
+   STORAGE - Upload / Delete file
+================================= */
+
+const BUCKET = "exam-files";
+
 export const uploadExamFile = async (file: File) => {
   const fileName = `${Date.now()}-${file.name}`;
 
   const { error } = await supabase.storage
-    .from("exam-files")
+    .from(BUCKET)
     .upload(fileName, file);
 
-  if (error) {
-    alert(error.message);
-    return null;
-  }
+  if (error) throw error;
 
   const { data } = supabase.storage
-    .from("exam-files")
+    .from(BUCKET)
     .getPublicUrl(fileName);
 
   return {
@@ -32,11 +32,6 @@ export const uploadExamFile = async (file: File) => {
   };
 };
 
-/* =============================
-   Delete File
-============================= */
 export const deleteExamFile = async (fileName: string) => {
-  await supabase.storage
-    .from("exam-files")
-    .remove([fileName]);
+  await supabase.storage.from(BUCKET).remove([fileName]);
 };
