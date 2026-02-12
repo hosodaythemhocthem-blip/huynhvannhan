@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import supabase, { uploadExamFile, deleteExamFile } from "./supabase";
-import { BlockMath } from "react-katex";
+import { supabase, uploadExamFile, deleteExamFile } from "./supabase";
+import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
 
 interface Exam {
@@ -20,20 +20,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
-  /* ================= LOAD DATA ================= */
+  /* ================= LOAD ================= */
 
   const loadData = async () => {
-    const { data, error } = await supabase
-      .from("exams")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("exams")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Load error:", error.message);
-      return;
+      if (error) throw error;
+
+      setExams(data || []);
+    } catch (err) {
+      console.error("Load error:", err);
     }
-
-    setExams(data || []);
   };
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function App() {
 
       if (file) {
         const uploaded = await uploadExamFile(file);
-
         if (!uploaded) throw new Error("Upload thất bại");
 
         fileUrl = uploaded.url;
@@ -61,33 +61,24 @@ export default function App() {
       }
 
       if (editingExam) {
-        const { error } = await supabase
+        await supabase
           .from("exams")
-          .update({
-            title,
-            content,
-            file_url: fileUrl,
-            file_name: fileName,
-          })
+          .update({ title, content, file_url: fileUrl, file_name: fileName })
           .eq("id", editingExam.id);
-
-        if (error) throw error;
       } else {
-        const { error } = await supabase.from("exams").insert({
+        await supabase.from("exams").insert({
           title,
           content,
           file_url: fileUrl,
           file_name: fileName,
         });
-
-        if (error) throw error;
       }
 
       await loadData();
       resetForm();
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      alert("Lỗi khi lưu dữ liệu");
+      alert("Lỗi khi lưu");
     } finally {
       setLoading(false);
     }
@@ -103,13 +94,7 @@ export default function App() {
         await deleteExamFile(exam.file_name);
       }
 
-      const { error } = await supabase
-        .from("exams")
-        .delete()
-        .eq("id", exam.id);
-
-      if (error) throw error;
-
+      await supabase.from("exams").delete().eq("id", exam.id);
       await loadData();
     } catch (err) {
       console.error(err);
@@ -135,19 +120,27 @@ export default function App() {
   /* ================= RENDER MATH ================= */
 
   const renderMath = (text: string) => {
-    try {
-      const blocks = text.split("$$");
+    const parts = text.split(/(\$\$.*?\$\$|\$.*?\$)/g);
 
-      return blocks.map((block, index) =>
-        index % 2 === 1 ? (
-          <BlockMath key={index} math={block} />
-        ) : (
-          <span key={index}>{block}</span>
-        )
-      );
-    } catch {
-      return <span>{text}</span>;
-    }
+    return parts.map((part, index) => {
+      if (part.startsWith("$$")) {
+        return (
+          <div key={index} className="my-4">
+            <BlockMath>{part.replace(/\$\$/g, "")}</BlockMath>
+          </div>
+        );
+      }
+
+      if (part.startsWith("$")) {
+        return (
+          <InlineMath key={index}>
+            {part.replace(/\$/g, "")}
+          </InlineMath>
+        );
+      }
+
+      return <span key={index}>{part}</span>;
+    });
   };
 
   /* ================= UI ================= */
@@ -158,12 +151,12 @@ export default function App() {
 
         <div className="bg-white p-8 rounded-3xl shadow-xl space-y-5">
           <h2 className="text-3xl font-bold text-indigo-600">
-            🚀 Quản lý đề thi Supabase PRO
+            🚀 LMS Supabase PRO
           </h2>
 
           <input
             className="w-full border p-4 rounded-xl"
-            placeholder="Tiêu đề đề"
+            placeholder="Tiêu đề"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -186,7 +179,7 @@ export default function App() {
             <button
               onClick={handleSave}
               disabled={loading}
-              className="bg-indigo-600 text-white px-6 py-3 rounded-xl"
+              className="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:scale-105 transition"
             >
               {loading ? "Đang lưu..." : "💾 Lưu"}
             </button>
@@ -216,21 +209,10 @@ export default function App() {
             )}
 
             {exam.file_url && (
-              exam.file_url.endsWith(".pdf") ? (
-                <iframe
-                  src={exam.file_url}
-                  className="w-full h-[600px] rounded-xl border"
-                />
-              ) : (
-                <a
-                  href={exam.file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-600 underline"
-                >
-                  📄 Tải file Word
-                </a>
-              )
+              <iframe
+                src={exam.file_url}
+                className="w-full h-[600px] rounded-xl border"
+              />
             )}
 
             <div className="flex gap-4">
