@@ -9,7 +9,7 @@ import "./index.css";
  * Nguyên tắc:
  * - Chỉ render App
  * - Không chứa business logic
- * - Không init Firebase / AI / API
+ * - Không init Supabase / API
  * - StrictMode để bắt lỗi lifecycle & side-effect sớm (DEV)
  */
 
@@ -19,10 +19,23 @@ if (!rootElement) {
   throw new Error("❌ Không tìm thấy phần tử #root trong index.html");
 }
 
-const root = ReactDOM.createRoot(rootElement);
+// 🔥 Bọc thêm Error Boundary nhẹ để tránh trắng trang
+const RootApp = () => {
+  try {
+    return <App />;
+  } catch (error) {
+    console.error("Lỗi render App:", error);
+    return (
+      <div style={{ padding: 40 }}>
+        <h1>LMS gặp lỗi render ⚠</h1>
+        <p>Kiểm tra console để xem chi tiết.</p>
+      </div>
+    );
+  }
+};
 
-root.render(
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <RootApp />
   </React.StrictMode>
 );
