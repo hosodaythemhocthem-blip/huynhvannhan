@@ -1,9 +1,10 @@
-import { supabase } from "../supabaseClient";
+import { supabase } from "../supabase";
 import { UserRole, AccountStatus } from "../types";
 
-/* =========================
+/* =====================================================
    TYPES
-========================= */
+===================================================== */
+
 export interface AppUser {
   uid: string;
   email: string;
@@ -11,30 +12,25 @@ export interface AppUser {
   status?: AccountStatus;
 }
 
-/* =========================
-   ⚠️ ADMIN LOCAL (DEV ONLY)
-========================= */
-const ADMIN_ACCOUNT = {
-  email: "huynhvannhan",
-  password: "huynhvannhan2020",
-};
-
-const isAdminLogin = (email: string, password: string) =>
-  email === ADMIN_ACCOUNT.email &&
-  password === ADMIN_ACCOUNT.password;
-
-/* =========================
+/* =====================================================
    INTERNAL ERROR HELPER
-========================= */
-const authError = (code: string) => {
-  const err = new Error(code);
-  (err as any).code = code;
-  return err;
-};
+===================================================== */
 
-/* =========================
+class AuthError extends Error {
+  code: string;
+
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
+const authError = (code: string) => new AuthError(code);
+
+/* =====================================================
    MAP SUPABASE USER → APP USER
-========================= */
+===================================================== */
+
 const mapSupabaseUser = async (userId: string): Promise<AppUser> => {
   const { data, error } = await supabase
     .from("users")
@@ -65,24 +61,14 @@ const mapSupabaseUser = async (userId: string): Promise<AppUser> => {
   };
 };
 
-/* =========================
+/* =====================================================
    LOGIN
-========================= */
+===================================================== */
+
 export const login = async (
   email: string,
   password: string
 ): Promise<AppUser> => {
-  /* ===== ADMIN LOCAL ===== */
-  if (isAdminLogin(email, password)) {
-    localStorage.setItem("ADMIN_LOGIN", "true");
-    return {
-      uid: "ADMIN",
-      email,
-      role: UserRole.ADMIN,
-    };
-  }
-
-  /* ===== SUPABASE AUTH ===== */
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -95,9 +81,10 @@ export const login = async (
   return await mapSupabaseUser(data.user.id);
 };
 
-/* =========================
+/* =====================================================
    REGISTER BASE
-========================= */
+===================================================== */
+
 export const register = async (
   email: string,
   password: string,
@@ -129,9 +116,10 @@ export const register = async (
   }
 };
 
-/* =========================
+/* =====================================================
    REGISTER HELPERS
-========================= */
+===================================================== */
+
 export const registerTeacher = (
   email: string,
   password: string
@@ -142,23 +130,29 @@ export const registerStudent = (
   password: string
 ) => register(email, password, UserRole.STUDENT);
 
-/* =========================
+/* =====================================================
+   GET CURRENT USER (SAFE)
+===================================================== */
+
+export const getCurrentUser = async (): Promise<AppUser | null> => {
+  const { data } = await supabase.auth.getSession();
+
+  if (!data.session?.user) return null;
+
+  try {
+    return await mapSupabaseUser(data.session.user.id);
+  } catch {
+    return null;
+  }
+};
+
+/* =====================================================
    OBSERVE AUTH STATE
-========================= */
+===================================================== */
+
 export const observeAuth = (
   callback: (user: AppUser | null) => void
 ) => {
-  /* ===== ADMIN SESSION ===== */
-  if (localStorage.getItem("ADMIN_LOGIN") === "true") {
-    callback({
-      uid: "ADMIN",
-      email: ADMIN_ACCOUNT.email,
-      role: UserRole.ADMIN,
-    });
-    return () => {};
-  }
-
-  /* ===== SUPABASE SESSION ===== */
   const { data: listener } = supabase.auth.onAuthStateChange(
     async (_event, session) => {
       if (!session?.user) {
@@ -169,7 +163,7 @@ export const observeAuth = (
       try {
         const user = await mapSupabaseUser(session.user.id);
         callback(user);
-      } catch (err) {
+      } catch {
         await supabase.auth.signOut();
         callback(null);
       }
@@ -181,10 +175,10 @@ export const observeAuth = (
   };
 };
 
-/* =========================
+/* =====================================================
    LOGOUT
-========================= */
+===================================================== */
+
 export const logout = async () => {
-  localStorage.removeItem("ADMIN_LOGIN");
   await supabase.auth.signOut();
 };
