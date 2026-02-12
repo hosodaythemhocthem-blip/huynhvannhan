@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Clock,
   FileText,
@@ -9,20 +9,25 @@ import {
   Trash2,
   Users,
   Calendar,
-  Upload,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { Exam } from "../types";
-import { uploadExamFile, deleteExamFile } from "../services/examService";
+import {
+  uploadExamFile,
+  deleteExamFile,
+} from "../services/examService";
 
 interface ExamCardProps {
   exam: Exam;
   onView?: (exam: Exam) => void;
   onEdit?: (exam: Exam) => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: string) => Promise<void>;
   onToggleLock?: (exam: Exam) => void;
   onAssign?: (exam: Exam) => void;
 }
+
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
 const ExamCard: React.FC<ExamCardProps> = ({
   exam,
@@ -33,6 +38,8 @@ const ExamCard: React.FC<ExamCardProps> = ({
   onAssign,
 }) => {
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formattedDate = useMemo(() => {
     if (!exam.createdAt) return "N/A";
@@ -43,19 +50,22 @@ const ExamCard: React.FC<ExamCardProps> = ({
     exam.assignedClassIds?.length ?? 0;
 
   /* =========================
-     DELETE
+     DELETE EXAM
   ========================= */
   const handleDelete = async () => {
-    if (!onDelete) return;
+    if (!onDelete || loading) return;
 
-    const confirmDelete = confirm(
-      "⚠️ Bạn có chắc muốn xóa đề thi này?"
-    );
-    if (!confirmDelete) return;
+    if (!window.confirm("⚠️ Xóa đề thi vĩnh viễn?")) return;
 
-    setLoading(true);
-    await onDelete(exam.id);
-    setLoading(false);
+    try {
+      setLoading(true);
+      await onDelete(exam.id);
+    } catch (err) {
+      console.error(err);
+      alert("Xóa thất bại");
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* =========================
@@ -66,36 +76,63 @@ const ExamCard: React.FC<ExamCardProps> = ({
   ) => {
     if (!e.target.files?.[0]) return;
 
-    setLoading(true);
-    await uploadExamFile(e.target.files[0], exam.id);
-    setLoading(false);
+    const file = e.target.files[0];
 
-    alert("Upload thành công!");
+    if (
+      ![
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ].includes(file.type)
+    ) {
+      alert("Chỉ hỗ trợ PDF, DOC, DOCX");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      alert("File vượt quá 15MB");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      await uploadExamFile(file, exam.id);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      alert("Upload thành công");
+    } catch (error) {
+      console.error(error);
+      alert("Upload thất bại");
+    } finally {
+      setUploading(false);
+    }
   };
 
   /* =========================
      DELETE FILE
   ========================= */
   const handleDeleteFile = async () => {
-    if (!exam.file_url) return;
+    if (!exam.file_url || uploading) return;
 
-    const confirmDelete = confirm(
-      "Xóa file đề thi?"
-    );
-    if (!confirmDelete) return;
+    if (!window.confirm("Xóa file đề thi?")) return;
 
-    setLoading(true);
-    await deleteExamFile(
-      exam.id,
-      exam.file_url
-    );
-    setLoading(false);
-
-    alert("Đã xóa file");
+    try {
+      setUploading(true);
+      await deleteExamFile(exam.id, exam.file_url);
+      alert("Đã xóa file");
+    } catch (error) {
+      console.error(error);
+      alert("Xóa thất bại");
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
-    <div className="group bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-2xl transition-all duration-300 flex flex-col justify-between h-full relative">
+    <div className="group bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between h-full relative">
 
       {/* HEADER */}
       <div className="flex justify-between items-start mb-4">
@@ -103,15 +140,15 @@ const ExamCard: React.FC<ExamCardProps> = ({
           <span
             className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
               exam.isLocked
-                ? "bg-red-50 text-red-600"
-                : "bg-emerald-50 text-emerald-600"
+                ? "bg-red-50 text-red-600 border-red-200"
+                : "bg-emerald-50 text-emerald-600 border-emerald-200"
             }`}
           >
             {exam.isLocked ? "Đã khóa" : "Đang mở"}
           </span>
 
           <h3
-            className="font-bold text-lg text-slate-800 hover:text-indigo-600 cursor-pointer mt-2"
+            className="font-bold text-lg text-slate-800 hover:text-indigo-600 cursor-pointer mt-2 transition-colors"
             onClick={() => onView?.(exam)}
           >
             {exam.title}
@@ -143,20 +180,29 @@ const ExamCard: React.FC<ExamCardProps> = ({
       </div>
 
       {/* FILE */}
-      <div className="mb-4 space-y-2">
-        <input
-          type="file"
-          accept=".pdf,.doc,.docx"
-          onChange={handleUpload}
-          className="text-xs"
-        />
+      <div className="mb-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={handleUpload}
+            disabled={uploading}
+            className="text-xs"
+          />
+
+          {uploading && (
+            <Loader2 className="animate-spin text-indigo-600" size={16} />
+          )}
+        </div>
 
         {exam.file_url && (
           <div className="flex items-center gap-3 text-xs">
             <a
               href={exam.file_url}
               target="_blank"
-              className="text-indigo-600 flex items-center gap-1"
+              rel="noopener noreferrer"
+              className="text-indigo-600 flex items-center gap-1 hover:underline"
             >
               <ExternalLink size={14} />
               Xem file
@@ -164,7 +210,8 @@ const ExamCard: React.FC<ExamCardProps> = ({
 
             <button
               onClick={handleDeleteFile}
-              className="text-red-500"
+              disabled={uploading}
+              className="text-red-500 hover:text-red-700 transition"
             >
               <Trash2 size={14} />
             </button>
@@ -176,20 +223,30 @@ const ExamCard: React.FC<ExamCardProps> = ({
       <div className="flex gap-2 border-t pt-3 mt-auto">
         <button
           onClick={() => onView?.(exam)}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold"
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95"
         >
           <Play size={14} />
+          Vào thi
         </button>
 
-        <button onClick={() => onAssign?.(exam)}>
+        <button
+          onClick={() => onAssign?.(exam)}
+          className="p-2 rounded-lg hover:bg-slate-100 transition"
+        >
           <Users size={16} />
         </button>
 
-        <button onClick={() => onEdit?.(exam)}>
+        <button
+          onClick={() => onEdit?.(exam)}
+          className="p-2 rounded-lg hover:bg-slate-100 transition"
+        >
           <Edit3 size={16} />
         </button>
 
-        <button onClick={() => onToggleLock?.(exam)}>
+        <button
+          onClick={() => onToggleLock?.(exam)}
+          className="p-2 rounded-lg hover:bg-slate-100 transition"
+        >
           {exam.isLocked ? (
             <Unlock size={16} />
           ) : (
@@ -197,9 +254,13 @@ const ExamCard: React.FC<ExamCardProps> = ({
           )}
         </button>
 
-        <button onClick={handleDelete}>
+        <button
+          onClick={handleDelete}
+          disabled={loading}
+          className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition disabled:opacity-50"
+        >
           {loading ? (
-            <div className="animate-spin h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full" />
+            <Loader2 className="animate-spin" size={16} />
           ) : (
             <Trash2 size={16} />
           )}
