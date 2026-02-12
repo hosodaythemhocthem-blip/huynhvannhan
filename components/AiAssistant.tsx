@@ -14,12 +14,14 @@ import { askGemini } from "../services/geminiService";
 import MathPreview from "./MathPreview";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
+import { supabase } from "../supabase";
 import {
   saveMessage,
   fetchMessages,
   clearMessages,
   deleteMessage,
-  initConversation
+  initConversation,
+  getConversationId
 } from "../services/chatService";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -50,6 +52,8 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const sendingRef = useRef(false);
+
   /* INIT */
   useEffect(() => {
     const load = async () => {
@@ -70,25 +74,24 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     load();
   }, []);
 
-  /* AUTO SCROLL */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  /* DELETE SINGLE */
+  /* DELETE */
   const handleDeleteMessage = async (id?: string) => {
     if (!id) return;
     await deleteMessage(id);
     setMessages(prev => prev.filter(m => m.id !== id));
   };
 
-  /* CLEAR ALL */
+  /* CLEAR */
   const handleClear = async () => {
     await clearMessages();
     setMessages([]);
   };
 
-  /* FILE TEXT EXTRACTION */
+  /* FILE TEXT */
   const extractText = async (file: File): Promise<string> => {
 
     if (file.size > MAX_FILE_SIZE) {
@@ -101,11 +104,18 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       const buffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        text += content.items.map((item: any) => item.str).join(" ") + "\n";
-      }
+      const pages = await Promise.all(
+        Array.from({ length: pdf.numPages }, (_, i) => pdf.getPage(i + 1))
+      );
+
+      const pageTexts = await Promise.all(
+        pages.map(async page => {
+          const content = await page.getTextContent();
+          return content.items.map((item: any) => item.str).join(" ");
+        })
+      );
+
+      text = pageTexts.join("\n");
     }
 
     else if (file.type.includes("wordprocessingml")) {
@@ -121,13 +131,29 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     return text;
   };
 
-  /* SPLIT LARGE TEXT */
   const splitChunks = (text: string) => {
     const chunks: string[] = [];
     for (let i = 0; i < text.length; i += CHUNK_SIZE) {
       chunks.push(text.slice(i, i + CHUNK_SIZE));
     }
     return chunks;
+  };
+
+  /* UPLOAD FILE TO STORAGE */
+  const uploadToStorage = async (file: File) => {
+
+    const user = await supabase.auth.getUser();
+    if (!user.data.user) throw new Error("Chưa đăng nhập");
+
+    const path = `ai_uploads/${user.data.user.id}/${Date.now()}_${file.name}`;
+
+    const { error } = await supabase.storage
+      .from("exam-files")
+      .upload(path, file);
+
+    if (error) throw error;
+
+    return path;
   };
 
   /* HANDLE FILE */
@@ -137,17 +163,18 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setFileName(file.name);
 
     try {
+
+      const storagePath = await uploadToStorage(file);
       const fullText = await extractText(file);
       const chunks = splitChunks(fullText);
 
-      let finalAnswer = "";
+      const replies = await Promise.all(
+        chunks.map(chunk =>
+          askGemini(`Phân tích và giải chi tiết đề sau:\n\n${chunk}`)
+        )
+      );
 
-      for (const chunk of chunks) {
-        const reply = await askGemini(
-          `Phân tích và giải chi tiết đề sau:\n\n${chunk}`
-        );
-        finalAnswer += reply + "\n";
-      }
+      const finalAnswer = replies.join("\n");
 
       const newMessages: Message[] = [
         { role: "user", text: `📎 ${file.name}` },
@@ -155,6 +182,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       ];
 
       setMessages(prev => [...prev, ...newMessages]);
+
       await Promise.all(
         newMessages.map(m => saveMessage(m.role, m.text))
       );
@@ -169,7 +197,9 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   /* SEND */
   const handleSend = async () => {
 
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || sendingRef.current) return;
+
+    sendingRef.current = true;
 
     const userMsg = input.trim();
     setInput("");
@@ -200,14 +230,15 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       alert("AI lỗi. Thử lại.");
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
   };
 
-  /* RETRY LAST */
   const handleRetry = async () => {
     const lastUser = [...messages].reverse().find(m => m.role === "user");
     if (!lastUser) return;
     setInput(lastUser.text);
+    await handleSend();
   };
 
   return (
