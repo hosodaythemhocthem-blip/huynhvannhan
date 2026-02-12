@@ -1,4 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, {
+  useMemo,
+  useState,
+  useCallback,
+  useDeferredValue,
+  memo,
+} from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
 
 interface TableProps<T> {
@@ -8,87 +14,136 @@ interface TableProps<T> {
   searchable?: boolean;
   pagination?: boolean;
   itemsPerPage?: number;
+  className?: string;
+  emptyText?: string;
 }
 
-export function Table<T extends { id?: string | number }>({
+type SortState = {
+  index: number | null;
+  asc: boolean;
+};
+
+function safeValue(value: unknown): string | number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return value.toLowerCase();
+  if (value instanceof Date) return value.getTime();
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value).toLowerCase();
+}
+
+function InternalTable<T extends { id?: string | number }>({
   headers,
   data,
   renderRow,
   searchable = true,
   pagination = true,
-  itemsPerPage = 10
+  itemsPerPage = 10,
+  className = "",
+  emptyText = "Không có dữ liệu",
 }: TableProps<T>) {
-  const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortIndex, setSortIndex] = useState<number | null>(null);
-  const [sortAsc, setSortAsc] = useState(true);
+  const [search, setSearch] = useState<string>("");
+  const deferredSearch = useDeferredValue(search);
 
-  /* SEARCH */
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [sortState, setSortState] = useState<SortState>({
+    index: null,
+    asc: true,
+  });
+
+  /* ================= SEARCH ================= */
+
   const filteredData = useMemo(() => {
-    if (!search) return data;
+    if (!deferredSearch.trim()) return data;
 
-    return data.filter(item =>
-      JSON.stringify(item)
-        .toLowerCase()
-        .includes(search.toLowerCase())
+    const lower = deferredSearch.toLowerCase();
+
+    return data.filter((item) =>
+      Object.values(item as Record<string, unknown>)
+        .map((v) => safeValue(v).toString())
+        .join(" ")
+        .includes(lower)
     );
-  }, [data, search]);
+  }, [data, deferredSearch]);
 
-  /* SORT */
+  /* ================= SORT ================= */
+
   const sortedData = useMemo(() => {
-    if (sortIndex === null) return filteredData;
+    if (sortState.index === null) return filteredData;
 
-    return [...filteredData].sort((a: any, b: any) => {
-      const aVal = Object.values(a)[sortIndex];
-      const bVal = Object.values(b)[sortIndex];
+    return [...filteredData].sort((a, b) => {
+      const aVal = safeValue(
+        Object.values(a as Record<string, unknown>)[sortState.index!]
+      );
+      const bVal = safeValue(
+        Object.values(b as Record<string, unknown>)[sortState.index!]
+      );
 
-      if (aVal < bVal) return sortAsc ? -1 : 1;
-      if (aVal > bVal) return sortAsc ? 1 : -1;
+      if (aVal < bVal) return sortState.asc ? -1 : 1;
+      if (aVal > bVal) return sortState.asc ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortIndex, sortAsc]);
+  }, [filteredData, sortState]);
 
-  /* PAGINATION */
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  /* ================= PAGINATION ================= */
+
+  const totalPages = useMemo(() => {
+    return pagination
+      ? Math.max(1, Math.ceil(sortedData.length / itemsPerPage))
+      : 1;
+  }, [sortedData.length, pagination, itemsPerPage]);
 
   const paginatedData = useMemo(() => {
     if (!pagination) return sortedData;
 
     const start = (currentPage - 1) * itemsPerPage;
     return sortedData.slice(start, start + itemsPerPage);
-  }, [sortedData, currentPage]);
+  }, [sortedData, currentPage, pagination, itemsPerPage]);
 
-  const handleSort = (index: number) => {
-    if (sortIndex === index) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortIndex(index);
-      setSortAsc(true);
-    }
-  };
+  /* ================= HANDLERS ================= */
+
+  const handleSort = useCallback((index: number) => {
+    setSortState((prev) => {
+      if (prev.index === index) {
+        return { index, asc: !prev.asc };
+      }
+      return { index, asc: true };
+    });
+  }, []);
+
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearch(e.target.value);
+      setCurrentPage(1);
+    },
+    []
+  );
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  /* ================= RENDER ================= */
 
   return (
-    <div className="space-y-4">
-
-      {/* SEARCH */}
+    <div className={`space-y-4 ${className}`}>
       {searchable && (
         <div className="relative w-64">
-          <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+          <Search
+            className="absolute left-3 top-2.5 text-slate-400"
+            size={16}
+          />
           <input
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={handleSearchChange}
             placeholder="Tìm kiếm..."
-            className="pl-9 pr-3 py-2 border rounded-xl text-sm w-full"
+            className="pl-9 pr-3 py-2 border rounded-xl text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
           />
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50 sticky top-0">
+          <thead className="bg-slate-50 sticky top-0 z-10">
             <tr>
               {headers.map((header, i) => (
                 <th
@@ -98,10 +153,12 @@ export function Table<T extends { id?: string | number }>({
                 >
                   <div className="flex items-center gap-1">
                     {header}
-                    {sortIndex === i &&
-                      (sortAsc
-                        ? <ChevronUp size={14} />
-                        : <ChevronDown size={14} />)}
+                    {sortState.index === i &&
+                      (sortState.asc ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      ))}
                   </div>
                 </th>
               ))}
@@ -112,8 +169,8 @@ export function Table<T extends { id?: string | number }>({
             {paginatedData.length > 0 ? (
               paginatedData.map((item, index) => (
                 <tr
-                  key={item.id ?? index}
-                  className="hover:bg-slate-50 transition"
+                  key={item.id ?? `${index}-${currentPage}`}
+                  className="hover:bg-slate-50 transition-colors"
                 >
                   {renderRow(item, index)}
                 </tr>
@@ -124,7 +181,7 @@ export function Table<T extends { id?: string | number }>({
                   colSpan={headers.length}
                   className="px-6 py-12 text-center text-sm text-slate-400"
                 >
-                  Không có dữ liệu
+                  {emptyText}
                 </td>
               </tr>
             )}
@@ -132,24 +189,30 @@ export function Table<T extends { id?: string | number }>({
         </table>
       </div>
 
-      {/* PAGINATION */}
       {pagination && totalPages > 1 && (
-        <div className="flex justify-center gap-2 text-sm">
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1 rounded-lg border ${
-                currentPage === i + 1
-                  ? "bg-indigo-600 text-white"
-                  : "bg-white"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
+        <div className="flex justify-center gap-2 text-sm flex-wrap">
+          {Array.from({ length: totalPages }).map((_, i) => {
+            const page = i + 1;
+            const active = page === currentPage;
+
+            return (
+              <button
+                key={page}
+                onClick={() => handlePageChange(page)}
+                className={`px-3 py-1 rounded-lg border transition ${
+                  active
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white hover:bg-slate-50"
+                }`}
+              >
+                {page}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
+
+export const Table = memo(InternalTable) as typeof InternalTable;
