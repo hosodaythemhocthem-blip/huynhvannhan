@@ -1,19 +1,30 @@
 import { useEffect, useState } from "react";
-import { BlockMath, InlineMath } from "react-katex";
-import "katex/dist/katex.min.css";
-
 import supabase, {
   uploadExamFile,
   deleteExamFile,
 } from "./supabase";
 
+import { BlockMath, InlineMath } from "react-katex";
+import "katex/dist/katex.min.css";
+
+interface Exam {
+  id: string;
+  title: string;
+  content: string;
+  file_url: string | null;
+  file_name: string | null;
+  created_at: string;
+}
+
 export default function App() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [exams, setExams] = useState<any[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  /* ================= LOAD DATA ================= */
 
   const loadData = async () => {
     const { data } = await supabase
@@ -41,12 +52,7 @@ export default function App() {
     };
   }, []);
 
-  const resetForm = () => {
-    setTitle("");
-    setContent("");
-    setFile(null);
-    setEditingId(null);
-  };
+  /* ================= SAVE ================= */
 
   const handleSave = async () => {
     if (!title) return alert("Nhập tiêu đề");
@@ -82,7 +88,11 @@ export default function App() {
     setLoading(false);
   };
 
-  const handleDelete = async (exam: any) => {
+  /* ================= DELETE ================= */
+
+  const handleDelete = async (exam: Exam) => {
+    if (!confirm("Xác nhận xóa?")) return;
+
     if (exam.file_name) {
       await deleteExamFile(exam.file_name);
     }
@@ -90,20 +100,45 @@ export default function App() {
     await supabase.from("exams").delete().eq("id", exam.id);
   };
 
-  const handleEdit = (exam: any) => {
+  /* ================= EDIT ================= */
+
+  const handleEdit = (exam: Exam) => {
     setTitle(exam.title);
     setContent(exam.content);
     setEditingId(exam.id);
   };
 
+  const resetForm = () => {
+    setTitle("");
+    setContent("");
+    setFile(null);
+    setEditingId(null);
+  };
+
+  /* ================= RENDER MATH ================= */
+
+  const renderMath = (text: string) => {
+    const blocks = text.split("$$");
+
+    return blocks.map((block, index) =>
+      index % 2 === 1 ? (
+        <BlockMath key={index} math={block} />
+      ) : (
+        <span key={index}>{block}</span>
+      )
+    );
+  };
+
+  /* ================= UI ================= */
+
   return (
-    <div className="min-h-screen bg-slate-100 p-10">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-slate-100 p-10">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* FORM */}
-        <div className="bg-white p-8 rounded-3xl shadow-lg space-y-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl space-y-5">
           <h2 className="text-3xl font-bold text-indigo-600">
-            🚀 Quản lý đề thi Supabase
+            🚀 Quản lý đề thi Supabase PRO
           </h2>
 
           <input
@@ -116,7 +151,7 @@ export default function App() {
           <textarea
             className="w-full border p-4 rounded-xl"
             rows={4}
-            placeholder="Ví dụ: $$x^2 + y^2 = z^2$$"
+            placeholder="Viết công thức như: $$x^2 + y^2 = z^2$$"
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
@@ -160,23 +195,17 @@ export default function App() {
             </h3>
 
             {exam.content && (
-              <div className="bg-slate-50 p-4 rounded-xl">
-                {exam.content.includes("$$") ? (
-                  <BlockMath
-                    math={exam.content.replace(/\$\$/g, "")}
-                  />
-                ) : (
-                  <p>{exam.content}</p>
-                )}
+              <div className="bg-slate-50 p-4 rounded-xl text-lg">
+                {renderMath(exam.content)}
               </div>
             )}
 
             {exam.file_url && (
-              <div className="space-y-2">
+              <div>
                 {exam.file_url.endsWith(".pdf") ? (
                   <iframe
                     src={exam.file_url}
-                    className="w-full h-[500px] rounded-xl border"
+                    className="w-full h-[600px] rounded-xl border"
                   />
                 ) : (
                   <a
