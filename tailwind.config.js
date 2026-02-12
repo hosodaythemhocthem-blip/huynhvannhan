@@ -1,15 +1,18 @@
+import typography from "@tailwindcss/typography";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./App.{js,ts,jsx,tsx}",
+    "./main.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./services/**/*.{js,ts,jsx,tsx}",
   ],
 
   theme: {
     extend: {
-      /* ==================================================
-         COLOR SYSTEM – PREMIUM LMS + EDU
-      ================================================== */
       colors: {
         primary: {
           50: "#f5f7ff",
@@ -18,10 +21,10 @@ export default {
           950: "#161a4f",
         },
 
-        secondary: "#16a34a", // green-600
-        danger: "#dc2626",    // red-600
-        warning: "#f59e0b",   // amber-500
-        info: "#0ea5e9",      // sky-500
+        secondary: "#16a34a",
+        danger: "#dc2626",
+        warning: "#f59e0b",
+        info: "#0ea5e9",
 
         slate: {
           50: "#f8fafc",
@@ -30,9 +33,6 @@ export default {
         },
       },
 
-      /* ==================================================
-         FONT SYSTEM
-      ================================================== */
       fontFamily: {
         sans: [
           '"Plus Jakarta Sans"',
@@ -47,15 +47,11 @@ export default {
         ],
       },
 
-      /* ==================================================
-         CARD / DASHBOARD / PREMIUM UI
-      ================================================== */
       boxShadow: {
         card: "0 4px 20px rgba(0,0,0,0.08)",
         soft: "0 2px 8px rgba(0,0,0,0.06)",
         premium: "0 20px 50px rgba(0,0,0,0.05)",
-        "premium-hover":
-          "0 30px 60px rgba(99,102,241,0.12)",
+        "premium-hover": "0 30px 60px rgba(99,102,241,0.12)",
       },
 
       borderRadius: {
@@ -63,9 +59,6 @@ export default {
         "2xl": "1.25rem",
       },
 
-      /* ==================================================
-         ANIMATION – LMS FEELING
-      ================================================== */
       keyframes: {
         float: {
           "0%, 100%": { transform: "translateY(0)" },
@@ -92,8 +85,5 @@ export default {
     },
   },
 
-  plugins: [
-    // Typography cho nội dung dài, bài giải, LaTeX, AI tutor
-    require("@tailwindcss/typography"),
-  ],
+  plugins: [typography],
 };
