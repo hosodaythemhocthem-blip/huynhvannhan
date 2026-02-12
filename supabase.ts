@@ -1,23 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 
 /* ===============================
-   ENV CHECK
+   ENV
 ================================= */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("❌ Thiếu biến môi trường Supabase (.env)");
+  console.error("Thiếu biến môi trường Supabase");
 }
 
-/* ===============================
-   CLIENT
-================================= */
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export default supabase;
+export const supabase = createClient(
+  supabaseUrl || "",
+  supabaseAnonKey || ""
+);
 
 /* ===============================
    STORAGE
@@ -40,7 +37,7 @@ export const uploadExamFile = async (file: File) => {
 
   if (error) {
     console.error("Upload error:", error.message);
-    throw error;
+    return null;
   }
 
   const { data } = supabase.storage
@@ -62,6 +59,5 @@ export const deleteExamFile = async (fileName: string) => {
 
   if (error) {
     console.error("Delete file error:", error.message);
-    throw error;
   }
 };
