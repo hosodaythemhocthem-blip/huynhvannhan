@@ -1,51 +1,49 @@
-import { createClient, SupabaseClient, Session, User } from "@supabase/supabase-js";
-
-/* =========================
-   ENV
-========================= */
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Missing Supabase ENV variables");
+  throw new Error("Missing Supabase ENV");
 }
 
-/* =========================
-   CLIENT
-========================= */
-
-export const supabase: SupabaseClient = createClient(
+export const supabase = createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
   {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
     },
   }
 );
 
-/* =========================
-   AUTH HELPERS
-========================= */
+/* ================= STORAGE ================= */
 
-export const getCurrentUser = async (): Promise<User | null> => {
-  const { data, error } = await supabase.auth.getUser();
+export const uploadExamFile = async (file: File) => {
+  const ext = file.name.split(".").pop();
+  const fileName = `exam-${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("exam-files")
+    .upload(fileName, file);
+
   if (error) throw error;
-  return data.user;
+
+  const { data } = supabase.storage
+    .from("exam-files")
+    .getPublicUrl(fileName);
+
+  return {
+    fileName,
+    url: data.publicUrl,
+  };
 };
 
-export const getCurrentSession = async (): Promise<Session | null> => {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return data.session;
-};
-
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+export const deleteExamFile = async (fileName: string) => {
+  await supabase.storage
+    .from("exam-files")
+    .remove([fileName]);
 };
 
 export default supabase;
