@@ -75,9 +75,6 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
     [loading, username, password]
   );
 
-  /* =====================
-     Handlers
-  ===================== */
   const handleLogin = useCallback(async () => {
     if (loading) return;
 
@@ -128,14 +125,10 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
 
       if (role === UserRole.TEACHER) {
         await registerTeacher(username.trim(), password.trim());
-        setError(
-          "Đăng ký giáo viên thành công. Vui lòng chờ Admin duyệt."
-        );
+        setError("Đăng ký giáo viên thành công. Vui lòng chờ Admin duyệt.");
       } else {
         await registerStudent(username.trim(), password.trim());
-        setError(
-          "Đăng ký học sinh thành công. Vui lòng chờ giáo viên duyệt."
-        );
+        setError("Đăng ký học sinh thành công. Vui lòng chờ giáo viên duyệt.");
       }
 
       setMode("login");
@@ -152,19 +145,14 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
     }
   };
 
-  /* =====================
-     UI
-  ===================== */
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white px-4">
       <div className="bg-slate-900/90 backdrop-blur-xl p-8 rounded-2xl w-full max-w-md shadow-2xl space-y-6 border border-slate-800">
-
         <h1 className="text-2xl font-bold text-center flex items-center justify-center gap-2 tracking-wide">
           <GraduationCap className="text-indigo-400" />
           LMS System
         </h1>
 
-        {/* Username */}
         <div className="space-y-2">
           <label className="text-sm text-slate-300">Tên đăng nhập</label>
           <div className="flex items-center bg-slate-800 rounded-xl px-3 focus-within:ring-2 focus-within:ring-indigo-500 transition">
@@ -181,7 +169,6 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
           </div>
         </div>
 
-        {/* Password */}
         <div className="space-y-2">
           <label className="text-sm text-slate-300">Mật khẩu</label>
           <div className="flex items-center bg-slate-800 rounded-xl px-3 focus-within:ring-2 focus-within:ring-indigo-500 transition">
@@ -198,29 +185,26 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
           </div>
         </div>
 
-        {/* Role chọn khi đăng ký */}
         {mode === "register" && (
           <div>
             <label className="text-sm text-slate-300">Vai trò</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full mt-1 bg-slate-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full mt-1 bg-slate-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-white"
             >
-              <option value={UserRole.STUDENT}>Học sinh</option>
-              <option value={UserRole.TEACHER}>Giáo viên</option>
+              <option value={UserRole.STUDENT} className="bg-slate-800">Học sinh</option>
+              <option value={UserRole.TEACHER} className="bg-slate-800">Giáo viên</option>
             </select>
           </div>
         )}
 
-        {/* Error / Info */}
         {error && (
           <div className="text-sm text-center px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
             {error}
           </div>
         )}
 
-        {/* Button */}
         <button
           onClick={mode === "login" ? handleLogin : handleRegister}
           disabled={isDisabled}
@@ -230,31 +214,18 @@ const LoginScreen: React.FC<Props> = ({ onSelectRole }) => {
           {mode === "login" ? "Đăng nhập" : "Đăng ký"}
         </button>
 
-        {/* Switch mode */}
         <div className="text-center text-sm text-slate-400">
           {mode === "login" ? (
             <>
               Chưa có tài khoản?{" "}
-              <button
-                onClick={() => {
-                  setError(null);
-                  setMode("register");
-                }}
-                className="text-indigo-400 hover:underline"
-              >
+              <button onClick={() => { setError(null); setMode("register"); }} className="text-indigo-400 hover:underline">
                 Đăng ký
               </button>
             </>
           ) : (
             <>
               Đã có tài khoản?{" "}
-              <button
-                onClick={() => {
-                  setError(null);
-                  setMode("login");
-                }}
-                className="text-indigo-400 hover:underline"
-              >
+              <button onClick={() => { setError(null); setMode("login"); }} className="text-indigo-400 hover:underline">
                 Đăng nhập
               </button>
             </>
