@@ -1,133 +1,161 @@
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  onSnapshot, 
-  query, 
-  orderBy,
-  setDoc
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { supabase } from "../supabase";
 import { Exam, Grade, Course, ClassItem } from "../types";
 
-/* =========================
+/* =====================================================
    EXAMS
-========================= */
+===================================================== */
+
 export const subscribeToExams = (
   callback: (exams: Exam[]) => void
 ) => {
-  if (!db) return () => {};
+  const fetchData = async () => {
+    const { data } = await supabase
+      .from("exams")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const q = query(
-    collection(db, "exams"),
-    orderBy("createdAt", "desc")
-  );
+    callback((data as Exam[]) || []);
+  };
 
-  return onSnapshot(q, (snapshot) => {
-    const exams = snapshot.docs.map((docSnap) => ({
-      ...(docSnap.data() as Exam),
-      id: docSnap.id,
-    }));
+  fetchData();
 
-    callback(exams);
-  });
+  const channel = supabase
+    .channel("exams-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "exams" },
+      () => fetchData()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 };
 
 export const saveExam = async (exam: Exam) => {
-  if (!db) return;
+  if (exam.id) {
+    const { error } = await supabase
+      .from("exams")
+      .update({
+        ...exam,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", exam.id);
 
-  const { id, ...data } = exam;
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("exams").insert({
+      ...exam,
+      created_at: new Date().toISOString(),
+    });
 
-  const examRef = doc(db, "exams", id);
-
-  await setDoc(
-    examRef,
-    {
-      ...data,
-      updatedAt: Date.now(),
-      createdAt: exam.createdAt ?? Date.now(),
-    },
-    { merge: true }
-  );
+    if (error) throw error;
+  }
 };
 
 export const deleteExam = async (examId: string) => {
-  if (!db) return;
-  await deleteDoc(doc(db, "exams", examId));
+  const { error } = await supabase
+    .from("exams")
+    .delete()
+    .eq("id", examId);
+
+  if (error) throw error;
 };
 
-/* =========================
+/* =====================================================
    GRADES
-========================= */
-export const saveGrade = async (grade: Grade) => {
-  if (!db) return;
+===================================================== */
 
-  await addDoc(collection(db, "grades"), {
+export const saveGrade = async (grade: Grade) => {
+  const { error } = await supabase.from("grades").insert({
     ...grade,
-    timestamp: Date.now(),
+    created_at: new Date().toISOString(),
   });
+
+  if (error) throw error;
 };
 
 export const subscribeToGrades = (
   callback: (grades: Grade[]) => void
 ) => {
-  if (!db) return () => {};
+  const fetchData = async () => {
+    const { data } = await supabase
+      .from("grades")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const q = query(
-    collection(db, "grades"),
-    orderBy("timestamp", "desc")
-  );
+    callback((data as Grade[]) || []);
+  };
 
-  return onSnapshot(q, (snapshot) => {
-    const grades = snapshot.docs.map((docSnap) => ({
-      ...(docSnap.data() as Grade),
-      id: docSnap.id,
-    }));
+  fetchData();
 
-    callback(grades);
-  });
+  const channel = supabase
+    .channel("grades-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "grades" },
+      () => fetchData()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 };
 
-/* =========================
+/* =====================================================
    CLASSES
-========================= */
+===================================================== */
+
 export const subscribeToClasses = (
   callback: (classes: ClassItem[]) => void
 ) => {
-  if (!db) return () => {};
+  const fetchData = async () => {
+    const { data } = await supabase.from("classes").select("*");
+    callback((data as ClassItem[]) || []);
+  };
 
-  return onSnapshot(
-    collection(db, "classes"),
-    (snapshot) => {
-      const classes = snapshot.docs.map((docSnap) => ({
-        ...(docSnap.data() as ClassItem),
-        id: docSnap.id,
-      }));
+  fetchData();
 
-      callback(classes);
-    }
-  );
+  const channel = supabase
+    .channel("classes-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "classes" },
+      () => fetchData()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 };
 
-/* =========================
+/* =====================================================
    COURSES
-========================= */
+===================================================== */
+
 export const subscribeToCourses = (
   callback: (courses: Course[]) => void
 ) => {
-  if (!db) return () => {};
+  const fetchData = async () => {
+    const { data } = await supabase.from("courses").select("*");
+    callback((data as Course[]) || []);
+  };
 
-  return onSnapshot(
-    collection(db, "courses"),
-    (snapshot) => {
-      const courses = snapshot.docs.map((docSnap) => ({
-        ...(docSnap.data() as Course),
-        id: docSnap.id,
-      }));
+  fetchData();
 
-      callback(courses);
-    }
-  );
+  const channel = supabase
+    .channel("courses-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "courses" },
+      () => fetchData()
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 };
