@@ -1,39 +1,62 @@
 // services/exam.service.ts
-import { db } from './firebase';
-import {
-  collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { Exam } from '../types';
 
-const EXAMS_COLLECTION = 'exams';
+import { supabase } from "../supabase";
+import { Exam } from "../types";
+
+const TABLE = "exams";
+const BUCKET = "exam-files";
 
 export const ExamService = {
   /* =========================
      ➕ CREATE
   ========================= */
-  async createExam(exam: Exam): Promise<string> {
-    if (!db) throw new Error('Firestore not initialized');
+  async createExam(
+    exam: Exam,
+    file?: File
+  ): Promise<string> {
+    let fileUrl: string | null = null;
+    let filePath: string | null = null;
 
-    const { id, createdAt, updatedAt, ...data } = exam;
+    /* ===== UPLOAD FILE IF EXISTS ===== */
+    if (file) {
+      const ext = file.name.split(".").pop();
+      const path = `${exam.teacherId}/${Date.now()}.${ext}`;
 
-    const ref = await addDoc(collection(db, EXAMS_COLLECTION), {
-      ...data,
-      isArchived: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, file);
 
-    return ref.id;
+      if (uploadError) {
+        throw new Error("file-upload-failed");
+      }
+
+      const { data } = supabase.storage
+        .from(BUCKET)
+        .getPublicUrl(path);
+
+      fileUrl = data.publicUrl;
+      filePath = path;
+    }
+
+    /* ===== INSERT DATABASE ===== */
+    const { data, error } = await supabase
+      .from(TABLE)
+      .insert({
+        title: exam.title,
+        description: exam.description,
+        teacher_id: exam.teacherId,
+        file_url: fileUrl,
+        file_path: filePath,
+        is_archived: false,
+      })
+      .select()
+      .single();
+
+    if (error || !data) {
+      throw new Error("exam-create-failed");
+    }
+
+    return data.id;
   },
 
   /* =========================
@@ -43,37 +66,36 @@ export const ExamService = {
     examId: string,
     data: Partial<Exam>
   ): Promise<void> {
-    if (!db) throw new Error('Firestore not initialized');
+    const { error } = await supabase
+      .from(TABLE)
+      .update({
+        title: data.title,
+        description: data.description,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", examId);
 
-    const { id, createdAt, ...safeData } = data;
-
-    const ref = doc(db, EXAMS_COLLECTION, examId);
-
-    await updateDoc(ref, {
-      ...safeData,
-      updatedAt: serverTimestamp(),
-    });
+    if (error) {
+      throw new Error("exam-update-failed");
+    }
   },
 
   /* =========================
      📥 GET BY ID
   ========================= */
-  async getExamById(examId: string): Promise<Exam | null> {
-    if (!db) return null;
+  async getExamById(
+    examId: string
+  ): Promise<Exam | null> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("id", examId)
+      .eq("is_archived", false)
+      .single();
 
-    const ref = doc(db, EXAMS_COLLECTION, examId);
-    const snap = await getDoc(ref);
+    if (error || !data) return null;
 
-    if (!snap.exists()) return null;
-
-    const data = snap.data() as Exam;
-
-    if (data.isArchived) return null;
-
-    return {
-      ...data,
-      id: snap.id,
-    };
+    return this.mapExam(data);
   },
 
   /* =========================
@@ -82,34 +104,61 @@ export const ExamService = {
   async getExamsByTeacher(
     teacherId: string
   ): Promise<Exam[]> {
-    if (!db) return [];
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("teacher_id", teacherId)
+      .eq("is_archived", false)
+      .order("created_at", { ascending: false });
 
-    const q = query(
-      collection(db, EXAMS_COLLECTION),
-      where('teacherId', '==', teacherId),
-      where('isArchived', '==', false),
-      orderBy('createdAt', 'desc')
-    );
+    if (error || !data) return [];
 
-    const snap = await getDocs(q);
-
-    return snap.docs.map((d) => ({
-      ...(d.data() as Exam),
-      id: d.id,
-    }));
+    return data.map(this.mapExam);
   },
 
   /* =========================
-     🗑️ ARCHIVE (SOFT DELETE)
+     🗑️ ARCHIVE (SOFT DELETE + DELETE FILE)
   ========================= */
   async archiveExam(examId: string): Promise<void> {
-    if (!db) throw new Error('Firestore not initialized');
+    const { data } = await supabase
+      .from(TABLE)
+      .select("file_path")
+      .eq("id", examId)
+      .single();
 
-    const ref = doc(db, EXAMS_COLLECTION, examId);
+    if (data?.file_path) {
+      await supabase.storage
+        .from(BUCKET)
+        .remove([data.file_path]);
+    }
 
-    await updateDoc(ref, {
-      isArchived: true,
-      updatedAt: serverTimestamp(),
-    });
+    const { error } = await supabase
+      .from(TABLE)
+      .update({
+        is_archived: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", examId);
+
+    if (error) {
+      throw new Error("exam-archive-failed");
+    }
+  },
+
+  /* =========================
+     🧠 INTERNAL MAP
+  ========================= */
+  mapExam(raw: any): Exam {
+    return {
+      id: raw.id,
+      title: raw.title,
+      description: raw.description,
+      teacherId: raw.teacher_id,
+      fileUrl: raw.file_url,
+      filePath: raw.file_path,
+      isArchived: raw.is_archived,
+      createdAt: raw.created_at,
+      updatedAt: raw.updated_at,
+    };
   },
 };
