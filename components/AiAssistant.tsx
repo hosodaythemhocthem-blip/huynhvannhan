@@ -1,6 +1,5 @@
-// AiAssistant.tsx FULL UPGRADE VERSION
-
-import React, { useState, useRef, useEffect } from 'react';
+// components/AiAssistant.tsx
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
   X,
@@ -8,22 +7,27 @@ import {
   MessageCircle,
   Loader2,
   Paperclip,
-  Trash2
-} from 'lucide-react';
-import { askGemini } from '../services/geminiService';
-import MathPreview from './MathPreview';
+  Trash2,
+  RotateCcw
+} from "lucide-react";
+import { askGemini } from "../services/geminiService";
+import MathPreview from "./MathPreview";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
 import {
   saveMessage,
   fetchMessages,
   clearMessages,
+  deleteMessage,
   initConversation
-} from '../services/chatService';
+} from "../services/chatService";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Message {
   id?: string;
-  role: 'user' | 'ai';
+  role: "user" | "ai";
   text: string;
 }
 
@@ -31,32 +35,34 @@ interface Props {
   context?: string;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const CHUNK_SIZE = 6000;
+
 const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* INIT CONVERSATION */
+  /* INIT */
   useEffect(() => {
     const load = async () => {
       await initConversation();
-      const data = await fetchMessages();
+      const data = await fetchMessages(50);
 
       if (data.length) {
         setMessages(data);
       } else {
         setMessages([
           {
-            role: 'ai',
-            text: 'Xin chào! Tôi là **Lumina AI** ✨\nTôi có thể giúp gì cho bạn?'
+            role: "ai",
+            text: "Xin chào! Tôi là **Lumina AI** ✨\nTôi có thể giúp gì cho bạn?"
           }
         ]);
       }
@@ -66,13 +72,26 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
   /* AUTO SCROLL */
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  /* FILE PARSER */
-  const extractText = async (file: File) => {
+  /* DELETE SINGLE */
+  const handleDeleteMessage = async (id?: string) => {
+    if (!id) return;
+    await deleteMessage(id);
+    setMessages(prev => prev.filter(m => m.id !== id));
+  };
 
-    if (file.size > 10_000_000) {
+  /* CLEAR ALL */
+  const handleClear = async () => {
+    await clearMessages();
+    setMessages([]);
+  };
+
+  /* FILE TEXT EXTRACTION */
+  const extractText = async (file: File): Promise<string> => {
+
+    if (file.size > MAX_FILE_SIZE) {
       throw new Error("File quá lớn (tối đa 10MB)");
     }
 
@@ -85,7 +104,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        text += content.items.map((item: any) => item.str).join(" ");
+        text += content.items.map((item: any) => item.str).join(" ") + "\n";
       }
     }
 
@@ -102,6 +121,15 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     return text;
   };
 
+  /* SPLIT LARGE TEXT */
+  const splitChunks = (text: string) => {
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+      chunks.push(text.slice(i, i + CHUNK_SIZE));
+    }
+    return chunks;
+  };
+
   /* HANDLE FILE */
   const handleFileUpload = async (file: File) => {
 
@@ -109,22 +137,27 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setFileName(file.name);
 
     try {
-      const text = await extractText(file);
+      const fullText = await extractText(file);
+      const chunks = splitChunks(fullText);
 
-      const reply = await askGemini(
-        `Phân tích và giải chi tiết đề sau:\n\n${text}`
-      );
+      let finalAnswer = "";
 
-      const newMessages = [
-        { role: 'user' as const, text: `📎 ${file.name}` },
-        { role: 'ai' as const, text: reply || 'AI không trả lời.' }
+      for (const chunk of chunks) {
+        const reply = await askGemini(
+          `Phân tích và giải chi tiết đề sau:\n\n${chunk}`
+        );
+        finalAnswer += reply + "\n";
+      }
+
+      const newMessages: Message[] = [
+        { role: "user", text: `📎 ${file.name}` },
+        { role: "ai", text: finalAnswer || "AI không trả lời." }
       ];
 
       setMessages(prev => [...prev, ...newMessages]);
-
-      for (const m of newMessages) {
-        await saveMessage(m.role, m.text);
-      }
+      await Promise.all(
+        newMessages.map(m => saveMessage(m.role, m.text))
+      );
 
     } catch (err: any) {
       alert(err.message);
@@ -133,17 +166,17 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     }
   };
 
-  /* HANDLE SEND */
+  /* SEND */
   const handleSend = async () => {
 
     if (!input.trim() || loading) return;
 
     const userMsg = input.trim();
-    setInput('');
+    setInput("");
 
-    const userMessage = { role: 'user' as const, text: userMsg };
+    const userMessage: Message = { role: "user", text: userMsg };
     setMessages(prev => [...prev, userMessage]);
-    await saveMessage('user', userMsg);
+    await saveMessage("user", userMsg);
 
     setLoading(true);
 
@@ -155,28 +188,31 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
       const reply = await askGemini(finalPrompt);
 
-      const aiMessage = {
-        role: 'ai' as const,
-        text: reply || '⚠️ AI không trả lời.'
+      const aiMessage: Message = {
+        role: "ai",
+        text: reply || "⚠️ AI không trả lời."
       };
 
       setMessages(prev => [...prev, aiMessage]);
-      await saveMessage('ai', aiMessage.text);
+      await saveMessage("ai", aiMessage.text);
 
     } catch {
-      alert("Lỗi AI");
+      alert("AI lỗi. Thử lại.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClear = async () => {
-    await clearMessages();
-    setMessages([]);
+  /* RETRY LAST */
+  const handleRetry = async () => {
+    const lastUser = [...messages].reverse().find(m => m.role === "user");
+    if (!lastUser) return;
+    setInput(lastUser.text);
   };
 
   return (
     <div className="fixed bottom-8 right-8 z-[100]">
+
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
@@ -185,7 +221,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
           <MessageCircle size={28} />
         </button>
       ) : (
-        <div className="w-[380px] h-[600px] bg-white rounded-3xl shadow-2xl flex flex-col animate-fade-in">
+        <div className="w-[380px] h-[620px] bg-white rounded-3xl shadow-2xl flex flex-col">
 
           <header className="p-5 bg-slate-900 text-white flex justify-between items-center rounded-t-3xl">
             <div className="flex items-center gap-3">
@@ -194,34 +230,46 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
             </div>
 
             <div className="flex gap-3">
-              <button onClick={handleClear}>
-                <Trash2 size={18} />
-              </button>
-              <button onClick={() => setIsOpen(false)}>
-                <X size={18} />
-              </button>
+              <button onClick={handleRetry}><RotateCcw size={18} /></button>
+              <button onClick={handleClear}><Trash2 size={18} /></button>
+              <button onClick={() => setIsOpen(false)}><X size={18} /></button>
             </div>
           </header>
 
           <div className="flex-1 p-5 overflow-y-auto bg-slate-50 space-y-4">
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`p-4 rounded-2xl text-sm shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>
-                  {msg.role === 'ai'
+            {messages.map((msg) => (
+              <div key={msg.id || Math.random()}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`p-4 rounded-2xl text-sm shadow-sm relative group
+                  ${msg.role === "user"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white border"}`}>
+
+                  {msg.role === "ai"
                     ? <MathPreview math={msg.text} />
                     : <p className="whitespace-pre-wrap">{msg.text}</p>}
+
+                  {msg.id && (
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
 
-            {(loading || uploading) && (
+            {(loading || uploading) &&
               <Loader2 className="animate-spin text-indigo-600" />
-            )}
+            }
 
             <div ref={chatEndRef} />
           </div>
 
           <div className="p-4 border-t flex gap-2">
+
             <button
               onClick={() => fileInputRef.current?.click()}
               className="w-10 h-10 bg-slate-200 rounded-xl hover:bg-slate-300 transition"
@@ -234,15 +282,17 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
               type="file"
               accept=".pdf,.doc,.docx"
               hidden
-              onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+              onChange={(e) =>
+                e.target.files?.[0] &&
+                handleFileUpload(e.target.files[0])
+              }
             />
 
             <input
-              ref={inputRef}
               value={input}
               disabled={loading}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="Nhập câu hỏi..."
               className="flex-1 border rounded-xl px-4 focus:ring-2 focus:ring-indigo-400"
             />
@@ -261,6 +311,7 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
               📎 {fileName}
             </p>
           )}
+
         </div>
       )}
     </div>
