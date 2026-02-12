@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, X, Sparkles, MessageCircle, Loader2 } from 'lucide-react';
+import { Send, Bot, X, Sparkles, MessageCircle, Loader2, Paperclip } from 'lucide-react';
 import { askGemini } from '../services/geminiService';
 import MathPreview from './MathPreview';
 
@@ -22,21 +22,51 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* Auto scroll xuống cuối khi có tin nhắn mới */
+  /* Auto scroll */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, isOpen]);
 
-  /* Focus input khi mở chat */
+  /* Focus input */
   useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
+    if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
+  /* ===== HANDLE FILE UPLOAD ===== */
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    setFileName(file.name);
+    setLoading(true);
+
+    try {
+      const text = await file.text(); // đọc nội dung file
+      const prompt = `Phân tích nội dung đề sau và hỗ trợ giải:\n\n${text}`;
+
+      const reply = await askGemini(prompt);
+
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', text: `📎 Đã gửi file: ${file.name}` },
+        { role: 'ai', text: reply || 'AI không trả lời.' }
+      ]);
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [
+        ...prev,
+        { role: 'ai', text: '⚠️ Không thể đọc file. Vui lòng kiểm tra định dạng.' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ===== HANDLE SEND ===== */
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -46,19 +76,21 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
     setLoading(true);
 
     try {
-      // Nối context an toàn (không phụ thuộc service có hỗ trợ param 2 hay không)
       const finalPrompt = context
         ? `Ngữ cảnh: ${context}\n\nCâu hỏi: ${userMsg}`
         : userMsg;
 
       const reply = await askGemini(finalPrompt);
 
-      setMessages(prev => [...prev, { role: 'ai', text: reply }]);
+      setMessages(prev => [
+        ...prev,
+        { role: 'ai', text: reply || '⚠️ AI không trả về nội dung.' }
+      ]);
     } catch (error) {
       console.error(error);
       setMessages(prev => [
         ...prev,
-        { role: 'ai', text: '⚠️ Hệ thống đang bận. Vui lòng thử lại sau.' }
+        { role: 'ai', text: '⚠️ Lỗi kết nối AI. Kiểm tra cấu hình API.' }
       ]);
     } finally {
       setLoading(false);
@@ -71,53 +103,44 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
         <button
           onClick={() => setIsOpen(true)}
           className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl hover:scale-110 transition-all hover:rotate-3"
-          title="Hỏi trợ lý AI"
         >
           <MessageCircle size={28} />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full animate-pulse border-2 border-white" />
         </button>
       ) : (
-        <div className="w-[380px] h-[600px] max-h-[80vh] bg-white rounded-[32px] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
-          
-          {/* Header */}
-          <header className="p-5 bg-slate-900 text-white flex justify-between items-center shadow-md z-10">
+        <div className="w-[380px] h-[600px] max-h-[80vh] bg-white rounded-[32px] shadow-2xl border flex flex-col overflow-hidden">
+
+          {/* HEADER */}
+          <header className="p-5 bg-slate-900 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-white/10">
-                <Sparkles size={20} className="text-yellow-300" />
-              </div>
+              <Sparkles size={20} className="text-yellow-300" />
               <div>
                 <h4 className="font-bold text-sm">Lumina AI Tutor</h4>
-                <p className="text-[10px] uppercase opacity-60 font-bold tracking-wider">Trợ lý học tập</p>
+                <p className="text-[10px] opacity-60 uppercase">Trợ lý học tập</p>
               </div>
             </div>
-            <button 
-              onClick={() => setIsOpen(false)}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
-            >
+            <button onClick={() => setIsOpen(false)}>
               <X size={18} />
             </button>
           </header>
 
-          {/* Messages */}
-          <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50 scroll-smooth">
+          {/* MESSAGES */}
+          <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-slate-50">
             {messages.map((msg, i) => (
               <div
                 key={`${msg.role}-${i}`}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] p-4 rounded-2xl text-sm shadow-sm ${
+                  className={`max-w-[85%] p-4 rounded-2xl text-sm shadow ${
                     msg.role === 'user'
-                      ? 'bg-indigo-600 text-white rounded-br-none'
-                      : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white border'
                   }`}
                 >
                   {msg.role === 'ai' ? (
-                    <div className="prose prose-sm max-w-none">
-                      <MathPreview math={msg.text} />
-                    </div>
+                    <MathPreview math={msg.text} />
                   ) : (
-                    <p className="font-semibold whitespace-pre-wrap">{msg.text}</p>
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
                   )}
                 </div>
               </div>
@@ -125,21 +148,37 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
 
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-white border p-4 rounded-2xl rounded-bl-none flex items-center gap-3 shadow-sm">
-                  <Loader2 size={16} className="animate-spin text-indigo-600" />
-                  <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider">
-                    AI đang suy nghĩ...
-                  </span>
-                </div>
+                <Loader2 size={18} className="animate-spin text-indigo-600" />
               </div>
             )}
 
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input */}
+          {/* INPUT */}
           <div className="p-4 border-t bg-white">
-            <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl focus-within:border-indigo-200 focus-within:bg-white transition-all">
+            <div className="flex items-center gap-2">
+
+              {/* FILE BUTTON */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-10 h-10 bg-slate-200 hover:bg-slate-300 rounded-xl flex items-center justify-center"
+              >
+                <Paperclip size={16} />
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    handleFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
+
               <input
                 ref={inputRef}
                 value={input}
@@ -147,25 +186,22 @@ const AiAssistant: React.FC<Props> = ({ context = "" }) => {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Nhập câu hỏi Toán học..."
-                className="flex-1 bg-transparent outline-none px-4 py-2 text-sm font-semibold text-slate-700 placeholder:text-slate-400"
+                className="flex-1 border rounded-xl px-4 py-2 text-sm"
               />
+
               <button
                 onClick={handleSend}
                 disabled={loading || !input.trim()}
-                className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-indigo-200"
+                className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center"
               >
-                <Send size={16} className={loading ? 'opacity-0' : 'opacity-100'} />
-                {loading && <Loader2 size={16} className="absolute animate-spin" />}
+                <Send size={16} />
               </button>
             </div>
 
-            {context && (
-              <div className="mt-2 flex items-center justify-center gap-1.5 opacity-60">
-                <Bot size={10} className="text-indigo-500" />
-                <p className="text-[9px] uppercase font-bold text-indigo-500 truncate max-w-[250px]">
-                  Ngữ cảnh: {context}
-                </p>
-              </div>
+            {fileName && (
+              <p className="text-[10px] mt-2 text-slate-400">
+                📎 File đã chọn: {fileName}
+              </p>
             )}
           </div>
         </div>
