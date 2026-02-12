@@ -1,161 +1,61 @@
-import { supabase } from "../supabase";
-import { Exam, Grade, Course, ClassItem } from "../types";
+import { supabase } from "./supabaseClient";
+import { ClassRoom, Exam, Question } from "../types";
 
-/* =====================================================
-   EXAMS
-===================================================== */
+/* ===============================
+   CLASS
+================================ */
+export async function createClass(name: string, teacher_id: string) {
+  const { data, error } = await supabase
+    .from("classes")
+    .insert([{ name, teacher_id }])
+    .select()
+    .single();
 
-export const subscribeToExams = (
-  callback: (exams: Exam[]) => void
-) => {
-  const fetchData = async () => {
-    const { data } = await supabase
-      .from("exams")
-      .select("*")
-      .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as ClassRoom;
+}
 
-    callback((data as Exam[]) || []);
-  };
+export async function getTeacherClasses(teacher_id: string) {
+  const { data, error } = await supabase
+    .from("classes")
+    .select("*")
+    .eq("teacher_id", teacher_id);
 
-  fetchData();
+  if (error) throw error;
+  return data as ClassRoom[];
+}
 
-  const channel = supabase
-    .channel("exams-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "exams" },
-      () => fetchData()
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-};
-
-export const saveExam = async (exam: Exam) => {
-  if (exam.id) {
-    const { error } = await supabase
-      .from("exams")
-      .update({
-        ...exam,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", exam.id);
-
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from("exams").insert({
-      ...exam,
-      created_at: new Date().toISOString(),
-    });
-
-    if (error) throw error;
-  }
-};
-
-export const deleteExam = async (examId: string) => {
-  const { error } = await supabase
+/* ===============================
+   EXAM
+================================ */
+export async function createExam(title: string, teacher_id: string) {
+  const { data, error } = await supabase
     .from("exams")
-    .delete()
-    .eq("id", examId);
+    .insert([{ title, teacher_id }])
+    .select()
+    .single();
 
   if (error) throw error;
-};
+  return data as Exam;
+}
 
-/* =====================================================
-   GRADES
-===================================================== */
-
-export const saveGrade = async (grade: Grade) => {
-  const { error } = await supabase.from("grades").insert({
-    ...grade,
-    created_at: new Date().toISOString(),
-  });
+export async function getTeacherExams(teacher_id: string) {
+  const { data, error } = await supabase
+    .from("exams")
+    .select("*")
+    .eq("teacher_id", teacher_id);
 
   if (error) throw error;
-};
+  return data as Exam[];
+}
 
-export const subscribeToGrades = (
-  callback: (grades: Grade[]) => void
-) => {
-  const fetchData = async () => {
-    const { data } = await supabase
-      .from("grades")
-      .select("*")
-      .order("created_at", { ascending: false });
+/* ===============================
+   QUESTION
+================================ */
+export async function addQuestion(question: Question) {
+  const { error } = await supabase
+    .from("questions")
+    .insert([question]);
 
-    callback((data as Grade[]) || []);
-  };
-
-  fetchData();
-
-  const channel = supabase
-    .channel("grades-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "grades" },
-      () => fetchData()
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-};
-
-/* =====================================================
-   CLASSES
-===================================================== */
-
-export const subscribeToClasses = (
-  callback: (classes: ClassItem[]) => void
-) => {
-  const fetchData = async () => {
-    const { data } = await supabase.from("classes").select("*");
-    callback((data as ClassItem[]) || []);
-  };
-
-  fetchData();
-
-  const channel = supabase
-    .channel("classes-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "classes" },
-      () => fetchData()
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-};
-
-/* =====================================================
-   COURSES
-===================================================== */
-
-export const subscribeToCourses = (
-  callback: (courses: Course[]) => void
-) => {
-  const fetchData = async () => {
-    const { data } = await supabase.from("courses").select("*");
-    callback((data as Course[]) || []);
-  };
-
-  fetchData();
-
-  const channel = supabase
-    .channel("courses-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "courses" },
-      () => fetchData()
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-};
+  if (error) throw error;
+}
