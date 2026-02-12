@@ -1,33 +1,35 @@
-import { Timestamp } from "firebase/firestore";
+/* =====================================================
+   USER ROLES
+===================================================== */
 
-/**
- * Vai trò người dùng trong hệ thống
- */
 export enum UserRole {
   ADMIN = "ADMIN",
   TEACHER = "TEACHER",
   STUDENT = "STUDENT",
 }
 
-/**
- * Trạng thái tài khoản
- */
+/* =====================================================
+   ACCOUNT STATUS
+===================================================== */
+
 export enum AccountStatus {
   PENDING = "PENDING",
   APPROVED = "APPROVED",
   BLOCKED = "BLOCKED",
 }
 
-/**
- * User dùng chung cho toàn hệ thống
- * - Lưu trong Firestore
- * - Đồng bộ Auth + DB
- */
-export interface AppUser {
-  /** UID từ Firebase Auth */
-  uid: string;
+/* =====================================================
+   SUPABASE USER MODEL
+===================================================== */
 
-  /** Email đăng nhập */
+export interface AppUser {
+  /** ID từ Supabase Auth (uuid) */
+  id: string;
+
+  /** Username đăng nhập */
+  username: string;
+
+  /** Email nội bộ (username@lms.local) */
   email: string;
 
   /** Vai trò hệ thống */
@@ -36,9 +38,9 @@ export interface AppUser {
   /** Trạng thái tài khoản */
   status: AccountStatus;
 
-  /** Thời điểm tạo (Firestore) */
-  createdAt?: Timestamp;
+  /** Thời điểm tạo */
+  created_at?: string;
 
-  /** Thời điểm cập nhật gần nhất */
-  updatedAt?: Timestamp;
+  /** Thời điểm cập nhật */
+  updated_at?: string;
 }
