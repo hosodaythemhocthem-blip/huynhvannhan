@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="vi">
   <head>
-    <!-- ================= META ================= -->
+    <!-- META -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -10,15 +10,13 @@
       name="description"
       content="Hệ thống LMS Toán học tích hợp AI, hỗ trợ LaTeX, quản lý lớp học, đề thi và bảng điểm."
     />
-    <meta name="robots" content="index, follow" />
-    <meta name="color-scheme" content="light dark" />
 
-    <!-- ================= PWA ================= -->
-    <link rel="manifest" href="/manifest.json" />
+    <!-- PWA -->
+    <link rel="manifest" href="/metadata.json" />
     <meta name="theme-color" content="#2563eb" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
 
-    <!-- ================= FONTS ================= -->
+    <!-- FONTS -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -28,25 +26,9 @@
   </head>
 
   <body class="antialiased">
-    <!-- ================= APP ROOT ================= -->
     <div id="root"></div>
 
-    <!-- ================= ENTRY (VITE - QUAN TRỌNG) ================= -->
-    <!-- ❗ main.tsx NẰM TRONG src -->
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-<!DOCTYPE html>
-<html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumina AI – Toán Học Cloud</title>
-  </head>
-  <body>
-    <div id="root"></div>
-
-    <!-- 🔥 ENTRY ĐÚNG – main.tsx Ở ROOT -->
+    <!-- 🔥 ENTRY ĐÚNG -->
     <script type="module" src="/main.tsx"></script>
   </body>
 </html>
