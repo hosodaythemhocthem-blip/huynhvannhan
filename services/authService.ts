@@ -13,12 +13,11 @@ export interface AppUser {
 }
 
 /* =====================================================
-   INTERNAL ERROR HELPER
+   ERROR SYSTEM (PRO)
 ===================================================== */
 
 class AuthError extends Error {
   code: string;
-
   constructor(code: string) {
     super(code);
     this.code = code;
@@ -36,14 +35,11 @@ const mapSupabaseUser = async (userId: string): Promise<AppUser> => {
     .from("users")
     .select("*")
     .eq("uid", userId)
+    .eq("deleted", false)
     .single();
 
   if (error || !data) {
     throw authError("account-not-exist");
-  }
-
-  if (data.deleted === true) {
-    throw authError("account-deleted");
   }
 
   if (
@@ -82,7 +78,7 @@ export const login = async (
 };
 
 /* =====================================================
-   REGISTER BASE
+   REGISTER (SAFE + ROLLBACK)
 ===================================================== */
 
 export const register = async (
@@ -99,8 +95,10 @@ export const register = async (
     throw authError("register-failed");
   }
 
+  const userId = data.user.id;
+
   const { error: insertError } = await supabase.from("users").insert({
-    uid: data.user.id,
+    uid: userId,
     email,
     role,
     status:
@@ -112,6 +110,8 @@ export const register = async (
   });
 
   if (insertError) {
+    // 🔥 ROLLBACK AUTH USER nếu profile lỗi
+    await supabase.auth.admin.deleteUser(userId).catch(() => {});
     throw authError("user-profile-create-failed");
   }
 };
@@ -131,7 +131,7 @@ export const registerStudent = (
 ) => register(email, password, UserRole.STUDENT);
 
 /* =====================================================
-   GET CURRENT USER (SAFE)
+   GET CURRENT USER
 ===================================================== */
 
 export const getCurrentUser = async (): Promise<AppUser | null> => {
@@ -173,6 +173,19 @@ export const observeAuth = (
   return () => {
     listener.subscription.unsubscribe();
   };
+};
+
+/* =====================================================
+   SOFT DELETE ACCOUNT
+===================================================== */
+
+export const softDeleteAccount = async (uid: string) => {
+  const { error } = await supabase
+    .from("users")
+    .update({ deleted: true })
+    .eq("uid", uid);
+
+  if (error) throw authError("delete-failed");
 };
 
 /* =====================================================
