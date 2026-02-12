@@ -1,17 +1,16 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /* =====================================================
-   ENV CONFIG (SAFE MODE)
+   ENV CONFIG (SAFE MODE - PRO)
 ===================================================== */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabase: SupabaseClient;
+let supabase: SupabaseClient | null = null;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn("⚠️ Supabase ENV chưa cấu hình. App chạy ở Setup Mode.");
-  supabase = {} as SupabaseClient;
 } else {
   supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -56,52 +55,53 @@ function validateFile(file: File) {
 }
 
 /* =====================================================
-   ENSURE BUCKET EXISTS
+   SESSION CHECK
 ===================================================== */
 
-async function ensureBucket() {
-  const { data } = await supabase.storage.listBuckets();
-  const exists = data?.find((b) => b.name === BUCKET);
-  if (!exists) {
-    await supabase.storage.createBucket(BUCKET, {
-      public: false,
-    });
+async function requireAuth() {
+  if (!supabase) {
+    throw new Error("Supabase chưa cấu hình.");
   }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("Bạn chưa đăng nhập.");
+  }
+
+  return session;
 }
 
 /* =====================================================
-   UPLOAD FILE PRO MAX
+   UPLOAD FILE (PRO SAFE)
 ===================================================== */
 
 export const uploadExamFile = async (file: File) => {
-  try {
-    validateFile(file);
-    await ensureBucket();
+  if (!supabase) throw new Error("Supabase chưa cấu hình.");
 
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+  await requireAuth();
+  validateFile(file);
 
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(fileName, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
-    if (error) throw error;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
 
-    const { data } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(fileName, 60 * 60 * 24); // 24h
-
-    return {
-      fileName,
-      signedUrl: data?.signedUrl ?? null,
-    };
-  } catch (error: any) {
+  if (error) {
     console.error("❌ Upload error:", error.message);
     throw error;
   }
+
+  return {
+    fileName,
+  };
 };
 
 /* =====================================================
@@ -115,17 +115,20 @@ export const replaceExamFile = async (
   if (oldFileName) {
     await deleteExamFile(oldFileName);
   }
+
   return await uploadExamFile(newFile);
 };
 
 /* =====================================================
-   GET SIGNED URL
+   GET SIGNED URL (AUTO REFRESH)
 ===================================================== */
 
 export const getSignedFileUrl = async (fileName: string) => {
+  if (!supabase) return null;
+
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(fileName, 60 * 60 * 24);
+    .createSignedUrl(fileName, 60 * 60 * 24); // 24h
 
   if (error) {
     console.error("❌ Signed URL error:", error.message);
@@ -140,6 +143,8 @@ export const getSignedFileUrl = async (fileName: string) => {
 ===================================================== */
 
 export const deleteExamFile = async (fileName: string) => {
+  if (!supabase) return false;
+
   try {
     const { error } = await supabase.storage
       .from(BUCKET)
@@ -159,10 +164,13 @@ export const deleteExamFile = async (fileName: string) => {
 ===================================================== */
 
 export const getCurrentSession = async () => {
+  if (!supabase) return null;
+
   const { data } = await supabase.auth.getSession();
   return data.session;
 };
 
 export const signOut = async () => {
+  if (!supabase) return;
   await supabase.auth.signOut();
 };
