@@ -1,39 +1,38 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /* =====================================================
-   ENV CONFIG
+   ENV CONFIG (SAFE MODE)
 ===================================================== */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+let supabase: SupabaseClient;
+
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("❌ Thiếu biến môi trường Supabase");
-}
-
-/* =====================================================
-   CLIENT
-===================================================== */
-
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
+  console.warn("⚠️ Supabase ENV chưa cấu hình. App chạy ở Setup Mode.");
+  supabase = {} as SupabaseClient;
+} else {
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
-  }
-);
+  });
+}
+
+export { supabase };
 
 /* =====================================================
    STORAGE CONFIG
 ===================================================== */
 
 const BUCKET = "exam-files";
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 /* =====================================================
-   HELPER: Validate File Type
+   FILE VALIDATION
 ===================================================== */
 
 const allowedTypes = [
@@ -46,17 +45,38 @@ const allowedTypes = [
 
 function validateFile(file: File) {
   if (!allowedTypes.includes(file.type)) {
-    throw new Error("File không được hỗ trợ. Chỉ chấp nhận PDF, Word, PNG, JPG");
+    throw new Error(
+      "❌ File không được hỗ trợ. Chỉ chấp nhận PDF, Word, PNG, JPG"
+    );
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error("❌ File vượt quá 10MB");
   }
 }
 
 /* =====================================================
-   UPLOAD FILE (PRO)
+   ENSURE BUCKET EXISTS
+===================================================== */
+
+async function ensureBucket() {
+  const { data } = await supabase.storage.listBuckets();
+  const exists = data?.find((b) => b.name === BUCKET);
+  if (!exists) {
+    await supabase.storage.createBucket(BUCKET, {
+      public: false,
+    });
+  }
+}
+
+/* =====================================================
+   UPLOAD FILE PRO MAX
 ===================================================== */
 
 export const uploadExamFile = async (file: File) => {
   try {
     validateFile(file);
+    await ensureBucket();
 
     const fileExt = file.name.split(".").pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
@@ -70,8 +90,13 @@ export const uploadExamFile = async (file: File) => {
 
     if (error) throw error;
 
+    const { data } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(fileName, 60 * 60 * 24); // 24h
+
     return {
       fileName,
+      signedUrl: data?.signedUrl ?? null,
     };
   } catch (error: any) {
     console.error("❌ Upload error:", error.message);
@@ -90,25 +115,24 @@ export const replaceExamFile = async (
   if (oldFileName) {
     await deleteExamFile(oldFileName);
   }
-
   return await uploadExamFile(newFile);
 };
 
 /* =====================================================
-   GET SIGNED URL (SECURE)
+   GET SIGNED URL
 ===================================================== */
 
 export const getSignedFileUrl = async (fileName: string) => {
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(fileName, 60 * 60); // 1 hour
+    .createSignedUrl(fileName, 60 * 60 * 24);
 
   if (error) {
     console.error("❌ Signed URL error:", error.message);
     return null;
   }
 
-  return data.signedUrl;
+  return data?.signedUrl ?? null;
 };
 
 /* =====================================================
@@ -131,7 +155,7 @@ export const deleteExamFile = async (fileName: string) => {
 };
 
 /* =====================================================
-   AUTH HELPERS (UNIFIED)
+   AUTH HELPERS
 ===================================================== */
 
 export const getCurrentSession = async () => {
