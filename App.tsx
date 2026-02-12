@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase, uploadExamFile, deleteExamFile } from "./supabase";
+import { supabase, uploadExamFile, deleteExamFile, getSignedFileUrl } from "./supabase";
 import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
 
@@ -21,7 +21,7 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState(""); // ✅ đổi từ email
   const [password, setPassword] = useState("");
 
   const [title, setTitle] = useState("");
@@ -50,16 +50,25 @@ export default function App() {
     };
   }, []);
 
+  const toEmail = (username: string) =>
+    `${username.trim().toLowerCase()}@lms.local`;
+
   const handleLogin = async () => {
+    if (!username || !password) {
+      return alert("Nhập đầy đủ thông tin");
+    }
+
     setLoading(true);
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: toEmail(username), // ✅ login bằng username
       password,
     });
+
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      alert("Sai tài khoản hoặc mật khẩu");
     }
   };
 
@@ -78,7 +87,20 @@ export default function App() {
       .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
 
-    if (!error) setExams(data || []);
+    if (!error && data) {
+      // tạo signed url cho file
+      const enriched = await Promise.all(
+        data.map(async (exam) => {
+          if (exam.file_name) {
+            const signedUrl = await getSignedFileUrl(exam.file_name);
+            return { ...exam, file_url: signedUrl };
+          }
+          return exam;
+        })
+      );
+
+      setExams(enriched);
+    }
   }, [session]);
 
   useEffect(() => {
@@ -92,27 +114,21 @@ export default function App() {
 
     setLoading(true);
 
-    let fileUrl = editingExam?.file_url || null;
     let fileName = editingExam?.file_name || null;
 
     if (file) {
-      const uploaded = await uploadExamFile(file);
-      if (uploaded) {
-        fileUrl = uploaded.url;
-        fileName = uploaded.fileName;
-      }
+      fileName = await uploadExamFile(file); // ✅ chỉ trả về fileName
     }
 
     if (editingExam) {
       await supabase
         .from("exams")
-        .update({ title, content, file_url: fileUrl, file_name: fileName })
+        .update({ title, content, file_name: fileName })
         .eq("id", editingExam.id);
     } else {
       await supabase.from("exams").insert({
         title,
         content,
-        file_url: fileUrl,
         file_name: fileName,
         user_id: session.user.id,
       });
@@ -146,47 +162,24 @@ export default function App() {
     setEditingExam(null);
   };
 
-  /* ================= RENDER MATH ================= */
-
-  const renderMath = (text: string) => {
-    const parts = text.split(/(\$\$.*?\$\$|\$.*?\$)/g);
-
-    return parts.map((part, index) => {
-      if (part.startsWith("$$")) {
-        return (
-          <BlockMath key={index}>
-            {part.replace(/\$\$/g, "")}
-          </BlockMath>
-        );
-      }
-
-      if (part.startsWith("$")) {
-        return (
-          <InlineMath key={index}>
-            {part.replace(/\$/g, "")}
-          </InlineMath>
-        );
-      }
-
-      return <span key={index}>{part}</span>;
-    });
-  };
-
   /* ================= LOGIN UI ================= */
 
-  if (checkingAuth) return <div className="p-10">Đang kiểm tra đăng nhập...</div>;
+  if (checkingAuth)
+    return <div className="p-10">Đang kiểm tra đăng nhập...</div>;
 
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-200 to-slate-200">
         <div className="bg-white p-10 rounded-3xl shadow-xl space-y-5 w-96">
-          <h2 className="text-2xl font-bold text-indigo-600">Đăng nhập LMS</h2>
+          <h2 className="text-2xl font-bold text-indigo-600">
+            Đăng nhập LMS
+          </h2>
 
           <input
             className="w-full border p-3 rounded-xl"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Tên đăng nhập"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
           />
 
           <input
@@ -214,7 +207,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 to-slate-100 p-10">
       <div className="max-w-6xl mx-auto space-y-8">
-
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-bold text-indigo-600">
             🚀 LMS Supabase PRO
@@ -227,8 +219,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Bạn giữ nguyên form + list như cũ */}
-
+        {/* Bạn giữ nguyên phần form + list bên dưới */}
       </div>
     </div>
   );
