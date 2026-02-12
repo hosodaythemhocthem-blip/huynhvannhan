@@ -1,70 +1,103 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, Eraser } from "lucide-react";
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Eraser,
+  Upload,
+  Trash2,
+  Download,
+} from "lucide-react";
 import { askGemini } from "../services/geminiService";
 import MathPreview from "./MathPreview";
+import mammoth from "mammoth";
+import * as pdfjsLib from "pdfjs-dist";
+import { saveAs } from "file-saver";
+import { v4 as uuidv4 } from "uuid";
 
-/* =========================
-   KIỂU DỮ LIỆU
-========================= */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 interface ChatMessage {
+  id: string;
   role: "user" | "ai";
   content: string;
+  createdAt: number;
 }
 
-/* =========================
-   COMPONENT
-========================= */
+const STORAGE_KEY = "lumina_ai_chat";
+
 const AiTutor: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "ai",
-      content:
-        "👋 Xin chào! Tôi là trợ lý AI Toán học (Lumina Tutor).\nBạn có thắc mắc gì về bài học hay cần giải đề không?",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved
+      ? JSON.parse(saved)
+      : [
+          {
+            id: uuidv4(),
+            role: "ai",
+            content:
+              "👋 Xin chào! Tôi là trợ lý AI Toán học (Lumina Tutor).\nBạn có thắc mắc gì về bài học hay cần giải đề không?",
+            createdAt: Date.now(),
+          },
+        ];
+  });
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Ref để tự động cuộn xuống cuối
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  /* ==============================
+     AUTO SCROLL + SAVE LOCAL
+  ============================== */
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  /* ==============================
+     SEND MESSAGE
+  ============================== */
 
-    const userText = input.trim();
+  const handleSend = async (customText?: string) => {
+    const text = customText || input.trim();
+    if (!text || loading) return;
+
     setInput("");
 
-    // Thêm tin nhắn User
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: userText },
-    ]);
+    const userMessage: ChatMessage = {
+      id: uuidv4(),
+      role: "user",
+      content: text,
+      createdAt: Date.now(),
+    };
 
+    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
     try {
-      const aiReply = await askGemini(userText);
+      const aiReply = await askGemini(text);
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", content: aiReply },
-      ]);
-    } catch (err: unknown) {
-      console.error(err);
+      const aiMessage: ChatMessage = {
+        id: uuidv4(),
+        role: "ai",
+        content: aiReply,
+        createdAt: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
+          id: uuidv4(),
           role: "ai",
-          content:
-            "❌ Xin lỗi, hệ thống AI đang quá tải hoặc gặp sự cố. Vui lòng thử lại sau.",
+          content: "❌ AI đang quá tải. Vui lòng thử lại.",
+          createdAt: Date.now(),
         },
       ]);
     } finally {
@@ -72,126 +105,164 @@ const AiTutor: React.FC = () => {
     }
   };
 
+  /* ==============================
+     DELETE MESSAGE
+  ============================== */
+
+  const deleteMessage = (id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  /* ==============================
+     CLEAR CHAT
+  ============================== */
+
   const handleClearChat = () => {
     if (confirm("Bạn muốn xóa toàn bộ đoạn chat này?")) {
-      setMessages([
-        {
-          role: "ai",
-          content: "🧹 Đã làm mới cuộc trò chuyện. Bạn cần giúp gì tiếp theo?",
-        },
-      ]);
+      localStorage.removeItem(STORAGE_KEY);
+      setMessages([]);
     }
   };
 
+  /* ==============================
+     EXPORT CHAT
+  ============================== */
+
+  const exportChat = () => {
+    const text = messages
+      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+      .join("\n\n");
+
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    saveAs(blob, "lumina-chat.txt");
+  };
+
+  /* ==============================
+     FILE UPLOAD (PDF + DOCX)
+  ============================== */
+
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let extractedText = "";
+
+    if (file.type === "application/pdf") {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const typedArray = new Uint8Array(reader.result as ArrayBuffer);
+        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          extractedText += content.items.map((item: any) => item.str).join(" ");
+        }
+
+        handleSend(extractedText);
+      };
+      reader.readAsArrayBuffer(file);
+    } else if (
+      file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const result = await mammoth.extractRawText({
+          arrayBuffer: reader.result as ArrayBuffer,
+        });
+        extractedText = result.value;
+        handleSend(extractedText);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      alert("Chỉ hỗ trợ file PDF hoặc DOCX.");
+    }
+  };
+
+  /* ==============================
+     RENDER
+  ============================== */
+
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] max-w-4xl mx-auto bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-140px)] max-w-4xl mx-auto bg-white rounded-[32px] border shadow-xl overflow-hidden">
+
       {/* HEADER */}
-      <div className="bg-slate-50/80 backdrop-blur border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+      <div className="bg-slate-50 border-b px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
             <Sparkles size={20} />
           </div>
           <div>
-            <h2 className="font-black text-lg text-slate-800">
-              Trợ lý AI Toán học
-            </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              Powered by Google Gemini
-            </p>
+            <h2 className="font-black text-lg">Trợ lý AI Toán học</h2>
+            <p className="text-xs text-slate-400">Powered by Gemini</p>
           </div>
         </div>
-        <button
-          onClick={handleClearChat}
-          className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-          title="Xóa đoạn chat"
-        >
-          <Eraser size={18} />
-        </button>
+
+        <div className="flex gap-2">
+          <button onClick={exportChat} className="p-2 hover:bg-slate-200 rounded-lg">
+            <Download size={18} />
+          </button>
+          <button onClick={handleClearChat} className="p-2 hover:bg-rose-100 rounded-lg">
+            <Eraser size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* CHAT AREA */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30 scroll-smooth">
-        {messages.map((m, idx) => {
+      {/* CHAT */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
+        {messages.map((m) => {
           const isUser = m.role === "user";
+
           return (
-            <div
-              key={`${m.role}-${idx}`}
-              className={`flex gap-4 ${
-                isUser ? "flex-row-reverse" : "flex-row"
-              }`}
-            >
-              {/* Avatar */}
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  isUser
-                    ? "bg-indigo-100 text-indigo-600"
-                    : "bg-emerald-100 text-emerald-600"
-                }`}
-              >
+            <div key={m.id} className={`flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                isUser ? "bg-indigo-100" : "bg-emerald-100"
+              }`}>
                 {isUser ? <User size={16} /> : <Bot size={16} />}
               </div>
 
-              {/* Bubble */}
-              <div
-                className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-sm shadow-sm leading-relaxed ${
+              <div className="relative group max-w-[80%]">
+                <div className={`px-5 py-3 rounded-2xl text-sm shadow ${
                   isUser
-                    ? "bg-indigo-600 text-white rounded-tr-none"
-                    : "bg-white border border-slate-200 text-slate-700 rounded-tl-none"
-                }`}
-              >
-                {isUser ? (
-                  <p className="whitespace-pre-wrap font-medium">
-                    {m.content}
-                  </p>
-                ) : (
-                  <MathPreview math={m.content} />
-                )}
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white border text-slate-700"
+                }`}>
+                  {isUser ? (
+                    <p className="whitespace-pre-wrap">{m.content}</p>
+                  ) : (
+                    <MathPreview math={m.content} />
+                  )}
+                </div>
+
+                <button
+                  onClick={() => deleteMessage(m.id)}
+                  className="absolute -top-2 -right-2 hidden group-hover:block bg-white border p-1 rounded-full shadow"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
           );
         })}
 
-        {/* Loading Indicator */}
-        {loading && (
-          <div className="flex gap-4">
-            <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
-              <Bot size={16} />
-            </div>
-            <div className="bg-white border border-slate-200 px-5 py-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
-              <span
-                className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
-                style={{ animationDelay: "0ms" }}
-              />
-              <span
-                className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
-                style={{ animationDelay: "150ms" }}
-              />
-              <span
-                className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"
-                style={{ animationDelay: "300ms" }}
-              />
-            </div>
-          </div>
-        )}
+        {loading && <div className="text-slate-400 text-sm">AI đang trả lời...</div>}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT AREA */}
+      {/* INPUT */}
       <div className="p-4 bg-white border-t">
-        <div className="relative flex items-end gap-2 bg-slate-100 p-2 rounded-2xl focus-within:border-indigo-200 focus-within:bg-white transition-all">
+        <div className="flex items-center gap-2 bg-slate-100 p-2 rounded-2xl">
           <textarea
             value={input}
             disabled={loading}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Nhập bài toán hoặc câu hỏi..."
+            placeholder="Nhập bài toán hoặc tải đề..."
+            className="flex-1 bg-transparent outline-none px-3 py-2 resize-none"
             rows={1}
-            className="flex-1 bg-transparent border-none outline-none px-3 py-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 resize-none max-h-32 min-h-[44px]"
-            onInput={(e) => {
-              e.currentTarget.style.height = "auto";
-              e.currentTarget.style.height =
-                e.currentTarget.scrollHeight + "px";
-            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -199,17 +270,30 @@ const AiTutor: React.FC = () => {
               }
             }}
           />
+
           <button
-            onClick={handleSend}
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 bg-white rounded-lg border"
+          >
+            <Upload size={18} />
+          </button>
+
+          <button
+            onClick={() => handleSend()}
             disabled={loading || !input.trim()}
-            className="mb-1 p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md shadow-indigo-200"
+            className="p-2 bg-indigo-600 text-white rounded-lg"
           >
             <Send size={18} />
           </button>
+
+          <input
+            type="file"
+            hidden
+            ref={fileInputRef}
+            accept=".pdf,.docx"
+            onChange={handleFileUpload}
+          />
         </div>
-        <p className="text-center text-[10px] text-slate-400 mt-2 font-medium">
-          AI có thể mắc lỗi. Hãy kiểm tra lại thông tin quan trọng.
-        </p>
       </div>
     </div>
   );
