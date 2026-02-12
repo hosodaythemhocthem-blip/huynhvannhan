@@ -1,30 +1,111 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Exam, Question, QuestionType } from "../types";
 import { GoogleGenAI } from "@google/genai";
-import { extractQuestionsFromVisual } from "../services/geminiService";
 import {
   Upload,
   Sparkles,
-  BrainCircuit,
   Loader2,
   Wand2,
   AlertCircle,
+  Trash2,
+  Save,
+  FileText,
 } from "lucide-react";
 
 interface Props {
   onGenerate: (exam: Exam) => void;
 }
 
+const STORAGE_KEY = "ai_exam_draft";
+
 const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
   const [topic, setTopic] = useState("");
   const [grade, setGrade] = useState<"10" | "11" | "12">("12");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [mode, setMode] = useState<"topic" | "file">("topic");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  /* =========================================
-     SINH ĐỀ TỪ CHỦ ĐỀ (TEXT PROMPT)
-  ========================================= */
+  /* ===============================
+     LOAD DRAFT VĨNH VIỄN
+  =============================== */
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setTopic(parsed.topic || "");
+      setGrade(parsed.grade || "12");
+      setFileName(parsed.fileName || null);
+    }
+  }, []);
+
+  /* ===============================
+     LƯU VĨNH VIỄN
+  =============================== */
+  const handleSave = () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ topic, grade, fileName })
+    );
+  };
+
+  /* ===============================
+     XÓA TOÀN BỘ
+  =============================== */
+  const handleClear = () => {
+    setTopic("");
+    setFileName(null);
+    setError("");
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  /* ===============================
+     UPLOAD FILE WORD / PDF
+  =============================== */
+  const handleFileUpload = async (file: File) => {
+    setFileName(file.name);
+    setLoading(true);
+    setError("");
+
+    try {
+      const text = await file.text();
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.API_KEY,
+      });
+
+      const prompt = `
+Trích xuất và chuẩn hóa đề thi từ nội dung sau.
+Chỉ trả về JSON đúng format Exam.
+
+${text}
+`;
+
+      const res = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: { responseMimeType: "application/json" },
+      });
+
+      const clean = (res.text || "")
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+      const parsed: Exam = JSON.parse(clean);
+
+      onGenerate(parsed);
+    } catch (err: any) {
+      console.error(err);
+      setError("Không thể xử lý file. Kiểm tra định dạng PDF/DOCX.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ===============================
+     SINH ĐỀ TỪ CHỦ ĐỀ
+  =============================== */
   const handleGenerateFromTopic = async () => {
     if (!topic.trim()) {
       setError("Vui lòng nhập chủ đề Toán");
@@ -32,7 +113,7 @@ const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
     }
 
     if (!process.env.API_KEY) {
-      setError("Thiếu API_KEY cho Gemini (chưa cấu hình môi trường)");
+      setError("Thiếu API_KEY cho Gemini");
       return;
     }
 
@@ -45,74 +126,24 @@ const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
       });
 
       const prompt = `
-Bạn là giáo viên Toán THPT Việt Nam chuyên nghiệp. 
-Hãy soạn 1 đề thi Toán lớp ${grade} chuẩn cấu trúc Bộ GD 2025 về chủ đề: "${topic}".
-
-YÊU CẦU ĐẦU RA:
-- Chỉ trả về 1 JSON Object
-- KHÔNG markdown
-- KHÔNG giải thích
-
-JSON FORMAT:
-{
-  "title": "Tên đề thi",
-  "questions": [
-    {
-      "id": "q1",
-      "type": "multiple_choice",
-      "section": 1,
-      "text": "Nội dung câu hỏi (LaTeX $...$)",
-      "options": ["A", "B", "C", "D"],
-      "correctAnswer": 0,
-      "points": 0.25
-    },
-    {
-      "id": "q2",
-      "type": "true_false",
-      "section": 2,
-      "text": "Câu hỏi đúng sai",
-      "subQuestions": [
-        { "id": "a", "text": "Ý 1", "correctAnswer": true },
-        { "id": "b", "text": "Ý 2", "correctAnswer": false }
-      ],
-      "points": 1.0
-    },
-    {
-      "id": "q3",
-      "type": "short_answer",
-      "section": 3,
-      "text": "Câu hỏi trả lời ngắn",
-      "correctAnswer": "Kết quả",
-      "points": 0.5
-    }
-  ]
-}
+Bạn là giáo viên Toán THPT Việt Nam.
+Soạn đề lớp ${grade} chủ đề "${topic}".
+Chỉ trả JSON chuẩn Exam.
 `;
 
       const res = await ai.models.generateContent({
         model: "gemini-1.5-flash",
         contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-        },
+        config: { responseMimeType: "application/json" },
       });
 
-      // ====== SANITIZE JSON ======
-      const raw = res.text || "{}";
-      const clean = raw
+      const clean = (res.text || "")
         .replace(/```json/gi, "")
         .replace(/```/g, "")
         .trim();
 
-      let parsed: Exam;
+      const parsed: Exam = JSON.parse(clean);
 
-      try {
-        parsed = JSON.parse(clean);
-      } catch {
-        throw new Error("AI trả về JSON không hợp lệ");
-      }
-
-      // ====== VALIDATE QUESTIONS ======
       const validTypes: QuestionType[] = [
         "multiple_choice",
         "true_false",
@@ -124,29 +155,48 @@ JSON FORMAT:
       );
 
       if (!questions.length) {
-        throw new Error("Không sinh được câu hỏi hợp lệ");
+        throw new Error("AI không sinh được câu hợp lệ");
       }
 
       onGenerate({
-        title: parsed.title || "Đề thi Toán (AI)",
+        title: parsed.title || "Đề thi AI",
         questions,
       });
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Không thể sinh đề từ AI");
+      setError(err.message || "Không thể sinh đề");
     } finally {
       setLoading(false);
     }
   };
 
-  /* =========================================
+  /* ===============================
      UI
-  ========================================= */
+  =============================== */
   return (
-    <div className="bg-white border rounded-2xl p-6 shadow-sm space-y-4">
-      <div className="flex items-center gap-2">
-        <Sparkles className="text-indigo-600" size={20} />
-        <h3 className="font-bold">Sinh đề thi bằng AI</h3>
+    <div className="bg-white border rounded-2xl p-6 shadow-lg space-y-4 transition-all">
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="text-indigo-600" size={20} />
+          <h3 className="font-bold">AI Exam Generator PRO</h3>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            className="p-2 rounded-lg bg-green-100 hover:bg-green-200"
+          >
+            <Save size={16} />
+          </button>
+
+          <button
+            onClick={handleClear}
+            className="p-2 rounded-lg bg-red-100 hover:bg-red-200"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -156,11 +206,12 @@ JSON FORMAT:
         </div>
       )}
 
+      {/* INPUT */}
       <div className="flex gap-2">
         <input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="VD: Hàm số bậc 3, tích phân, xác suất..."
+          placeholder="VD: Hàm số, tích phân..."
           className="flex-1 border rounded-xl px-4 py-2 text-sm"
         />
         <select
@@ -174,18 +225,44 @@ JSON FORMAT:
         </select>
       </div>
 
-      <button
-        onClick={handleGenerateFromTopic}
-        disabled={loading}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 flex items-center justify-center gap-2 disabled:opacity-50"
-      >
-        {loading ? (
-          <Loader2 className="animate-spin" size={18} />
-        ) : (
-          <Wand2 size={18} />
-        )}
-        Sinh đề thi
-      </button>
+      {/* BUTTONS */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleGenerateFromTopic}
+          disabled={loading}
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
+          Sinh từ chủ đề
+        </button>
+
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="bg-slate-200 hover:bg-slate-300 rounded-xl px-4 flex items-center gap-2"
+        >
+          <Upload size={16} />
+          Upload
+        </button>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          hidden
+          onChange={(e) => {
+            if (e.target.files?.[0]) {
+              handleFileUpload(e.target.files[0]);
+            }
+          }}
+        />
+      </div>
+
+      {fileName && (
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          <FileText size={14} />
+          {fileName}
+        </div>
+      )}
     </div>
   );
 };
