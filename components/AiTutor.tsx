@@ -1,12 +1,7 @@
-// FULL CODE SIÊU ĐỈNH – SUPABASE VERSION
-
-import React, { useState, useRef, useEffect } from "react";
+// components/AiTutor.tsx
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
-  Bot,
-  User,
-  Sparkles,
-  Eraser,
   Upload,
   Trash2,
   Download,
@@ -39,22 +34,70 @@ const AiTutor: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ==============================
-     INIT CONVERSATION
+     LOAD USER + INIT CONVERSATION
   ============================== */
 
   useEffect(() => {
-    const initConversation = async () => {
-      const { data } = await supabase
-        .from("conversations")
-        .insert({})
-        .select()
-        .single();
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      setConversationId(data.id);
+      if (!user) return;
+
+      // Tìm conversation gần nhất
+      const { data: existing } = await supabase
+        .from("conversations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        setConversationId(existing.id);
+        loadMessages(existing.id);
+      } else {
+        const { data, error } = await supabase
+          .from("conversations")
+          .insert({
+            user_id: user.id,
+            title: "New Chat",
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          setConversationId(data.id);
+        }
+      }
     };
 
-    initConversation();
+    init();
   }, []);
+
+  /* ==============================
+     LOAD MESSAGES
+  ============================== */
+
+  const loadMessages = async (convId: string) => {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", convId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      const formatted = data.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: new Date(m.created_at).getTime(),
+      }));
+
+      setMessages(formatted);
+    }
+  };
 
   /* ==============================
      AUTO SCROLL
@@ -65,7 +108,7 @@ const AiTutor: React.FC = () => {
   }, [messages]);
 
   /* ==============================
-     SAVE MESSAGE TO DB
+     SAVE MESSAGE
   ============================== */
 
   const saveMessage = async (msg: ChatMessage) => {
@@ -84,6 +127,8 @@ const AiTutor: React.FC = () => {
   ============================== */
 
   const handleSend = async (customText?: string) => {
+    if (!conversationId) return;
+
     const text = customText || input.trim();
     if (!text || loading) return;
 
@@ -113,11 +158,11 @@ const AiTutor: React.FC = () => {
 
       setMessages((prev) => [...prev, aiMessage]);
       await saveMessage(aiMessage);
-    } catch {
+    } catch (error) {
       const errorMsg: ChatMessage = {
         id: uuidv4(),
         role: "ai",
-        content: "❌ AI đang quá tải.",
+        content: "❌ AI đang quá tải, thử lại sau.",
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -143,7 +188,7 @@ const AiTutor: React.FC = () => {
   const handleClearChat = async () => {
     if (!conversationId) return;
 
-    if (confirm("Xóa toàn bộ cuộc trò chuyện?")) {
+    if (window.confirm("Xóa toàn bộ cuộc trò chuyện?")) {
       await supabase
         .from("messages")
         .delete()
@@ -173,56 +218,80 @@ const AiTutor: React.FC = () => {
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
+    if (!conversationId) return;
+
     const file = e.target.files?.[0];
-    if (!file || !conversationId) return;
+    if (!file) return;
 
     let extractedText = "";
 
-    if (file.type === "application/pdf") {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer))
-        .promise;
+    try {
+      if (file.type === "application/pdf") {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({
+          data: new Uint8Array(arrayBuffer),
+        }).promise;
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        extractedText += content.items.map((item: any) => item.str).join(" ");
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          extractedText +=
+            content.items
+              .map((item: any) => ("str" in item ? item.str : ""))
+              .join(" ") + "\n";
+        }
+      } else if (
+        file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        const result = await mammoth.extractRawText({
+          arrayBuffer: await file.arrayBuffer(),
+        });
+        extractedText = result.value;
+      } else {
+        alert("Chỉ hỗ trợ PDF hoặc DOCX");
+        return;
       }
-    } else if (
-      file.type ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ) {
-      const result = await mammoth.extractRawText({
-        arrayBuffer: await file.arrayBuffer(),
+
+      // Đổi tên file tránh trùng
+      const filePath = `${conversationId}/${uuidv4()}-${file.name}`;
+
+      const { error } = await supabase.storage
+        .from("uploads")
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("uploads").getPublicUrl(filePath);
+
+      await supabase.from("uploads").insert({
+        conversation_id: conversationId,
+        file_name: file.name,
+        file_url: publicUrl,
       });
-      extractedText = result.value;
-    } else {
-      alert("Chỉ hỗ trợ PDF hoặc DOCX");
-      return;
+
+      handleSend(extractedText);
+    } catch (err) {
+      console.error(err);
+      alert("Upload file thất bại");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-
-    // Upload file to Supabase Storage
-    const { data } = await supabase.storage
-      .from("uploads")
-      .upload(`${conversationId}/${file.name}`, file);
-
-    const fileUrl = supabase.storage
-      .from("uploads")
-      .getPublicUrl(data?.path || "").data.publicUrl;
-
-    await supabase.from("uploads").insert({
-      conversation_id: conversationId,
-      file_name: file.name,
-      file_url: fileUrl,
-    });
-
-    handleSend(extractedText);
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] max-w-4xl mx-auto bg-white rounded-[32px] border shadow-2xl overflow-hidden">
-      {/* UI giữ nguyên cấu trúc của bạn */}
-      {/* (Phần render không thay đổi cấu trúc) */}
+      {/* GIỮ NGUYÊN UI CỦA BẠN */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {messages.map((msg) => (
+          <div key={msg.id}>
+            <MathPreview content={msg.content} />
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 };
