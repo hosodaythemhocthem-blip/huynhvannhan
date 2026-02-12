@@ -3,7 +3,7 @@ import { Course, ProgressData, QuestionType, Exam } from "./types";
 /* ======================================================
    BIỂU ĐỒ TIẾN ĐỘ HỌC TẬP HÀNG TUẦN
 ====================================================== */
-export const STUDY_DATA: Readonly<ProgressData[]> = [
+export const STUDY_DATA: Readonly<ProgressData[]> = Object.freeze([
   { name: "Thứ 2", hours: 1.5 },
   { name: "Thứ 3", hours: 3.8 },
   { name: "Thứ 4", hours: 2.2 },
@@ -11,12 +11,12 @@ export const STUDY_DATA: Readonly<ProgressData[]> = [
   { name: "Thứ 6", hours: 3.1 },
   { name: "Thứ 7", hours: 5.4 },
   { name: "CN", hours: 2.0 },
-];
+]);
 
 /* ======================================================
    KHÓA HỌC MẪU (DEMO / SEED DATA)
 ====================================================== */
-export const MOCK_COURSES: Readonly<Course[]> = [
+export const MOCK_COURSES: Readonly<Course[]> = Object.freeze([
   {
     id: "c1",
     title: "Giải tích 12: Đạo hàm & Khảo sát hàm số",
@@ -35,6 +35,7 @@ export const MOCK_COURSES: Readonly<Course[]> = [
         completed: true,
         content: `
 ### 1. Định lý về tính đơn điệu
+
 Giả sử hàm số $f$ có đạo hàm trên khoảng $K$.
 
 - Nếu $f'(x) > 0$ với mọi $x \\in K$ thì hàm số **đồng biến** trên $K$.
@@ -47,7 +48,8 @@ Giả sử hàm số $f$ có đạo hàm trên khoảng $K$.
         duration: "25m",
         completed: false,
         content: `
-Để tìm cực trị hàm bậc ba $y=ax^3+bx^2+cx+d$, ta giải phương trình đạo hàm:
+Để tìm cực trị hàm bậc ba $y=ax^3+bx^2+cx+d$, ta giải:
+
 $$y' = 3ax^2 + 2bx + c = 0$$
         `.trim(),
       },
@@ -77,18 +79,22 @@ thì $d \\perp (P)$.
       },
     ],
   },
-];
+]);
 
 /* ======================================================
    ĐỀ THI MẪU – CẤU TRÚC 3 PHẦN (BỘ GD)
 ====================================================== */
-export const MOCK_EXAMS: Readonly<Exam[]> = [
+export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
   {
     id: "e1",
     title: "Đề ôn tập Chương 1 - Giải tích 12",
-    createdAt: "2024-05-25", // ISO-friendly (dễ migrate Firestore)
-    questionCount: 18,
+    createdAt: new Date("2024-05-25").toISOString(),
+    questionCount: 3,
     duration: 90,
+    totalPoints: 1.75,
+    subject: "Toán",
+    grade: "12",
+    difficulty: "medium",
     isLocked: false,
     questions: [
       {
@@ -129,11 +135,10 @@ export const MOCK_EXAMS: Readonly<Exam[]> = [
         id: "q3",
         type: QuestionType.SHORT_ANSWER,
         section: 3,
-        text:
-          "Tìm giá trị **cực tiểu** của hàm số $y = x^2 - 4x + 5$:",
+        text: "Tìm giá trị cực tiểu của hàm số $y = x^2 - 4x + 5$:",
         correctAnswer: "1",
         points: 0.5,
       },
     ],
   },
-];
+]);
