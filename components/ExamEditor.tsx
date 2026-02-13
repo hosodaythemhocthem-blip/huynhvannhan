@@ -1,103 +1,190 @@
-import React from "react";
-import { Plus, FileText, LayoutGrid } from "lucide-react";
-import { Exam } from "../types";
-import ExamCard from "./ExamCard";
-import ImportExamFromFile from "./ImportExamFromFile";
-import AiExamGenerator from "./AiExamGenerator";
+import React, { useEffect, useState, useCallback } from "react";
+import { Plus, Trash2, Save, Undo2 } from "lucide-react";
+import { Exam, Question } from "../types";
+import { examService } from "../services/exam.service";
+import { BlockMath } from "react-katex";
+import "katex/dist/katex.min.css";
 
-/* =========================
-   PROPS
-========================= */
 interface Props {
-  exams: Exam[];
-  onCreate: () => void;
-  onAdd: (exam: Exam) => void; // Nhận đề từ AI hoặc File
-  onEdit: (exam: Exam) => void;
-  onDelete: (id: string) => void;
-  onView?: (exam: Exam) => void;
+  exam: Exam;
 }
 
-/* =========================
-   COMPONENT
-========================= */
-const ExamDashboard: React.FC<Props> = ({
-  exams,
-  onCreate,
-  onAdd,
-  onEdit,
-  onDelete,
-  onView,
-}) => {
-  const hasExams = exams.length > 0;
+const ExamEditor: React.FC<Props> = ({ exam }) => {
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [history, setHistory] = useState<Question[][]>([]);
+  const [saving, setSaving] = useState(false);
+
+  /* =========================
+     LOAD QUESTIONS
+  ========================= */
+  useEffect(() => {
+    const load = async () => {
+      const data = await examService.getQuestions(exam.id);
+      setQuestions(data);
+    };
+    load();
+  }, [exam.id]);
+
+  /* =========================
+     AUTO SAVE
+  ========================= */
+  const saveAll = async () => {
+    setSaving(true);
+    for (const q of questions) {
+      if (!q.id) {
+        await examService.addQuestion({
+          exam_id: exam.id,
+          content: q.content,
+          type: "multiple",
+        });
+      }
+    }
+    setSaving(false);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveAll();
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [questions]);
+
+  /* =========================
+     ADD QUESTION
+  ========================= */
+  const addQuestion = () => {
+    setHistory((prev) => [...prev, questions]);
+    setQuestions((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        exam_id: exam.id,
+        content: "",
+        type: "multiple",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+  };
+
+  /* =========================
+     DELETE QUESTION
+  ========================= */
+  const deleteQuestion = async (id: string) => {
+    if (!window.confirm("Xóa câu hỏi này?")) return;
+
+    setHistory((prev) => [...prev, questions]);
+    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    await examService.deleteQuestion(id);
+  };
+
+  /* =========================
+     UPDATE CONTENT
+  ========================= */
+  const updateContent = (id: string, value: string) => {
+    setHistory((prev) => [...prev, questions]);
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, content: value } : q))
+    );
+  };
+
+  /* =========================
+     UNDO
+  ========================= */
+  const undo = () => {
+    if (history.length === 0) return;
+    const prevState = history[history.length - 1];
+    setQuestions(prevState);
+    setHistory((prev) => prev.slice(0, -1));
+  };
+
+  /* =========================
+     PASTE HANDLER
+  ========================= */
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>, id: string) => {
+      const html = e.clipboardData.getData("text/html");
+      if (html) {
+        e.preventDefault();
+        updateContent(id, html);
+      }
+    },
+    []
+  );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* =========================
-          ACTION BAR
-      ========================= */}
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div className="flex flex-wrap gap-3">
-          {/* Tạo đề thủ công */}
+    <div className="space-y-8">
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black text-slate-700">
+          Chỉnh sửa: {exam.title}
+        </h2>
+
+        <div className="flex items-center gap-3">
           <button
-            onClick={onCreate}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
+            onClick={undo}
+            className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl flex items-center gap-2"
           >
-            <Plus size={20} />
-            Soạn đề thủ công
+            <Undo2 size={18} />
+            Undo
           </button>
 
-          {/* Import Word / PDF */}
-          <ImportExamFromFile />
-        </div>
-
-        {/* AI Generator */}
-        <div className="w-full md:w-auto">
-          <AiExamGenerator onGenerate={onAdd} />
+          <button
+            onClick={saveAll}
+            className="bg-green-600 text-white px-5 py-2 rounded-xl flex items-center gap-2 shadow"
+          >
+            <Save size={18} />
+            {saving ? "Đang lưu..." : "Lưu"}
+          </button>
         </div>
       </div>
 
-      {/* =========================
-          EXAM LIST
-      ========================= */}
-      {!hasExams ? (
-        /* EMPTY STATE */
-        <div className="flex flex-col items-center justify-center text-slate-400 py-24 border-2 border-dashed border-slate-200 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 transition-colors">
-          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-6 border border-slate-100">
-            <FileText size={40} className="text-slate-300" />
-          </div>
+      {/* QUESTION LIST */}
+      <div className="space-y-6">
+        {questions.map((q, index) => (
+          <div
+            key={q.id}
+            className="bg-white p-6 rounded-2xl shadow border border-slate-200"
+          >
+            <div className="flex justify-between mb-3">
+              <span className="font-bold text-slate-600">
+                Câu {index + 1}
+              </span>
 
-          <h3 className="font-black text-xl text-slate-600 mb-2">
-            Chưa có đề thi nào
-          </h3>
-          <p className="text-sm font-medium opacity-60 max-w-md text-center">
-            Hệ thống chưa ghi nhận đề thi nào. Hãy bắt đầu bằng cách tạo thủ công,
-            tải file lên hoặc dùng{" "}
-            <span className="text-indigo-500 font-bold">AI Genius</span> để biên soạn.
-          </p>
-        </div>
-      ) : (
-        /* LIST */
-        <div>
-          <div className="flex items-center gap-2 mb-4 text-slate-400 font-bold text-xs uppercase tracking-widest">
-            <LayoutGrid size={14} />
-            Danh sách đề thi ({exams.length})
-          </div>
+              <button
+                onClick={() => deleteQuestion(q.id)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {exams.map((exam) => (
-              <ExamCard
-                key={exam.id}
-                exam={exam}
-                onView={onView}
-                onEdit={() => onEdit(exam)}
-                onDelete={onDelete}
-              />
-            ))}
+            <textarea
+              value={q.content}
+              onChange={(e) => updateContent(q.id, e.target.value)}
+              onPaste={(e) => handlePaste(e, q.id)}
+              placeholder="Nhập nội dung câu hỏi (hỗ trợ LaTeX: \\frac{a}{b})"
+              className="w-full min-h-[120px] p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400 outline-none"
+            />
+
+            {/* MATH PREVIEW */}
+            <div className="mt-4 bg-slate-50 p-4 rounded-xl">
+              <BlockMath math={q.content} />
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+
+      {/* ADD BUTTON */}
+      <button
+        onClick={addQuestion}
+        className="bg-indigo-600 text-white px-6 py-3 rounded-2xl flex items-center gap-2 shadow-lg hover:bg-indigo-700 transition"
+      >
+        <Plus size={20} />
+        Thêm câu hỏi
+      </button>
     </div>
   );
 };
 
-export default ExamDashboard;
+export default ExamEditor;
