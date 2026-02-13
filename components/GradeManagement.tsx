@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
+  useRef,
 } from "react";
 import {
   ChevronDown,
@@ -10,10 +11,12 @@ import {
   RotateCcw,
   AlertTriangle,
   CheckCircle2,
-  X,
   Trash2,
+  Save,
+  X,
+  RefreshCw,
 } from "lucide-react";
-import { Class, Exam, Grade } from "../types";
+import { Class, Exam } from "../types";
 import { supabase } from "../supabase";
 
 /* =========================
@@ -50,30 +53,44 @@ const GradeManagement: React.FC<
   GradeManagementProps
 > = ({ classes, exams }) => {
   const [selectedClassId, setSelectedClassId] =
-    useState<string>("");
+    useState("");
   const [selectedExamId, setSelectedExamId] =
-    useState<string>("");
+    useState("");
 
   const [submissions, setSubmissions] =
     useState<SubmissionRow[]>([]);
   const [loading, setLoading] =
-    useState<boolean>(false);
+    useState(false);
   const [error, setError] =
     useState<string | null>(null);
 
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
+  const [editScore, setEditScore] =
+    useState<number>(0);
+
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   /* =========================
-     LOAD FROM SUPABASE
+     LOAD DATA
   ========================= */
 
-  const loadSubmissions = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const loadSubmissions = useCallback(
+    async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      let query = supabase
-        .from("submissions")
-        .select(
-          `
+        let query = supabase
+          .from("submissions")
+          .select(
+            `
           id,
           exam_id,
           student_id,
@@ -89,62 +106,121 @@ const GradeManagement: React.FC<
             class_id
           )
         `
-        )
-        .order("created_at", {
-          ascending: false,
-        });
+          )
+          .order("created_at", {
+            ascending: false,
+          });
 
-      if (selectedExamId) {
-        query = query.eq(
-          "exam_id",
-          selectedExamId
-        );
+        if (selectedExamId) {
+          query = query.eq(
+            "exam_id",
+            selectedExamId
+          );
+        }
+
+        const { data, error } =
+          await query;
+
+        if (error) throw error;
+
+        const filtered =
+          selectedClassId
+            ? (data ?? []).filter(
+                (s) =>
+                  s.exams?.class_id ===
+                  selectedClassId
+              )
+            : data ?? [];
+
+        if (mounted.current)
+          setSubmissions(filtered);
+      } catch (err: any) {
+        if (mounted.current)
+          setError(
+            err?.message ||
+              "Không thể tải dữ liệu."
+          );
+      } finally {
+        if (mounted.current)
+          setLoading(false);
       }
-
-      const { data, error } =
-        await query;
-
-      if (error) {
-        throw error;
-      }
-
-      const filtered =
-        selectedClassId
-          ? (data ?? []).filter(
-              (s) =>
-                s.exams?.class_id ===
-                selectedClassId
-            )
-          : data ?? [];
-
-      setSubmissions(filtered);
-    } catch (err: any) {
-      setError(
-        err?.message ||
-          "Không thể tải dữ liệu."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedClassId, selectedExamId]);
+    },
+    [selectedClassId, selectedExamId]
+  );
 
   useEffect(() => {
     loadSubmissions();
   }, [loadSubmissions]);
 
   /* =========================
-     DERIVED DATA
+     UPDATE SCORE
   ========================= */
 
-  const filteredExams = useMemo(() => {
-    if (!selectedClassId)
-      return exams;
-    return exams.filter(
-      (e) =>
-        e.classId ===
-        selectedClassId
+  const handleSaveScore =
+    useCallback(
+      async (id: string) => {
+        try {
+          const { error } =
+            await supabase
+              .from("submissions")
+              .update({
+                score: editScore,
+              })
+              .eq("id", id);
+
+          if (error) throw error;
+
+          setSubmissions((prev) =>
+            prev.map((s) =>
+              s.id === id
+                ? { ...s, score: editScore }
+                : s
+            )
+          );
+
+          setEditingId(null);
+        } catch (err: any) {
+          alert(
+            err?.message ||
+              "Không thể cập nhật điểm."
+          );
+        }
+      },
+      [editScore]
     );
-  }, [exams, selectedClassId]);
+
+  /* =========================
+     DELETE
+  ========================= */
+
+  const handleDelete =
+    useCallback(async (id: string) => {
+      if (
+        !window.confirm(
+          "Bạn chắc chắn muốn xóa?"
+        )
+      )
+        return;
+
+      const { error } =
+        await supabase
+          .from("submissions")
+          .delete()
+          .eq("id", id);
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      setSubmissions((prev) =>
+        prev.filter((s) => s.id !== id)
+      );
+    }, []);
+
+  /* =========================
+     STATS
+  ========================= */
 
   const stats = useMemo(() => {
     const total = submissions.length;
@@ -157,8 +233,8 @@ const GradeManagement: React.FC<
       total > 0
         ? (
             submissions.reduce(
-              (sum, s) =>
-                sum + s.score,
+              (a, b) =>
+                a + b.score,
               0
             ) / total
           ).toFixed(2)
@@ -173,67 +249,30 @@ const GradeManagement: React.FC<
               (passed / total) *
               100
             ).toFixed(1)
-          : "0.0",
+          : "0",
       avg,
     };
   }, [submissions]);
 
   /* =========================
-     ACTIONS
+     EXPORT CSV
   ========================= */
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      if (
-        !window.confirm(
-          "Xóa bài nộp này?"
-        )
-      )
-        return;
-
-      try {
-        const { error } =
-          await supabase
-            .from("submissions")
-            .delete()
-            .eq("id", id);
-
-        if (error) throw error;
-
-        setSubmissions((prev) =>
-          prev.filter(
-            (s) => s.id !== id
-          )
-        );
-      } catch (err: any) {
-        alert(
-          err?.message ||
-            "Không thể xóa."
-        );
-      }
-    },
-    []
-  );
-
-  const exportCSV = useCallback(() => {
-    if (submissions.length === 0)
-      return;
+  const exportCSV = () => {
+    if (!submissions.length) return;
 
     const header =
       "Student,Exam,Score,Date\n";
 
     const rows = submissions
-      .map((s) => {
-        const name =
-          s.profiles?.full_name ??
-          "Unknown";
-        const exam =
-          s.exams?.title ??
-          "Unknown";
-        return `${name},${exam},${s.score},${new Date(
-          s.created_at
-        ).toLocaleString()}`;
-      })
+      .map(
+        (s) =>
+          `${s.profiles?.full_name ?? ""},${
+            s.exams?.title ?? ""
+          },${s.score},${new Date(
+            s.created_at
+          ).toLocaleString()}`
+      )
       .join("\n");
 
     const blob = new Blob(
@@ -245,37 +284,29 @@ const GradeManagement: React.FC<
 
     const url =
       URL.createObjectURL(blob);
+
     const link =
       document.createElement("a");
     link.href = url;
-    link.setAttribute(
-      "download",
-      "grades.csv"
-    );
-    document.body.appendChild(
-      link
-    );
+    link.download = "grades.csv";
     link.click();
-    document.body.removeChild(
-      link
-    );
-  }, [submissions]);
+  };
 
   /* =========================
      RENDER
   ========================= */
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-8">
+
       {/* FILTER */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-wrap gap-5 items-end">
+      <div className="bg-white rounded-2xl p-6 shadow-sm border">
+        <div className="flex gap-4 flex-wrap">
+
           <FilterSelect
             label="Chọn lớp"
             value={selectedClassId}
-            onChange={
-              setSelectedClassId
-            }
+            onChange={setSelectedClassId}
             options={[
               {
                 value: "",
@@ -294,16 +325,14 @@ const GradeManagement: React.FC<
           <FilterSelect
             label="Chọn đề"
             value={selectedExamId}
-            onChange={
-              setSelectedExamId
-            }
+            onChange={setSelectedExamId}
             options={[
               {
                 value: "",
                 label:
                   "-- Tất cả đề --",
               },
-              ...filteredExams.map(
+              ...exams.map(
                 (e) => ({
                   value: e.id,
                   label: e.title,
@@ -312,88 +341,75 @@ const GradeManagement: React.FC<
             ]}
           />
 
-          <div className="flex gap-3">
-            <button
-              onClick={exportCSV}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg"
-            >
-              <Download size={16} />
-              CSV
-            </button>
+          <button
+            onClick={loadSubmissions}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl flex items-center gap-2"
+          >
+            <RefreshCw size={16} />
+            Reload
+          </button>
 
-            <button
-              onClick={() => {
-                setSelectedClassId("");
-                setSelectedExamId("");
-              }}
-              className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 border border-red-100"
-            >
-              <RotateCcw size={18} />
-            </button>
-          </div>
+          <button
+            onClick={exportCSV}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-xl flex items-center gap-2"
+          >
+            <Download size={16} />
+            CSV
+          </button>
         </div>
       </div>
 
-      {/* OVERVIEW */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* STATS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          label="Tổng bài nộp"
+          label="Tổng bài"
           value={stats.total}
-          icon={<CheckCircle2 />}
         />
         <StatCard
           label="Đạt"
           value={stats.passed}
-          icon={<CheckCircle2 />}
         />
         <StatCard
-          label="Tỉ lệ đạt (%)"
+          label="Tỉ lệ (%)"
           value={stats.passRate}
-          icon={<AlertTriangle />}
         />
         <StatCard
-          label="Điểm TB"
+          label="TB"
           value={stats.avg}
-          icon={<CheckCircle2 />}
         />
       </div>
 
       {/* TABLE */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-10 text-center text-slate-400">
-            Đang tải dữ liệu...
+      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+
+        {loading && (
+          <div className="p-8 text-center">
+            Đang tải...
           </div>
-        ) : error ? (
-          <div className="p-10 text-center text-red-500">
-            {error}
-          </div>
-        ) : submissions.length ===
-          0 ? (
-          <div className="p-10 text-center text-slate-400">
-            Không có dữ liệu.
-          </div>
-        ) : (
+        )}
+
+        {!loading && (
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600 uppercase text-xs">
+            <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-3 text-left">
                   Học sinh
                 </th>
                 <th className="px-4 py-3 text-left">
-                  Đề thi
+                  Đề
                 </th>
-                <th className="px-4 py-3">
+                <th className="px-4 py-3 text-center">
                   Điểm
                 </th>
-                <th className="px-4 py-3">
-                  Ngày nộp
+                <th className="px-4 py-3 text-center">
+                  Ngày
                 </th>
-                <th className="px-4 py-3">
+                <th className="px-4 py-3 text-center">
                   Hành động
                 </th>
               </tr>
             </thead>
+
             <tbody>
               {submissions.map(
                 (s) => (
@@ -406,18 +422,75 @@ const GradeManagement: React.FC<
                         ?.full_name ??
                         "Unknown"}
                     </td>
+
                     <td className="px-4 py-3">
-                      {s.exams?.title ??
-                        "Unknown"}
+                      {s.exams?.title}
                     </td>
+
                     <td className="px-4 py-3 text-center font-bold">
-                      {s.score}
+
+                      {editingId ===
+                      s.id ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <input
+                            type="number"
+                            value={
+                              editScore
+                            }
+                            onChange={(e) =>
+                              setEditScore(
+                                Number(
+                                  e.target
+                                    .value
+                                )
+                              )
+                            }
+                            className="w-16 border rounded-lg px-2 py-1 text-center"
+                          />
+                          <button
+                            onClick={() =>
+                              handleSaveScore(
+                                s.id
+                              )
+                            }
+                            className="text-green-600"
+                          >
+                            <Save size={16} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setEditingId(
+                                null
+                              )
+                            }
+                            className="text-red-500"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          onClick={() => {
+                            setEditingId(
+                              s.id
+                            );
+                            setEditScore(
+                              s.score
+                            );
+                          }}
+                          className="cursor-pointer hover:text-blue-600"
+                        >
+                          {s.score}
+                        </span>
+                      )}
                     </td>
+
                     <td className="px-4 py-3 text-center">
                       {new Date(
                         s.created_at
                       ).toLocaleString()}
                     </td>
+
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() =>
@@ -443,63 +516,49 @@ const GradeManagement: React.FC<
   );
 };
 
-/* =========================
-   SMALL COMPONENTS
-========================= */
+/* SMALL */
 
 const FilterSelect = ({
   label,
   value,
   onChange,
   options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: {
-    value: string;
-    label: string;
-  }[];
-}) => (
-  <div className="flex-1 min-w-[220px] space-y-2">
-    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+}: any) => (
+  <div className="min-w-[220px]">
+    <label className="text-xs font-bold text-slate-400">
       {label}
     </label>
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) =>
-          onChange(e.target.value)
-        }
-        className="w-full appearance-none border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-sm"
-      >
-        {options.map((o) => (
-          <option
-            key={o.value}
-            value={o.value}
-          >
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
-    </div>
+    <select
+      value={value}
+      onChange={(e) =>
+        onChange(e.target.value)
+      }
+      className="w-full border rounded-xl px-3 py-2 mt-1"
+    >
+      {options.map((o: any) => (
+        <option
+          key={o.value}
+          value={o.value}
+        >
+          {o.label}
+        </option>
+      ))}
+    </select>
   </div>
 );
 
 const StatCard = ({
   label,
   value,
-  icon,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-}) => (
-  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
-    <div>
-      <p className="text-xs uppercase text-slate-400 font-bold">
-        {label}
-      </p>
-      <p className="text-2xl font-black text-slate-800 mt-1">
-        {value}
+}: any) => (
+  <div className="bg-white border rounded-2xl p-4 text-center shadow-sm">
+    <p className="text-xs text-slate-400 uppercase font-bold">
+      {label}
+    </p>
+    <p className="text-2xl font-black text-slate-800 mt-1">
+      {value}
+    </p>
+  </div>
+);
+
+export default GradeManagement;
