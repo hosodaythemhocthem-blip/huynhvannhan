@@ -26,28 +26,58 @@ const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [loggingOut, setLoggingOut] = useState(false);
   const [profile, setProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   /* =========================
-     LOAD USER PROFILE
+     LOAD USER PROFILE SAFE
   ========================= */
   useEffect(() => {
+    let mounted = true;
+
     const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        setLoadingProfile(true);
 
-      if (!user) return;
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+        if (userError || !user) {
+          setLoadingProfile(false);
+          return;
+        }
 
-      setProfile(data);
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Load profile error:", error.message);
+        }
+
+        if (mounted) {
+          setProfile(data || null);
+        }
+      } catch (err) {
+        console.error("Unexpected profile error:", err);
+      } finally {
+        if (mounted) setLoadingProfile(false);
+      }
     };
 
     loadProfile();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      loadProfile();
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   /* =========================
@@ -79,11 +109,19 @@ const Layout: React.FC<LayoutProps> = ({
     }
   };
 
+  const initials =
+    profile?.full_name
+      ?.split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "U";
+
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-slate-100">
 
       {/* ================= SIDEBAR ================= */}
-      <aside className="hidden md:flex w-72 flex-col bg-white/80 backdrop-blur-xl border-r border-slate-200">
+      <aside className="hidden md:flex w-72 flex-col bg-white/80 backdrop-blur-xl border-r border-slate-200 transition-all duration-300">
 
         {/* Logo */}
         <div className="px-6 py-6 flex items-center gap-4 border-b border-slate-100">
@@ -113,7 +151,7 @@ const Layout: React.FC<LayoutProps> = ({
                 className={[
                   "group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
                   active
-                    ? "bg-indigo-100 text-indigo-700 font-semibold"
+                    ? "bg-indigo-100 text-indigo-700 font-semibold shadow-sm"
                     : "text-slate-600 hover:bg-slate-100",
                 ].join(" ")}
               >
@@ -132,7 +170,7 @@ const Layout: React.FC<LayoutProps> = ({
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
           >
             {loggingOut ? (
               <Loader2 size={18} className="animate-spin" />
@@ -175,16 +213,25 @@ const Layout: React.FC<LayoutProps> = ({
 
               <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
                 <div className="hidden sm:block text-right">
-                  <div className="text-sm font-semibold text-slate-800">
-                    {profile?.full_name || "Người dùng"}
-                  </div>
-                  <div className="text-xs text-slate-500 capitalize">
-                    {profile?.role || "User"}
-                  </div>
+                  {loadingProfile ? (
+                    <div className="animate-pulse">
+                      <div className="h-3 w-20 bg-slate-200 rounded mb-2" />
+                      <div className="h-2 w-14 bg-slate-200 rounded" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {profile?.full_name || "Người dùng"}
+                      </div>
+                      <div className="text-xs text-slate-500 capitalize">
+                        {profile?.role || "User"}
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-sm">
-                  <User size={18} />
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-sm text-sm font-bold">
+                  {initials}
                 </div>
               </div>
 
