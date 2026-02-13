@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./supabase";
 import type { AppUser, UserRole } from "./types";
 
@@ -8,11 +8,13 @@ import StudentDashboard from "./pages/StudentDashboard";
 import TeacherPortal from "./pages/TeacherPortal";
 import AdminDashboard from "./pages/AdminDashboard";
 
+/* ================= APP ================= */
+
 export default function App() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= AUTH INIT ================= */
+  /* ================= INIT AUTH ================= */
 
   useEffect(() => {
     let mounted = true;
@@ -66,10 +68,12 @@ export default function App() {
         approval_status: data.approved,
         email,
       });
+    } else {
+      setUser(null);
     }
   };
 
-  /* ================= PROTECTED ================= */
+  /* ================= PROTECTED ROUTE ================= */
 
   const protect = (component: JSX.Element, allowed: UserRole[]) => {
     if (loading) return <FullScreenLoader />;
@@ -80,23 +84,29 @@ export default function App() {
       return <Navigate to="/" replace />;
     }
 
+    // 🔥 CHẶN STUDENT CHƯA DUYỆT
+    if (user.role === "student" && !user.approval_status) {
+      return <PendingApproval />;
+    }
+
     return component;
   };
 
-  /* ================= REDIRECT ROOT ================= */
+  /* ================= ROOT REDIRECT ================= */
 
   const RootRedirect = () => {
     if (loading) return <FullScreenLoader />;
 
-    if (!user) {
-      return <LoginScreen onLoginSuccess={() => {}} />;
-    }
+    if (!user) return <LoginScreen />;
 
     if (user.role === "teacher") {
       return <Navigate to="/teacher" replace />;
     }
 
     if (user.role === "student") {
+      if (!user.approval_status) {
+        return <PendingApproval />;
+      }
       return <Navigate to="/student" replace />;
     }
 
@@ -133,12 +143,29 @@ export default function App() {
   );
 }
 
-/* ================= LOADING UI ================= */
+/* ================= LOADING ================= */
 
 function FullScreenLoader() {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-700 text-white text-xl font-semibold">
       <div className="animate-pulse">Đang tải hệ thống...</div>
+    </div>
+  );
+}
+
+/* ================= PENDING UI ================= */
+
+function PendingApproval() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-yellow-500 to-orange-600 text-white text-center p-10">
+      <div>
+        <h1 className="text-3xl font-bold mb-4">
+          Tài khoản đang chờ duyệt
+        </h1>
+        <p className="opacity-90">
+          Vui lòng chờ giáo viên phê duyệt để vào lớp học.
+        </p>
+      </div>
     </div>
   );
 }
