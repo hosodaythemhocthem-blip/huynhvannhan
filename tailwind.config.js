@@ -1,22 +1,30 @@
-import typography from '@tailwindcss/typography';
+import typography from '@tailwindcss/typography'
 
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./App.{js,ts,jsx,tsx}",
+    "./main.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./services/**/*.{js,ts,jsx,tsx}",
   ],
 
   theme: {
     extend: {
-      /* ==================================================
-         COLOR SYSTEM – PREMIUM LMS + EDU
-      ================================================== */
       colors: {
         primary: {
           50: "#f5f7ff",
+          100: "#e6ebff",
+          200: "#cdd6ff",
+          300: "#aabaff",
+          400: "#8096ff",
           500: "#4a67ee",
           600: "#3447e4",
+          700: "#2a3ad1",
+          800: "#1f2da8",
+          900: "#1a2485",
           950: "#161a4f",
         },
 
@@ -27,6 +35,14 @@ export default {
 
         slate: {
           50: "#f8fafc",
+          100: "#f1f5f9",
+          200: "#e2e8f0",
+          300: "#cbd5e1",
+          400: "#94a3b8",
+          500: "#64748b",
+          600: "#475569",
+          700: "#334155",
+          800: "#1e293b",
           900: "#0f172a",
           950: "#020617",
         },
@@ -84,7 +100,5 @@ export default {
     },
   },
 
-  plugins: [
-    typography,
-  ],
-};
+  plugins: [typography],
+}
