@@ -1,3 +1,4 @@
+// components/CourseViewer.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
@@ -6,6 +7,7 @@ import {
   Upload,
   Loader2,
   FileText,
+  RotateCcw,
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
@@ -17,11 +19,10 @@ interface Props {
   onBack: () => void;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   const lessons = useMemo(() => course.lessons ?? [], [course]);
-
   const [activeLessonId, setActiveLessonId] = useState(
     lessons[0]?.id
   );
@@ -30,9 +31,9 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   const [score, setScore] = useState<number | null>(null);
   const [selectedAnswers, setSelectedAnswers] =
     useState<Record<number, number>>({});
-
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const activeLesson = lessons.find(
     (l: any) => l.id === activeLessonId
@@ -45,37 +46,45 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   }, [activeLessonId]);
 
   /* =========================
-     LƯU ĐIỂM VĨNH VIỄN
+     SAVE RESULT
   ========================= */
   const saveResult = async (scoreValue: number) => {
-    try {
-      const { data } = await supabase.auth.getUser();
-      if (!data?.user) return;
+    const { data } = await supabase.auth.getUser();
+    if (!data?.user) return;
 
-      await supabase.from("quiz_results").insert({
-        lesson_id: activeLessonId,
-        user_id: data.user.id,
-        score: scoreValue,
-      });
-    } catch (error) {
-      console.error("Save result error:", error);
-    }
+    await supabase.from("quiz_results").upsert({
+      lesson_id: activeLessonId,
+      user_id: data.user.id,
+      score: scoreValue,
+    });
+  };
+
+  const deleteResult = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data?.user) return;
+
+    await supabase
+      .from("quiz_results")
+      .delete()
+      .eq("lesson_id", activeLessonId)
+      .eq("user_id", data.user.id);
+
+    setScore(null);
   };
 
   /* =========================
-     SINH QUIZ AI
+     GENERATE QUIZ
   ========================= */
   const handleGenQuiz = async () => {
     if (!activeLesson) return;
 
     try {
       setLoadingQuiz(true);
-
       const questions = await generateQuiz(
         activeLesson.content
       );
 
-      if (!questions || questions.length === 0) {
+      if (!questions?.length) {
         alert("AI không tạo được câu hỏi.");
         return;
       }
@@ -86,20 +95,20 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
       });
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi tạo quiz.");
+      alert("Lỗi AI.");
     } finally {
       setLoadingQuiz(false);
     }
   };
 
   /* =========================
-     NỘP BÀI
+     SUBMIT QUIZ
   ========================= */
   const submitQuiz = async () => {
-    if (!quiz || quiz.questions.length === 0) return;
+    if (!quiz) return;
+    setSubmitting(true);
 
     let correct = 0;
-
     quiz.questions.forEach((q: any, i: number) => {
       if (selectedAnswers[i] === q.correctIndex)
         correct++;
@@ -111,6 +120,12 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
 
     setScore(finalScore);
     await saveResult(finalScore);
+    setSubmitting(false);
+  };
+
+  const resetQuiz = () => {
+    setSelectedAnswers({});
+    setScore(null);
   };
 
   /* =========================
@@ -125,7 +140,7 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
     const file = e.target.files[0];
 
     if (file.size > MAX_FILE_SIZE) {
-      alert("File quá lớn (tối đa 10MB)");
+      alert("File tối đa 10MB");
       return;
     }
 
@@ -144,11 +159,11 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
         .from("lesson-files")
         .getPublicUrl(filePath);
 
-      await supabase.from("lessons").update({
-        file_url: data.publicUrl,
-      }).eq("id", activeLessonId);
+      await supabase.from("lessons")
+        .update({ file_url: data.publicUrl })
+        .eq("id", activeLessonId);
 
-      alert("Upload thành công!");
+      window.location.reload();
     } catch (error) {
       console.error(error);
       alert("Upload thất bại");
@@ -158,15 +173,12 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
   };
 
   /* =========================
-     XÓA FILE
+     DELETE FILE
   ========================= */
   const handleDeleteFile = async () => {
     if (!activeLesson?.file_url) return;
 
-    const confirmDelete = confirm(
-      "Bạn có chắc muốn xóa file?"
-    );
-    if (!confirmDelete) return;
+    if (!confirm("Xóa file?")) return;
 
     try {
       const url = new URL(activeLesson.file_url);
@@ -182,17 +194,47 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
         .update({ file_url: null })
         .eq("id", activeLessonId);
 
-      alert("Đã xóa file");
+      window.location.reload();
     } catch (error) {
       console.error(error);
-      alert("Xóa thất bại");
     }
   };
 
+  const renderFilePreview = () => {
+    if (!activeLesson?.file_url) return null;
+
+    const url = activeLesson.file_url;
+
+    if (url.endsWith(".pdf")) {
+      return (
+        <iframe
+          src={url}
+          className="w-full h-[500px] rounded-xl border"
+        />
+      );
+    }
+
+    if (
+      url.endsWith(".doc") ||
+      url.endsWith(".docx")
+    ) {
+      return (
+        <iframe
+          src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+            url
+          )}`}
+          className="w-full h-[500px] rounded-xl border"
+        />
+      );
+    }
+
+    return null;
+  };
+
   return (
-    <div className="flex gap-8">
+    <div className="flex gap-10 fade-in">
       {/* SIDEBAR */}
-      <aside className="w-72 space-y-4">
+      <aside className="w-72 bg-white rounded-2xl shadow-sm p-4 space-y-4 border">
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-indigo-600 font-semibold"
@@ -204,12 +246,10 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
         {lessons.map((l: any) => (
           <button
             key={l.id}
-            onClick={() =>
-              setActiveLessonId(l.id)
-            }
-            className={`block w-full text-left p-2 rounded-lg transition ${
+            onClick={() => setActiveLessonId(l.id)}
+            className={`block w-full text-left p-3 rounded-xl transition ${
               l.id === activeLessonId
-                ? "bg-indigo-100 text-indigo-700"
+                ? "bg-indigo-100 text-indigo-700 font-semibold"
                 : "hover:bg-slate-100"
             }`}
           >
@@ -219,22 +259,21 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
       </aside>
 
       {/* MAIN */}
-      <main className="flex-1 space-y-6">
+      <main className="flex-1 space-y-8">
         {activeLesson && (
           <>
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-3xl font-black text-slate-800">
               {activeLesson.title}
             </h2>
 
-            {/* HIỂN THỊ CÔNG THỨC */}
             <MathPreview
               math={activeLesson.content}
             />
 
             {/* FILE SECTION */}
-            <div className="bg-slate-50 p-4 rounded-xl space-y-3">
-              <div className="flex items-center gap-2 font-semibold">
-                <FileText size={18} />
+            <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+              <div className="flex items-center gap-2 font-bold text-lg">
+                <FileText size={20} />
                 Tài liệu
               </div>
 
@@ -249,23 +288,27 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
               )}
 
               {activeLesson.file_url && (
-                <div className="flex items-center gap-4">
-                  <a
-                    href={activeLesson.file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-indigo-600 underline"
-                  >
-                    Xem file
-                  </a>
+                <>
+                  <div className="flex gap-4 items-center">
+                    <a
+                      href={activeLesson.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-600 underline"
+                    >
+                      Mở file mới tab
+                    </a>
 
-                  <button
-                    onClick={handleDeleteFile}
-                    className="text-red-500"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                    <button
+                      onClick={handleDeleteFile}
+                      className="text-red-500"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+
+                  {renderFilePreview()}
+                </>
               )}
             </div>
 
@@ -274,7 +317,7 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
               <button
                 onClick={handleGenQuiz}
                 disabled={loadingQuiz}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2"
+                className="btn btn-primary flex items-center gap-2"
               >
                 {loadingQuiz ? (
                   <Loader2 className="animate-spin" />
@@ -289,17 +332,14 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
                   (q: any, i: number) => (
                     <div
                       key={i}
-                      className="p-4 border rounded-xl"
+                      className="bg-white p-6 rounded-2xl border shadow-sm"
                     >
-                      <p className="font-semibold mb-3">
+                      <p className="font-bold mb-4">
                         {q.question}
                       </p>
 
                       {q.options.map(
-                        (
-                          opt: string,
-                          oi: number
-                        ) => (
+                        (opt: string, oi: number) => (
                           <button
                             key={oi}
                             onClick={() =>
@@ -310,10 +350,9 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
                                 })
                               )
                             }
-                            className={`block w-full text-left p-2 rounded-lg mb-2 ${
-                              selectedAnswers[i] ===
-                              oi
-                                ? "bg-indigo-100"
+                            className={`block w-full text-left p-3 rounded-xl mb-2 transition ${
+                              selectedAnswers[i] === oi
+                                ? "bg-indigo-100 border-indigo-300 border"
                                 : "hover:bg-slate-100"
                             }`}
                           >
@@ -328,13 +367,37 @@ const CourseViewer: React.FC<Props> = ({ course, onBack }) => {
                 {score === null ? (
                   <button
                     onClick={submitQuiz}
-                    className="bg-green-600 text-white px-4 py-2 rounded-xl"
+                    disabled={submitting}
+                    className="btn btn-success"
                   >
-                    Nộp bài
+                    {submitting ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      "Nộp bài"
+                    )}
                   </button>
                 ) : (
-                  <div className="text-xl font-bold text-indigo-600">
-                    Điểm: {score}
+                  <div className="space-y-4">
+                    <div className="text-2xl font-black text-indigo-600">
+                      Điểm: {score}
+                    </div>
+
+                    <div className="flex gap-4">
+                      <button
+                        onClick={resetQuiz}
+                        className="btn"
+                      >
+                        <RotateCcw size={16} />
+                        Làm lại
+                      </button>
+
+                      <button
+                        onClick={deleteResult}
+                        className="btn btn-danger"
+                      >
+                        Xóa kết quả
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
