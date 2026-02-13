@@ -17,11 +17,19 @@ import {
 } from "lucide-react";
 import { Class } from "../types";
 
+/* =========================
+   TYPES
+========================= */
+
+type GameId = "duck-race" | "lucky-wheel" | "math-battle";
+
 interface GameManagementProps {
   classes: Class[];
 }
 
-type GameId = "duck-race" | "lucky-wheel" | "math-battle";
+/* ============================================================
+   MAIN COMPONENT
+============================================================ */
 
 const GameManagement: React.FC<GameManagementProps> = ({
   classes,
@@ -59,7 +67,7 @@ const GameManagement: React.FC<GameManagementProps> = ({
         id: "lucky-wheel" as GameId,
         title: "Quay số may mắn",
         description:
-          "Chọn ngẫu nhiên học sinh trả lời câu hỏi hoặc nhận thưởng.",
+          "Chọn ngẫu nhiên học sinh trả lời câu hỏi.",
         gradient:
           "from-purple-500 to-indigo-600",
         icon: (
@@ -86,6 +94,10 @@ const GameManagement: React.FC<GameManagementProps> = ({
     ],
     []
   );
+
+  /* =========================
+     ROUTER GAME
+  ========================= */
 
   if (
     activeGameId === "duck-race" &&
@@ -128,6 +140,10 @@ const GameManagement: React.FC<GameManagementProps> = ({
       />
     );
   }
+
+  /* =========================
+     DEFAULT SCREEN
+  ========================= */
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -207,7 +223,6 @@ const GameManagement: React.FC<GameManagementProps> = ({
           />
           <p className="font-bold">
             Vui lòng chọn lớp để bắt đầu
-            trò chơi
           </p>
         </div>
       )}
@@ -215,9 +230,9 @@ const GameManagement: React.FC<GameManagementProps> = ({
   );
 };
 
-/* =========================
-   DUCK RACE
-========================= */
+/* ============================================================
+   DUCK RACE ARENA
+============================================================ */
 
 interface Duck {
   id: number;
@@ -230,32 +245,26 @@ const DuckRaceArena: React.FC<{
   onBack: () => void;
 }> = ({ className, onBack }) => {
   const [racing, setRacing] =
-    useState<boolean>(false);
+    useState(false);
+  const [winner, setWinner] =
+    useState<string | null>(null);
+
   const [ducks, setDucks] =
     useState<Duck[]>([
-      {
-        id: 1,
-        name: "Trâm Anh",
-        progress: 0,
-      },
-      {
-        id: 2,
-        name: "Minh Khang",
-        progress: 0,
-      },
-      {
-        id: 3,
-        name: "Bảo Ngọc",
-        progress: 0,
-      },
+      { id: 1, name: "Trâm Anh", progress: 0 },
+      { id: 2, name: "Minh Khang", progress: 0 },
+      { id: 3, name: "Bảo Ngọc", progress: 0 },
     ]);
 
   const timerRef =
-    useRef<NodeJS.Timeout | null>(null);
+    useRef<ReturnType<typeof setInterval> | null>(
+      null
+    );
 
-  const startRace = useCallback(() => {
+  const startRace = () => {
     if (racing) return;
 
+    setWinner(null);
     setRacing(true);
 
     timerRef.current = setInterval(() => {
@@ -265,31 +274,46 @@ const DuckRaceArena: React.FC<{
           progress: Math.min(
             100,
             d.progress +
-              Math.random() * 8 +
-              2
+              Math.random() * 10
           ),
         }))
       );
+    }, 150);
+  };
+
+  useEffect(() => {
+    if (!racing) return;
+
+    const checkWinner = setInterval(() => {
+      setDucks((prev) => {
+        const win = prev.find(
+          (d) => d.progress >= 100
+        );
+        if (win) {
+          setWinner(win.name);
+          setRacing(false);
+          if (timerRef.current)
+            clearInterval(
+              timerRef.current
+            );
+        }
+        return prev;
+      });
     }, 200);
 
-    setTimeout(() => {
-      if (timerRef.current)
-        clearInterval(
-          timerRef.current
-        );
-      setRacing(false);
-    }, 5000);
+    return () => clearInterval(checkWinner);
   }, [racing]);
 
-  const resetRace = useCallback(() => {
+  const resetRace = () => {
     if (racing) return;
+    setWinner(null);
     setDucks((prev) =>
       prev.map((d) => ({
         ...d,
         progress: 0,
       }))
     );
-  }, [racing]);
+  };
 
   useEffect(() => {
     return () => {
@@ -302,50 +326,35 @@ const DuckRaceArena: React.FC<{
 
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm animate-in fade-in">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex justify-between mb-8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition"
+          className="text-slate-500 hover:text-indigo-600 font-bold flex items-center gap-2"
         >
-          <ArrowLeft size={18} /> Quay lại
+          <ArrowLeft size={18} />
+          Quay lại
         </button>
 
-        <h2 className="font-black text-yellow-500 text-lg">
+        <h2 className="font-black text-yellow-500">
           Đua Vịt – {className}
         </h2>
-
-        <div className="flex gap-3">
-          <button
-            onClick={resetRace}
-            disabled={racing}
-            className="p-2 rounded-xl border hover:bg-slate-50 disabled:opacity-50 transition"
-          >
-            <RotateCw size={18} />
-          </button>
-          <button
-            onClick={startRace}
-            disabled={racing}
-            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-bold disabled:opacity-50 transition"
-          >
-            <Play size={16} /> Đua
-          </button>
-        </div>
       </div>
 
+      {winner && (
+        <div className="mb-6 text-xl font-black text-emerald-600 text-center">
+          🎉 Người thắng: {winner}
+        </div>
+      )}
+
       {ducks.map((d) => (
-        <div
-          key={d.id}
-          className="mb-4"
-        >
+        <div key={d.id} className="mb-4">
           <div className="flex justify-between text-sm font-semibold mb-1">
             <span>{d.name}</span>
-            <span>
-              {Math.round(d.progress)}%
-            </span>
+            <span>{Math.round(d.progress)}%</span>
           </div>
           <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
             <div
-              className="h-2 bg-yellow-400 rounded-full transition-all duration-200"
+              className="h-2 bg-yellow-400 transition-all duration-150"
               style={{
                 width: `${d.progress}%`,
               }}
@@ -353,59 +362,88 @@ const DuckRaceArena: React.FC<{
           </div>
         </div>
       ))}
+
+      <div className="flex gap-4 mt-6">
+        <button
+          onClick={resetRace}
+          className="px-4 py-2 border rounded-xl"
+        >
+          Reset
+        </button>
+
+        <button
+          onClick={startRace}
+          disabled={racing}
+          className="px-6 py-2 bg-yellow-500 text-white rounded-xl font-bold disabled:opacity-50"
+        >
+          Bắt đầu
+        </button>
+      </div>
     </div>
   );
 };
 
-/* =========================
+/* ============================================================
    LUCKY WHEEL
-========================= */
+============================================================ */
 
 const LuckyWheelArena: React.FC<{
   className: string;
   onBack: () => void;
 }> = ({ className, onBack }) => {
-  const [spinning, setSpinning] =
-    useState<boolean>(false);
+  const students = [
+    "Trâm Anh",
+    "Minh Khang",
+    "Bảo Ngọc",
+    "Gia Huy",
+  ];
+
   const [winner, setWinner] =
     useState<string | null>(null);
+  const [spinning, setSpinning] =
+    useState(false);
 
-  const spin = useCallback(() => {
+  const spin = () => {
     if (spinning) return;
     setSpinning(true);
     setWinner(null);
 
     setTimeout(() => {
-      setWinner(
-        "🎉 Một học sinh may mắn!"
-      );
+      const random =
+        students[
+          Math.floor(
+            Math.random() *
+              students.length
+          )
+        ];
+      setWinner(random);
       setSpinning(false);
     }, 2000);
-  }, [spinning]);
+  };
 
   return (
-    <div className="relative bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm animate-in fade-in">
+    <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm animate-in fade-in">
       <button
         onClick={onBack}
-        className="absolute left-6 top-6 text-slate-400 hover:text-indigo-600 transition"
+        className="mb-6 text-slate-500 hover:text-indigo-600"
       >
         <ArrowLeft size={20} />
       </button>
 
-      <h2 className="text-3xl font-black text-purple-600 mb-8">
+      <h2 className="text-3xl font-black text-purple-600 mb-6">
         Vòng quay – {className}
       </h2>
 
       {winner && (
         <div className="mb-6 text-2xl font-black text-emerald-600">
-          {winner}
+          🎉 {winner}
         </div>
       )}
 
       <button
         onClick={spin}
         disabled={spinning}
-        className="px-12 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black shadow-lg disabled:opacity-50 transition"
+        className="px-10 py-4 bg-purple-600 text-white rounded-2xl font-black disabled:opacity-50"
       >
         {spinning
           ? "Đang quay..."
@@ -415,21 +453,21 @@ const LuckyWheelArena: React.FC<{
   );
 };
 
-/* =========================
+/* ============================================================
    MATH BATTLE
-========================= */
+============================================================ */
 
 const MathBattleArena: React.FC<{
   className: string;
   onBack: () => void;
 }> = ({ className, onBack }) => {
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm text-center animate-in fade-in">
+    <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm animate-in fade-in">
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold mb-6 transition"
+        className="mb-6 text-slate-500 hover:text-indigo-600"
       >
-        <ArrowLeft size={18} /> Quay lại
+        <ArrowLeft size={18} />
       </button>
 
       <h2 className="text-3xl font-black text-blue-600 mb-4">
@@ -437,9 +475,8 @@ const MathBattleArena: React.FC<{
       </h2>
 
       <p className="text-slate-500">
-        Tính năng đang được nâng cấp
-        cho chế độ thi đấu trực tiếp
-        realtime.
+        Sắp tích hợp realtime Supabase
+        để thi đấu trực tiếp.
       </p>
     </div>
   );
