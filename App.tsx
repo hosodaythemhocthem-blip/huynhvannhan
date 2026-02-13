@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase, uploadExamFile, deleteExamFile, getSignedFileUrl } from "./supabase";
-import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
 
 /* ================= TYPES ================= */
@@ -15,32 +14,73 @@ interface Exam {
   user_id: string;
 }
 
+/* ================= LOGIN COMPONENT ================= */
+
+function LoginForm({ onLogin, loading }: any) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-200 to-slate-200">
+      <div className="bg-white p-10 rounded-3xl shadow-xl space-y-5 w-96">
+        <h2 className="text-2xl font-bold text-indigo-600">
+          Đăng nhập LMS
+        </h2>
+
+        <input
+          className="w-full border p-3 rounded-xl"
+          placeholder="Tên đăng nhập"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+
+        <input
+          type="password"
+          className="w-full border p-3 rounded-xl"
+          placeholder="Mật khẩu"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        <button
+          disabled={loading}
+          onClick={() => onLogin(username, password)}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl w-full disabled:opacity-50"
+        >
+          {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ================= APP ================= */
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-
-  const [username, setUsername] = useState(""); // ✅ đổi từ email
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
-  const [loading, setLoading] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
 
   /* ================= AUTH ================= */
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
       setSession(data.session);
       setCheckingAuth(false);
-    });
+    };
+
+    init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        console.log("Auth changed:", session);
         setSession(session);
       }
     );
@@ -53,7 +93,7 @@ export default function App() {
   const toEmail = (username: string) =>
     `${username.trim().toLowerCase()}@lms.local`;
 
-  const handleLogin = async () => {
+  const handleLogin = async (username: string, password: string) => {
     if (!username || !password) {
       return alert("Nhập đầy đủ thông tin");
     }
@@ -61,7 +101,7 @@ export default function App() {
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: toEmail(username), // ✅ login bằng username
+      email: toEmail(username),
       password,
     });
 
@@ -88,7 +128,6 @@ export default function App() {
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      // tạo signed url cho file
       const enriched = await Promise.all(
         data.map(async (exam) => {
           if (exam.file_name) {
@@ -107,99 +146,14 @@ export default function App() {
     if (session) loadData();
   }, [session, loadData]);
 
-  /* ================= SAVE ================= */
+  /* ================= UI FLOW ================= */
 
-  const handleSave = async () => {
-    if (!title.trim()) return alert("Nhập tiêu đề");
-
-    setLoading(true);
-
-    let fileName = editingExam?.file_name || null;
-
-    if (file) {
-      fileName = await uploadExamFile(file); // ✅ chỉ trả về fileName
-    }
-
-    if (editingExam) {
-      await supabase
-        .from("exams")
-        .update({ title, content, file_name: fileName })
-        .eq("id", editingExam.id);
-    } else {
-      await supabase.from("exams").insert({
-        title,
-        content,
-        file_name: fileName,
-        user_id: session.user.id,
-      });
-    }
-
-    await loadData();
-    resetForm();
-    setLoading(false);
-  };
-
-  const handleDelete = async (exam: Exam) => {
-    if (!confirm("Xác nhận xóa?")) return;
-
-    if (exam.file_name) await deleteExamFile(exam.file_name);
-
-    await supabase.from("exams").delete().eq("id", exam.id);
-
-    await loadData();
-  };
-
-  const handleEdit = (exam: Exam) => {
-    setTitle(exam.title);
-    setContent(exam.content);
-    setEditingExam(exam);
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setContent("");
-    setFile(null);
-    setEditingExam(null);
-  };
-
-  /* ================= LOGIN UI ================= */
-
-  if (checkingAuth)
+  if (checkingAuth) {
     return <div className="p-10">Đang kiểm tra đăng nhập...</div>;
+  }
 
   if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-200 to-slate-200">
-        <div className="bg-white p-10 rounded-3xl shadow-xl space-y-5 w-96">
-          <h2 className="text-2xl font-bold text-indigo-600">
-            Đăng nhập LMS
-          </h2>
-
-          <input
-            className="w-full border p-3 rounded-xl"
-            placeholder="Tên đăng nhập"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-
-          <input
-            type="password"
-            className="w-full border p-3 rounded-xl"
-            placeholder="Mật khẩu"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <button
-            disabled={loading}
-            onClick={handleLogin}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-xl w-full disabled:opacity-50"
-          >
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
-        </div>
-      </div>
-    );
+    return <LoginForm onLogin={handleLogin} loading={loading} />;
   }
 
   /* ================= LMS UI ================= */
@@ -211,6 +165,7 @@ export default function App() {
           <h2 className="text-3xl font-bold text-indigo-600">
             🚀 LMS Supabase PRO
           </h2>
+
           <button
             onClick={handleLogout}
             className="bg-red-500 text-white px-4 py-2 rounded-xl"
@@ -219,7 +174,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Bạn giữ nguyên phần form + list bên dưới */}
+        {/* FORM + LIST CỦA BẠN ĐẶT Ở ĐÂY */}
       </div>
     </div>
   );
