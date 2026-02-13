@@ -49,7 +49,7 @@ export interface Exam {
   title: string;
   description?: string;
   teacher_id: string;
-  file_url?: string; // lưu file Word/PDF
+  file_url?: string;
   created_at?: string;
 }
 
@@ -59,7 +59,7 @@ export interface Exam {
 export interface Question {
   id: string;
   exam_id: string;
-  content: string; // hỗ trợ LaTeX
+  content: string;
   answers: string[];
   correct_index: number;
   created_at?: string;
