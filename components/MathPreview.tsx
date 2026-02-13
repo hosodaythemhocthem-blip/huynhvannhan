@@ -1,157 +1,87 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+"use client";
+
+import React, { useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
 interface MathPreviewProps {
-  math: string;
+  content: string;
+  displayMode?: boolean;
   className?: string;
-  isBlock?: boolean;
 }
 
-/* =====================
-   Helpers
-===================== */
+const MathPreview: React.FC<MathPreviewProps> = ({
+  content,
+  displayMode = false,
+  className = "",
+}) => {
+  const elements = useMemo(() => {
+    if (!content) return null;
 
-/**
- * Tự động detect LaTeX nếu user không bọc $...$
- */
-const normalizeMathInput = (raw: string): string => {
-  if (!raw) return "";
+    const regex = /\$\$([^$]+)\$\$|\$([^$]+)\$/g;
+    const result: React.ReactNode[] = [];
 
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
 
-  // Nếu đã có $ hoặc $$ thì giữ nguyên
-  if (/\${1,2}.*?\${1,2}/.test(trimmed)) {
-    return trimmed;
-  }
+    while ((match = regex.exec(content)) !== null) {
+      const [fullMatch, blockMath, inlineMath] = match;
+      const start = match.index;
 
-  // Detect ký hiệu toán phổ biến
-  const mathSigns = [
-    "\\",
-    "^",
-    "_",
-    "{",
-    "}",
-    "\\frac",
-    "\\sqrt",
-    "\\int",
-    "\\sum",
-    "\\lim",
-  ];
+      // Thêm text thường trước math
+      if (start > lastIndex) {
+        result.push(
+          <span key={key++}>
+            {content.slice(lastIndex, start)}
+          </span>
+        );
+      }
 
-  const hasMath = mathSigns.some((s) => trimmed.includes(s));
-
-  if (hasMath) {
-    return `$${trimmed}$`;
-  }
-
-  return trimmed;
-};
-
-/**
- * Render nội dung có cả text + math
- */
-const renderMixedContent = (
-  container: HTMLDivElement,
-  content: string,
-  displayMode: boolean
-) => {
-  // Regex bắt $...$ và $$...$$
-  const regex = /\$\$([^$]+)\$\$|\$([^$]+)\$/g;
-
-  container.innerHTML = "";
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(content)) !== null) {
-    const [fullMatch, blockMath, inlineMath] = match;
-    const start = match.index;
-
-    // Thêm text trước math
-    if (start > lastIndex) {
-      const text = content.slice(lastIndex, start);
-      container.appendChild(document.createTextNode(text));
-    }
-
-    const mathExpression = blockMath || inlineMath;
-    const span = document.createElement("span");
-
-    try {
-      katex.render(mathExpression, span, {
-        displayMode: !!blockMath || displayMode,
-        throwOnError: false,
-        strict: "ignore",
-        output: "html",
-      });
-    } catch (err) {
-      span.textContent = mathExpression;
-    }
-
-    container.appendChild(span);
-    lastIndex = start + fullMatch.length;
-  }
-
-  // Thêm phần text còn lại
-  if (lastIndex < content.length) {
-    container.appendChild(
-      document.createTextNode(content.slice(lastIndex))
-    );
-  }
-};
-
-/* =====================
-   Component
-===================== */
-
-const MathPreview: React.FC<MathPreviewProps> = memo(
-  ({ math, className = "", isBlock = false }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [isReady, setIsReady] = useState<boolean>(false);
-
-    const normalized = useMemo(() => {
-      return normalizeMathInput(math);
-    }, [math]);
-
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      let cancelled = false;
-      setIsReady(false);
+      const mathExpression = blockMath || inlineMath;
 
       try {
-        renderMixedContent(container, normalized, isBlock);
-      } catch (err) {
-        console.warn("KaTeX render error:", err);
+        const html = katex.renderToString(mathExpression, {
+          displayMode: !!blockMath || displayMode,
+          throwOnError: false,
+          strict: "ignore",
+          output: "html",
+        });
+
+        result.push(
+          <span
+            key={key++}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      } catch {
+        result.push(
+          <span key={key++}>
+            {mathExpression}
+          </span>
+        );
       }
 
-      if (!cancelled) {
-        setIsReady(true);
-      }
+      lastIndex = start + fullMatch.length;
+    }
 
-      return () => {
-        cancelled = true;
-      };
-    }, [normalized, isBlock]);
+    // Thêm phần còn lại
+    if (lastIndex < content.length) {
+      result.push(
+        <span key={key++}>
+          {content.slice(lastIndex)}
+        </span>
+      );
+    }
 
-    return (
-      <div
-        ref={containerRef}
-        className={`math-preview ${
-          isBlock ? "block w-full text-center" : "inline-block"
-        } ${className}`}
-        style={{
-          wordBreak: "break-word",
-          minHeight: "1.2em",
-          opacity: isReady ? 1 : 0.7,
-          transition: "opacity 0.15s ease",
-        }}
-      />
-    );
-  }
-);
+    return result;
+  }, [content, displayMode]);
 
-MathPreview.displayName = "MathPreview";
+  return (
+    <span className={className}>
+      {elements}
+    </span>
+  );
+};
 
 export default MathPreview;
