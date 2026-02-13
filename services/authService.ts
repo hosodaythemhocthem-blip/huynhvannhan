@@ -1,8 +1,15 @@
-import { supabase } from "./supabaseClient";
-import { AppUser, UserRole } from "../types";
+import { supabase } from "../supabase";
+import { UserRole } from "../types";
+
+export interface AppUser {
+  id: string;
+  email: string;
+  role: UserRole;
+  approved: boolean;
+}
 
 /* ===============================
-   SAFE METADATA PARSER
+   PARSE USER
 ================================ */
 function parseUser(user: any): AppUser {
   const metadata = user.user_metadata ?? {};
@@ -10,7 +17,6 @@ function parseUser(user: any): AppUser {
   return {
     id: user.id,
     email: user.email ?? "",
-    full_name: metadata.full_name ?? "",
     role: metadata.role as UserRole,
     approved: metadata.approved ?? false,
   };
@@ -32,14 +38,13 @@ export async function registerUser(
       data: {
         full_name,
         role,
-        approved: role === "teacher", // teacher auto approved
+        approved: role === UserRole.TEACHER, // teacher auto approved
       },
     },
   });
 
   if (error) {
-    console.error("Register error:", error.message);
-    throw new Error(error.message);
+    throw error;
   }
 
   return data;
@@ -58,44 +63,39 @@ export async function loginUser(
   });
 
   if (error) {
-    console.error("Login error:", error.message);
-    throw new Error(error.message);
+    throw error;
   }
 
-  const user = data.user;
-
-  if (!user) {
+  if (!data.user) {
     throw new Error("Không tìm thấy người dùng");
   }
 
-  const parsedUser = parseUser(user);
+  const parsedUser = parseUser(data.user);
 
   if (!parsedUser.role) {
     throw new Error("Tài khoản chưa được gán vai trò");
   }
 
-  if (parsedUser.role === "student" && !parsedUser.approved) {
-    throw new Error("Tài khoản đang chờ giáo viên duyệt");
+  if (!parsedUser.approved) {
+    throw new Error(
+      parsedUser.role === UserRole.TEACHER
+        ? "Giáo viên đang chờ duyệt"
+        : "Học sinh đang chờ duyệt"
+    );
   }
 
   return parsedUser;
 }
 
 /* ===============================
-   CURRENT USER (AUTO RESTORE)
+   CURRENT USER
 ================================ */
 export async function getCurrentUser(): Promise<AppUser | null> {
   const { data, error } = await supabase.auth.getUser();
 
-  if (error) {
-    console.error("Get current user error:", error.message);
-    return null;
-  }
+  if (error || !data.user) return null;
 
-  const user = data.user;
-  if (!user) return null;
-
-  return parseUser(user);
+  return parseUser(data.user);
 }
 
 /* ===============================
@@ -103,9 +103,5 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 ================================ */
 export async function logoutUser() {
   const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    console.error("Logout error:", error.message);
-    throw new Error(error.message);
-  }
+  if (error) throw error;
 }
