@@ -1,4 +1,4 @@
-{
+package.json {
   "name": "math-lms-ai",
   "private": true,
   "version": "1.0.0",
@@ -7,8 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf node_modules dist"
+    "preview": "vite preview"
   },
 
   "dependencies": {
@@ -24,16 +23,12 @@
     "mammoth": "^1.6.0",
     "pdfjs-dist": "^4.0.379",
 
-    "lucide-react": "^0.462.0",
-
-    "lodash.debounce": "^4.0.8",
-    "uuid": "^9.0.1"
+    "lucide-react": "^0.462.0"
   },
 
   "devDependencies": {
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
-    "@types/uuid": "^9.0.8",
 
     "@vitejs/plugin-react": "^4.2.1",
     "vite": "^5.0.12",
@@ -46,6 +41,6 @@
   },
 
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   }
 }
