@@ -1,219 +1,130 @@
-import { useState } from "react"
-import { supabase } from "../supabase"
+import React, { useState } from "react";
+import { Eye, EyeOff, Loader2, GraduationCap } from "lucide-react";
+import { supabase } from "../supabase";
 
-export default function LoginScreen() {
-  const [role, setRole] = useState<"student" | "teacher">("student")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [fullName, setFullName] = useState("")
-  const [isRegister, setIsRegister] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+interface Props {
+  onLoginSuccess: () => void;
+}
 
-  /* =========================
-     HANDLE LOGIN
-  ========================= */
-  const handleLogin = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
-      if (error) throw error
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      const user = data.user
-      if (!user) throw new Error("Không tìm thấy user")
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single()
-
-      if (!profile) {
-        throw new Error("Tài khoản chưa được thiết lập profile.")
-      }
-
-      if (profile.role !== role) {
-        throw new Error("Sai vai trò đăng nhập.")
-      }
-
-      if (role === "student" && !profile.approved) {
-        throw new Error("Tài khoản đang chờ giáo viên duyệt.")
-      }
-
-      window.location.href = "/dashboard"
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+    if (error) {
+      setError("Sai email hoặc mật khẩu");
+      setLoading(false);
+      return;
     }
-  }
 
-  /* =========================
-     HANDLE REGISTER (STUDENT)
-  ========================= */
-  const handleRegister = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      if (!fullName) throw new Error("Vui lòng nhập họ tên.")
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
-
-      if (error) throw error
-      if (!data.user) throw new Error("Không tạo được user")
-
-      await supabase.from("profiles").insert({
-        id: data.user.id,
-        email,
-        full_name: fullName,
-        role: "student",
-        approved: false,
-      })
-
-      alert("Đăng ký thành công! Chờ giáo viên duyệt.")
-      setIsRegister(false)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    setLoading(false);
+    onLoginSuccess();
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-slate-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md animate-fadeIn">
-        <div className="bg-white shadow-premium rounded-2xl p-8 space-y-6">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 px-4">
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
 
+      <div className="relative w-full max-w-md">
+        {/* Card */}
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/40 animate-fadeIn">
+          
           {/* Logo */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold text-primary-700">
-              LMS Toán Học AI
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-3">
+              <GraduationCap size={26} />
+            </div>
+            <h1 className="text-2xl font-black text-slate-800">
+              NexusLMS
             </h1>
-            <p className="text-slate-500 text-sm">
-              Hệ thống học tập thông minh
+            <p className="text-sm text-slate-500 mt-1">
+              Hệ thống quản lý học tập thông minh
             </p>
           </div>
 
-          {/* Role Switch */}
-          <div className="flex bg-slate-100 rounded-xl p-1">
-            <button
-              onClick={() => setRole("student")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-                role === "student"
-                  ? "bg-white shadow-soft text-primary-600"
-                  : "text-slate-500"
-              }`}
-            >
-              Học sinh
-            </button>
-            <button
-              onClick={() => setRole("teacher")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-                role === "teacher"
-                  ? "bg-white shadow-soft text-primary-600"
-                  : "text-slate-500"
-              }`}
-            >
-              Giáo viên
-            </button>
-          </div>
-
           {/* Form */}
-          <div className="space-y-4">
-
-            {isRegister && (
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="text-sm font-semibold text-slate-600 block mb-1">
+                Email
+              </label>
               <input
-                type="text"
-                placeholder="Họ và tên"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-400 focus:outline-none"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                type="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition"
+                placeholder="Nhập email..."
               />
-            )}
+            </div>
 
-            <input
-              type="email"
-              placeholder="Email"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-400 focus:outline-none"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <div>
+              <label className="text-sm font-semibold text-slate-600 block mb-1">
+                Mật khẩu
+              </label>
 
-            <input
-              type="password"
-              placeholder="Mật khẩu"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-400 focus:outline-none"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition pr-12"
+                  placeholder="Nhập mật khẩu..."
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-indigo-600 transition"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
 
             {error && (
-              <div className="text-sm text-red-500 bg-red-50 p-2 rounded-lg">
+              <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">
                 {error}
               </div>
             )}
 
-            {!isRegister ? (
-              <button
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-xl font-semibold transition disabled:opacity-50"
-              >
-                {loading
-                  ? "Đang xử lý..."
-                  : role === "teacher"
-                  ? "Đăng nhập giáo viên"
-                  : "Đăng nhập học sinh"}
-              </button>
-            ) : (
-              <button
-                onClick={handleRegister}
-                disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-semibold transition disabled:opacity-50"
-              >
-                {loading ? "Đang xử lý..." : "Đăng ký học sinh"}
-              </button>
-            )}
-          </div>
-
-          {/* Footer */}
-          {role === "student" && (
-            <p className="text-center text-sm text-slate-500">
-              {!isRegister ? (
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              {loading ? (
                 <>
-                  Chưa có tài khoản?{" "}
-                  <span
-                    className="text-primary-600 font-medium cursor-pointer"
-                    onClick={() => setIsRegister(true)}
-                  >
-                    Đăng ký
-                  </span>
+                  <Loader2 className="animate-spin" size={18} />
+                  Đang đăng nhập...
                 </>
               ) : (
-                <>
-                  Đã có tài khoản?{" "}
-                  <span
-                    className="text-primary-600 font-medium cursor-pointer"
-                    onClick={() => setIsRegister(false)}
-                  >
-                    Đăng nhập
-                  </span>
-                </>
+                "Đăng nhập"
               )}
-            </p>
-          )}
+            </button>
+          </form>
+
+          <div className="text-center text-xs text-slate-400 mt-6">
+            © {new Date().getFullYear()} NexusLMS
+          </div>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default LoginScreen;
