@@ -2,6 +2,21 @@ import { supabase } from "./supabaseClient";
 import { AppUser, UserRole } from "../types";
 
 /* ===============================
+   SAFE METADATA PARSER
+================================ */
+function parseUser(user: any): AppUser {
+  const metadata = user.user_metadata ?? {};
+
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    full_name: metadata.full_name ?? "",
+    role: metadata.role as UserRole,
+    approved: metadata.approved ?? false,
+  };
+}
+
+/* ===============================
    REGISTER
 ================================ */
 export async function registerUser(
@@ -17,12 +32,16 @@ export async function registerUser(
       data: {
         full_name,
         role,
-        approved: role === "teacher" ? true : false,
+        approved: role === "teacher", // teacher auto approved
       },
     },
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Register error:", error.message);
+    throw new Error(error.message);
+  }
+
   return data;
 }
 
@@ -38,50 +57,55 @@ export async function loginUser(
     password,
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Login error:", error.message);
+    throw new Error(error.message);
+  }
 
   const user = data.user;
-  if (!user) throw new Error("User not found");
 
-  const role = user.user_metadata?.role as UserRole;
-  const approved = user.user_metadata?.approved ?? false;
+  if (!user) {
+    throw new Error("Không tìm thấy người dùng");
+  }
 
-  if (!role) throw new Error("Role not found");
+  const parsedUser = parseUser(user);
 
-  if (role === "student" && !approved) {
+  if (!parsedUser.role) {
+    throw new Error("Tài khoản chưa được gán vai trò");
+  }
+
+  if (parsedUser.role === "student" && !parsedUser.approved) {
     throw new Error("Tài khoản đang chờ giáo viên duyệt");
   }
 
-  return {
-    id: user.id,
-    email: user.email!,
-    full_name: user.user_metadata?.full_name || "",
-    role,
-    approved,
-  };
+  return parsedUser;
 }
 
 /* ===============================
-   CURRENT USER
+   CURRENT USER (AUTO RESTORE)
 ================================ */
 export async function getCurrentUser(): Promise<AppUser | null> {
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
+  const { data, error } = await supabase.auth.getUser();
 
+  if (error) {
+    console.error("Get current user error:", error.message);
+    return null;
+  }
+
+  const user = data.user;
   if (!user) return null;
 
-  return {
-    id: user.id,
-    email: user.email!,
-    full_name: user.user_metadata?.full_name || "",
-    role: user.user_metadata?.role,
-    approved: user.user_metadata?.approved,
-  };
+  return parseUser(user);
 }
 
 /* ===============================
    LOGOUT
 ================================ */
 export async function logoutUser() {
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    console.error("Logout error:", error.message);
+    throw new Error(error.message);
+  }
 }
