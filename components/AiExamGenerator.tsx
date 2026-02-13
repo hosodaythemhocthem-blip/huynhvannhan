@@ -1,3 +1,4 @@
+// components/AiExamGenerator.tsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Exam } from "../types";
 import { GoogleGenAI } from "@google/genai";
@@ -10,17 +11,19 @@ import {
   Trash2,
   Save,
   FileText,
-  X
+  X,
+  ClipboardPaste
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
+import MathPreview from "./MathPreview";
 import {
   loadDraft,
   saveDraft,
-  clearDraft
+  clearDraft,
+  saveGeneratedExam
 } from "../services/supabaseExamService";
 
-/* ===== FIX PDF WORKER (PRODUCTION SAFE) ===== */
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -28,16 +31,22 @@ interface Props {
   onGenerate: (exam: Exam) => void;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const CHUNK_SIZE = 6000;
+
 const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
   const [topic, setTopic] = useState("");
   const [grade, setGrade] = useState<"10" | "11" | "12">("12");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [previewExam, setPreviewExam] = useState<Exam | null>(null);
 
-  /* ===== LOAD DRAFT ===== */
+  const fileRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generatingRef = useRef(false);
+
+  /* ================= LOAD DRAFT ================= */
   useEffect(() => {
     const init = async () => {
       try {
@@ -48,44 +57,54 @@ const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
           setFileName(draft.file_name || null);
         }
       } catch (e) {
-        console.error("Load draft error", e);
+        console.error(e);
       }
     };
     init();
   }, []);
 
-  /* ===== AUTO SAVE (DEBOUNCE) ===== */
+  /* ================= AUTO SAVE ================= */
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
       saveDraft(topic, grade, fileName);
-    }, 800);
+    }, 700);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [topic, grade, fileName]);
 
-  /* ===== CLEAR ALL ===== */
-  const handleClear = async () => {
-    setTopic("");
-    setFileName(null);
-    setError("");
-    await clearDraft();
+  /* ================= SAFE JSON PARSE ================= */
+  const safeParseJSON = (text: string) => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("AI trả về JSON không hợp lệ");
+    }
   };
 
-  /* ===== VALIDATE EXAM JSON ===== */
+  /* ================= VALIDATE EXAM ================= */
   const validateExam = (data: any): Exam => {
-    if (!data || !Array.isArray(data.questions)) {
-      throw new Error("JSON đề thi không hợp lệ");
+    if (!data?.questions || !Array.isArray(data.questions)) {
+      throw new Error("Cấu trúc đề thi không hợp lệ");
     }
     return data as Exam;
   };
 
-  /* ===== EXTRACT FILE TEXT ===== */
+  /* ================= SPLIT TEXT ================= */
+  const splitChunks = (text: string) => {
+    const arr = [];
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+      arr.push(text.slice(i, i + CHUNK_SIZE));
+    }
+    return arr;
+  };
+
+  /* ================= EXTRACT FILE ================= */
   const extractText = async (file: File) => {
-    if (file.size > 10_000_000) {
+    if (file.size > MAX_FILE_SIZE) {
       throw new Error("File tối đa 10MB");
     }
 
@@ -115,17 +134,18 @@ const AiExamGenerator: React.FC<Props> = ({ onGenerate }) => {
     return text;
   };
 
-  /* ===== GENERATE FROM TEXT ===== */
+  /* ================= GEMINI CALL ================= */
   const generateFromText = async (inputText: string) => {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Thiếu VITE_GEMINI_API_KEY");
+    if (!apiKey) throw new Error("Thiếu API KEY");
 
     const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
 Bạn là giáo viên Toán THPT Việt Nam.
-Chuẩn hóa đề sau thành JSON đúng format Exam.
-Công thức phải giữ nguyên LaTeX ($...$).
+Chuẩn hóa nội dung sau thành JSON đúng chuẩn Exam.
+Giữ nguyên công thức LaTeX $...$.
+Chỉ trả JSON.
 
 ${inputText}
 `;
@@ -141,76 +161,97 @@ ${inputText}
       .replace(/```/g, "")
       .trim();
 
-    const parsed = JSON.parse(clean);
+    const parsed = safeParseJSON(clean);
     return validateExam(parsed);
   };
 
-  /* ===== UPLOAD FILE ===== */
-  const handleFileUpload = async (file: File) => {
-    setFileName(file.name);
-    setLoading(true);
-    setError("");
-
-    try {
-      const text = await extractText(file);
-      const exam = await generateFromText(text);
-      onGenerate(exam);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Không thể xử lý file");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ===== GENERATE FROM TOPIC ===== */
-  const handleGenerateFromTopic = async () => {
-    if (!topic.trim()) {
-      setError("Vui lòng nhập chủ đề");
-      return;
-    }
+  /* ================= GENERATE ================= */
+  const generateExam = async (input: string) => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
 
     setLoading(true);
     setError("");
 
     try {
-      const exam = await generateFromText(
-        `Soạn đề lớp ${grade} chủ đề "${topic}".`
-      );
+      const exam = await generateFromText(input);
+      setPreviewExam(exam);
+      await saveGeneratedExam(exam);
       onGenerate(exam);
     } catch (err: any) {
       setError(err.message || "Không thể sinh đề");
     } finally {
       setLoading(false);
+      generatingRef.current = false;
     }
   };
 
+  /* ================= HANDLERS ================= */
+  const handleGenerateFromTopic = () => {
+    if (!topic.trim()) {
+      setError("Vui lòng nhập chủ đề");
+      return;
+    }
+    generateExam(`Soạn đề lớp ${grade} chủ đề "${topic}"`);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setFileName(file.name);
+    setError("");
+
+    try {
+      const text = await extractText(file);
+      const chunks = splitChunks(text);
+
+      let combined = "";
+      for (const chunk of chunks) {
+        combined += chunk + "\n";
+      }
+
+      generateExam(combined);
+    } catch (err: any) {
+      setError(err.message);
+    }
+
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleClear = async () => {
+    setTopic("");
+    setFileName(null);
+    setPreviewExam(null);
+    setError("");
+    await clearDraft();
+  };
+
+  /* ================= UI ================= */
+
   return (
-    <div className="bg-white border rounded-2xl p-6 shadow-xl space-y-4 relative">
+    <div className="bg-white border rounded-3xl p-6 shadow-xl space-y-5 relative">
 
       {loading && (
-        <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl z-50">
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-3xl z-50">
           <Loader2 className="animate-spin text-indigo-600" size={32} />
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex justify-between items-center">
+        <h3 className="font-bold text-lg flex items-center gap-2">
           <Sparkles className="text-indigo-600" size={20} />
-          <h3 className="font-bold text-lg">AI Exam Generator PRO</h3>
-        </div>
+          AI Exam Generator PRO MAX
+        </h3>
 
         <div className="flex gap-2">
           <button
             onClick={() => saveDraft(topic, grade, fileName)}
-            className="p-2 rounded-lg bg-green-100 hover:bg-green-200 transition"
+            className="p-2 bg-green-100 hover:bg-green-200 rounded-xl"
           >
             <Save size={16} />
           </button>
 
           <button
             onClick={handleClear}
-            className="p-2 rounded-lg bg-red-100 hover:bg-red-200 transition"
+            className="p-2 bg-red-100 hover:bg-red-200 rounded-xl"
           >
             <Trash2 size={16} />
           </button>
@@ -218,7 +259,7 @@ ${inputText}
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-2 rounded-lg">
+        <div className="text-red-600 text-sm bg-red-50 p-2 rounded-xl flex gap-2 items-center">
           <AlertCircle size={16} />
           {error}
         </div>
@@ -228,37 +269,32 @@ ${inputText}
         <input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="VD: Hàm số, tích phân..."
-          className="flex-1 border rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+          placeholder="Nhập chủ đề..."
+          className="flex-1 border rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500"
         />
 
         <select
           value={grade}
           onChange={(e) => setGrade(e.target.value as any)}
-          className="border rounded-xl px-3 text-sm focus:ring-2 focus:ring-indigo-500"
+          className="border rounded-xl px-3"
         >
           <option value="10">Lớp 10</option>
           <option value="11">Lớp 11</option>
           <option value="12">Lớp 12</option>
         </select>
-      </div>
 
-      <div className="flex gap-2">
         <button
           onClick={handleGenerateFromTopic}
-          disabled={loading}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 flex items-center justify-center gap-2 transition"
+          className="bg-indigo-600 text-white px-4 rounded-xl hover:bg-indigo-700"
         >
           <Wand2 size={18} />
-          Sinh từ chủ đề
         </button>
 
         <button
           onClick={() => fileRef.current?.click()}
-          className="bg-slate-200 hover:bg-slate-300 rounded-xl px-4 flex items-center gap-2 transition"
+          className="bg-slate-200 px-4 rounded-xl hover:bg-slate-300"
         >
           <Upload size={16} />
-          Upload
         </button>
 
         <input
@@ -273,12 +309,36 @@ ${inputText}
       </div>
 
       {fileName && (
-        <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-2 rounded-lg">
+        <div className="flex items-center gap-2 text-sm bg-slate-50 p-2 rounded-xl">
           <FileText size={14} />
           {fileName}
           <button onClick={() => setFileName(null)}>
             <X size={14} />
           </button>
+        </div>
+      )}
+
+      {previewExam && (
+        <div className="mt-6 space-y-4 border-t pt-4">
+          <h4 className="font-semibold">Preview đề:</h4>
+
+          {previewExam.questions.map((q, index) => (
+            <div key={index} className="bg-slate-50 p-4 rounded-xl relative">
+              <button
+                onClick={() =>
+                  setPreviewExam({
+                    ...previewExam,
+                    questions: previewExam.questions.filter((_, i) => i !== index)
+                  })
+                }
+                className="absolute top-2 right-2 text-red-500"
+              >
+                <Trash2 size={14} />
+              </button>
+
+              <MathPreview math={q.question} />
+            </div>
+          ))}
         </div>
       )}
     </div>
