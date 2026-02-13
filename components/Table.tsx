@@ -7,10 +7,15 @@ import React, {
 } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
 
+interface Column<T> {
+  key: keyof T;
+  label: string;
+}
+
 interface TableProps<T> {
-  headers: string[];
+  columns: Column<T>[];
   data: T[];
-  renderRow: (item: T, index: number) => React.ReactNode;
+  renderRow: (item: T) => React.ReactNode;
   searchable?: boolean;
   pagination?: boolean;
   itemsPerPage?: number;
@@ -18,12 +23,12 @@ interface TableProps<T> {
   emptyText?: string;
 }
 
-type SortState = {
-  index: number | null;
+type SortState<T> = {
+  key: keyof T | null;
   asc: boolean;
 };
 
-function safeValue(value: unknown): string | number {
+function normalizeValue(value: unknown): string | number {
   if (typeof value === "number") return value;
   if (typeof value === "string") return value.toLowerCase();
   if (value instanceof Date) return value.getTime();
@@ -32,7 +37,7 @@ function safeValue(value: unknown): string | number {
 }
 
 function InternalTable<T extends { id?: string | number }>({
-  headers,
+  columns,
   data,
   renderRow,
   searchable = true,
@@ -41,12 +46,12 @@ function InternalTable<T extends { id?: string | number }>({
   className = "",
   emptyText = "Không có dữ liệu",
 }: TableProps<T>) {
-  const [search, setSearch] = useState<string>("");
+  const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [sortState, setSortState] = useState<SortState>({
-    index: null,
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortState, setSortState] = useState<SortState<T>>({
+    key: null,
     asc: true,
   });
 
@@ -58,8 +63,8 @@ function InternalTable<T extends { id?: string | number }>({
     const lower = deferredSearch.toLowerCase();
 
     return data.filter((item) =>
-      Object.values(item as Record<string, unknown>)
-        .map((v) => safeValue(v).toString())
+      Object.values(item)
+        .map((v) => normalizeValue(v).toString())
         .join(" ")
         .includes(lower)
     );
@@ -68,15 +73,11 @@ function InternalTable<T extends { id?: string | number }>({
   /* ================= SORT ================= */
 
   const sortedData = useMemo(() => {
-    if (sortState.index === null) return filteredData;
+    if (!sortState.key) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aVal = safeValue(
-        Object.values(a as Record<string, unknown>)[sortState.index!]
-      );
-      const bVal = safeValue(
-        Object.values(b as Record<string, unknown>)[sortState.index!]
-      );
+      const aVal = normalizeValue(a[sortState.key!]);
+      const bVal = normalizeValue(b[sortState.key!]);
 
       if (aVal < bVal) return sortState.asc ? -1 : 1;
       if (aVal > bVal) return sortState.asc ? 1 : -1;
@@ -101,14 +102,18 @@ function InternalTable<T extends { id?: string | number }>({
 
   /* ================= HANDLERS ================= */
 
-  const handleSort = useCallback((index: number) => {
-    setSortState((prev) => {
-      if (prev.index === index) {
-        return { index, asc: !prev.asc };
-      }
-      return { index, asc: true };
-    });
-  }, []);
+  const handleSort = useCallback(
+    (key: keyof T) => {
+      setSortState((prev) => {
+        if (prev.key === key) {
+          return { key, asc: !prev.asc };
+        }
+        return { key, asc: true };
+      });
+      setCurrentPage(1);
+    },
+    []
+  );
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,15 +150,15 @@ function InternalTable<T extends { id?: string | number }>({
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 sticky top-0 z-10">
             <tr>
-              {headers.map((header, i) => (
+              {columns.map((col) => (
                 <th
-                  key={i}
-                  onClick={() => handleSort(i)}
+                  key={String(col.key)}
+                  onClick={() => handleSort(col.key)}
                   className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-1">
-                    {header}
-                    {sortState.index === i &&
+                    {col.label}
+                    {sortState.key === col.key &&
                       (sortState.asc ? (
                         <ChevronUp size={14} />
                       ) : (
@@ -172,13 +177,13 @@ function InternalTable<T extends { id?: string | number }>({
                   key={item.id ?? `${index}-${currentPage}`}
                   className="hover:bg-slate-50 transition-colors"
                 >
-                  {renderRow(item, index)}
+                  {renderRow(item)}
                 </tr>
               ))
             ) : (
               <tr>
                 <td
-                  colSpan={headers.length}
+                  colSpan={columns.length}
                   className="px-6 py-12 text-center text-sm text-slate-400"
                 >
                   {emptyText}
@@ -191,7 +196,7 @@ function InternalTable<T extends { id?: string | number }>({
 
       {pagination && totalPages > 1 && (
         <div className="flex justify-center gap-2 text-sm flex-wrap">
-          {Array.from({ length: totalPages }).map((_, i) => {
+          {Array.from({ length: totalPages }, (_, i) => {
             const page = i + 1;
             const active = page === currentPage;
 
