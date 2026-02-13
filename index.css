@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ===============================
-   RESET + LMS BASE STYLE
+   GLOBAL RESET
    =============================== */
 html,
 body,
@@ -16,64 +16,102 @@ body {
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: linear-gradient(135deg, #eef2ff 0%, #fdf2f8 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* ===============================
-   SCROLLBAR (NHẸ – XỊN – CROSS BROWSER)
+   CONTAINER WRAPPER
+   =============================== */
+.app-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* ===============================
+   SCROLLBAR (MODERN + CLEAN)
    =============================== */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #6366f1, #a855f7);
+  background: linear-gradient(180deg, #6366f1, #8b5cf6);
   border-radius: 999px;
 }
 
-/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #6366f1 #f1f5f9;
+  scrollbar-color: #6366f1 transparent;
 }
 
 /* ===============================
-   INPUT / BUTTON FEEL
+   INPUT / FORM SYSTEM
    =============================== */
 input,
 textarea,
-button {
-  transition: color 0.2s ease, background-color 0.2s ease,
-    border-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+select {
+  @apply bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm;
+  transition: all 0.2s ease;
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
+  @apply ring-2 ring-primary-400 border-primary-400;
   outline: none;
-  /* Không phá Tailwind ring */
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
 }
 
 /* ===============================
-   CARD / PANEL STYLE (DÙNG CHUNG)
+   BUTTON SYSTEM
+   =============================== */
+.btn {
+  @apply px-4 py-2 rounded-xl font-medium transition-all duration-200;
+}
+
+.btn-primary {
+  @apply bg-gradient-to-r from-indigo-500 to-purple-600 
+  text-white shadow-md hover:shadow-lg 
+  hover:opacity-95 active:scale-[0.98];
+}
+
+.btn-danger {
+  @apply bg-rose-500 text-white shadow-md 
+  hover:bg-rose-600 active:scale-[0.98];
+}
+
+.btn-success {
+  @apply bg-emerald-500 text-white shadow-md 
+  hover:bg-emerald-600 active:scale-[0.98];
+}
+
+.btn-ghost {
+  @apply bg-transparent hover:bg-slate-100 text-slate-700;
+}
+
+/* ===============================
+   CARD SYSTEM (ELEVATION)
    =============================== */
 .card {
-  @apply bg-white rounded-2xl shadow-sm border border-gray-200;
+  @apply bg-white rounded-2xl shadow-sm border border-slate-200;
+}
+
+.card-elevated {
+  @apply bg-white rounded-2xl shadow-lg border border-slate-100;
 }
 
 .card-hover {
-  @apply hover:shadow-md transition-shadow;
+  @apply hover:shadow-xl transition-shadow duration-300;
 }
 
 /* ===============================
-   BADGE (TRẠNG THÁI)
+   BADGE SYSTEM
    =============================== */
 .badge {
   @apply px-3 py-1 text-xs font-semibold rounded-full;
@@ -92,39 +130,35 @@ textarea:focus {
 }
 
 /* ===============================
-   TITLE / HEADING
+   TYPOGRAPHY POLISH
    =============================== */
 h1,
 h2,
 h3 {
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  @apply text-3xl font-bold;
+}
+
+h2 {
+  @apply text-2xl font-semibold;
+}
+
+h3 {
+  @apply text-xl font-semibold;
 }
 
 /* ===============================
-   BUTTON PREMIUM FEEL
-   =============================== */
-.btn {
-  @apply px-4 py-2 rounded-xl font-medium transition-all;
-}
-
-.btn-primary {
-  @apply bg-gradient-to-r from-indigo-500 to-purple-500
-    text-white hover:opacity-90 active:scale-[0.98];
-}
-
-.btn-danger {
-  @apply bg-rose-500 text-white hover:bg-rose-600 active:scale-[0.98];
-}
-
-.btn-success {
-  @apply bg-emerald-500 text-white hover:bg-emerald-600 active:scale-[0.98];
-}
-
-/* ===============================
-   SMOOTH APPEAR
+   SMOOTH ANIMATION
    =============================== */
 .fade-in {
   animation: fadeIn 0.4s ease-out both;
+}
+
+.scale-in {
+  animation: scaleIn 0.2s ease-out both;
 }
 
 @keyframes fadeIn {
@@ -138,11 +172,50 @@ h3 {
   }
 }
 
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* ===============================
-   DARK MODE READY (KHÔNG KÍCH HOẠT)
+   MATH RENDER READY (KaTeX)
+   =============================== */
+.katex-display {
+  overflow-x: auto;
+  padding: 0.5rem 0;
+}
+
+.katex {
+  font-size: 1.05em;
+}
+
+/* ===============================
+   DARK MODE (THỰC SỰ)
    =============================== */
 @media (prefers-color-scheme: dark) {
   body {
-    color-scheme: dark;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+  }
+
+  .card,
+  .card-elevated {
+    @apply bg-slate-800 border-slate-700;
+  }
+
+  input,
+  textarea,
+  select {
+    @apply bg-slate-800 border-slate-600 text-slate-100;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-slate-700 text-slate-200;
   }
 }
