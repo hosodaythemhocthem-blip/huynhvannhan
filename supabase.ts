@@ -1,15 +1,14 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /* =====================================================
-   ENV CONFIG – Production Safe
+   ENV CONFIG – PRODUCTION SAFE
 ===================================================== */
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("❌ Supabase ENV chưa cấu hình");
-  throw new Error("Supabase ENV chưa cấu hình");
+  throw new Error("❌ Supabase ENV chưa cấu hình");
 }
 
 export const supabase: SupabaseClient = createClient(
@@ -55,14 +54,33 @@ function validateFile(file: File) {
 }
 
 /* =====================================================
+   AUTH HELPERS
+===================================================== */
+
+export const getCurrentSession = async () => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return null;
+  return data.session;
+};
+
+export const getCurrentUser = async () => {
+  const { data } = await supabase.auth.getUser();
+  return data.user ?? null;
+};
+
+export const signOut = async () => {
+  await supabase.auth.signOut();
+};
+
+/* =====================================================
    STORAGE HELPERS
 ===================================================== */
 
 export const uploadExamFile = async (file: File) => {
   validateFile(file);
 
-  const session = await supabase.auth.getUser();
-  const userId = session.data.user?.id;
+  const session = await getCurrentSession();
+  const userId = session?.user?.id;
 
   if (!userId) {
     throw new Error("Bạn chưa đăng nhập");
@@ -80,7 +98,6 @@ export const uploadExamFile = async (file: File) => {
     });
 
   if (error) {
-    console.error("Upload lỗi:", error.message);
     throw new Error("Upload file thất bại");
   }
 
@@ -105,33 +122,7 @@ export const deleteExamFile = async (filePath: string) => {
     .remove([filePath]);
 
   if (error) {
-    console.error("Delete lỗi:", error.message);
     throw new Error("Xóa file thất bại");
-  }
-};
-
-/* =====================================================
-   AUTH HELPERS
-===================================================== */
-
-export const getCurrentSession = async () => {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    console.error("Lỗi session:", error.message);
-    return null;
-  }
-  return data.session;
-};
-
-export const getCurrentUser = async () => {
-  const { data } = await supabase.auth.getUser();
-  return data.user ?? null;
-};
-
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    console.error("SignOut lỗi:", error.message);
   }
 };
 
@@ -141,20 +132,37 @@ export const signOut = async () => {
 
 export async function dbInsert<T>(
   table: string,
-  payload: T
+  payload: T | T[]
 ) {
   const { data, error } = await supabase
     .from(table)
     .insert(payload)
-    .select()
-    .single();
+    .select();
 
   if (error) {
-    console.error(`Insert ${table} lỗi:`, error.message);
-    throw new Error("Không lưu được dữ liệu");
+    throw new Error(`Insert ${table} thất bại`);
   }
 
   return data;
+}
+
+export async function dbSelect<T>(
+  table: string,
+  filter?: { column: string; value: any }
+) {
+  let query = supabase.from(table).select("*");
+
+  if (filter) {
+    query = query.eq(filter.column, filter.value);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Select ${table} thất bại`);
+  }
+
+  return data as T[];
 }
 
 export async function dbUpdate<T>(
@@ -170,8 +178,7 @@ export async function dbUpdate<T>(
     .single();
 
   if (error) {
-    console.error(`Update ${table} lỗi:`, error.message);
-    throw new Error("Không cập nhật được dữ liệu");
+    throw new Error(`Update ${table} thất bại`);
   }
 
   return data;
@@ -187,7 +194,6 @@ export async function dbDelete(
     .eq("id", id);
 
   if (error) {
-    console.error(`Delete ${table} lỗi:`, error.message);
-    throw new Error("Không xóa được dữ liệu");
+    throw new Error(`Delete ${table} thất bại`);
   }
 }
