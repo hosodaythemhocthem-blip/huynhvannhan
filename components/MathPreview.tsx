@@ -10,6 +10,74 @@ interface MathPreviewProps {
   className?: string;
 }
 
+/* =====================================================
+   LATEX TOKENIZER (KHÔNG DÙNG REGEX NGU NGỐC)
+===================================================== */
+type Token =
+  | { type: "text"; value: string }
+  | { type: "inline"; value: string }
+  | { type: "block"; value: string };
+
+function tokenizeLatex(input: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+
+  while (i < input.length) {
+    if (input[i] === "$") {
+      const isBlock = input[i + 1] === "$";
+      const delimiter = isBlock ? "$$" : "$";
+      const start = i + delimiter.length;
+
+      let end = input.indexOf(delimiter, start);
+
+      if (end !== -1) {
+        const math = input.slice(start, end).trim();
+
+        tokens.push({
+          type: isBlock ? "block" : "inline",
+          value: math,
+        });
+
+        i = end + delimiter.length;
+        continue;
+      }
+    }
+
+    // text thường
+    let nextMath = input.indexOf("$", i);
+    if (nextMath === -1) nextMath = input.length;
+
+    tokens.push({
+      type: "text",
+      value: input.slice(i, nextMath),
+    });
+
+    i = nextMath;
+  }
+
+  return tokens;
+}
+
+/* =====================================================
+   SAFE RENDER KATEX
+===================================================== */
+function renderLatex(latex: string, block: boolean) {
+  try {
+    return katex.renderToString(latex, {
+      displayMode: block,
+      throwOnError: false,
+      strict: "ignore",
+      trust: true,
+      output: "html",
+    });
+  } catch {
+    return `<span class="text-red-500">${latex}</span>`;
+  }
+}
+
+/* =====================================================
+   COMPONENT
+===================================================== */
 const MathPreview: React.FC<MathPreviewProps> = ({
   content,
   displayMode = false,
@@ -18,70 +86,26 @@ const MathPreview: React.FC<MathPreviewProps> = ({
   const elements = useMemo(() => {
     if (!content) return null;
 
-    const regex = /\$\$([^$]+)\$\$|\$([^$]+)\$/g;
-    const result: React.ReactNode[] = [];
+    const tokens = tokenizeLatex(content);
 
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    let key = 0;
-
-    while ((match = regex.exec(content)) !== null) {
-      const [fullMatch, blockMath, inlineMath] = match;
-      const start = match.index;
-
-      // Thêm text thường trước math
-      if (start > lastIndex) {
-        result.push(
-          <span key={key++}>
-            {content.slice(lastIndex, start)}
-          </span>
-        );
+    return tokens.map((token, index) => {
+      if (token.type === "text") {
+        return <span key={index}>{token.value}</span>;
       }
 
-      const mathExpression = blockMath || inlineMath;
+      const html = renderLatex(token.value, token.type === "block" || displayMode);
 
-      try {
-        const html = katex.renderToString(mathExpression, {
-          displayMode: !!blockMath || displayMode,
-          throwOnError: false,
-          strict: "ignore",
-          output: "html",
-        });
-
-        result.push(
-          <span
-            key={key++}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        );
-      } catch {
-        result.push(
-          <span key={key++}>
-            {mathExpression}
-          </span>
-        );
-      }
-
-      lastIndex = start + fullMatch.length;
-    }
-
-    // Thêm phần còn lại
-    if (lastIndex < content.length) {
-      result.push(
-        <span key={key++}>
-          {content.slice(lastIndex)}
-        </span>
+      return (
+        <span
+          key={index}
+          className="math-fragment"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       );
-    }
-
-    return result;
+    });
   }, [content, displayMode]);
 
-  return (
-    <span className={className}>
-      {elements}
-    </span>
-  );
+  return <span className={`math-preview ${className}`}>{elements}</span>;
 };
 
 export default MathPreview;
