@@ -11,7 +11,7 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": __dirname, // Alias về root để không lỗi nếu không có src
     },
   },
 
@@ -20,6 +20,8 @@ export default defineConfig({
     target: "es2018",
     minify: "esbuild",
     sourcemap: false,
+    cssCodeSplit: true,
+    emptyOutDir: true,
 
     rollupOptions: {
       output: {
@@ -41,6 +43,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    host: true,
+  },
+
+  preview: {
+    port: 4173,
     host: true,
   },
 });
