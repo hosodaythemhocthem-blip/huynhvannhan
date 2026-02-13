@@ -19,7 +19,10 @@ interface NavItem {
   icon: React.ComponentType<{ size?: number; className?: string }>;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  activePage,
+  onNavigate,
+}) => {
   const navItems: NavItem[] = useMemo(
     () => [
       { id: "dashboard", icon: LayoutDashboard, label: "Tổng quan" },
@@ -33,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate }) => {
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 h-screen sticky top-0 flex flex-col">
+      
       {/* ================= LOGO ================= */}
       <div className="p-6 flex items-center gap-3 border-b border-slate-100">
         <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-sm">
@@ -44,37 +48,40 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate }) => {
       </div>
 
       {/* ================= MENU ================= */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activePage === item.id;
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <ul className="space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activePage === item.id;
 
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
-              aria-current={isActive ? "page" : undefined}
-              className={`group w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200
-                focus:outline-none focus:ring-2 focus:ring-indigo-500/40
-                ${
-                  isActive
-                    ? "bg-indigo-50 text-indigo-700 shadow-sm"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-indigo-600"
-                }`}
-            >
-              <Icon
-                size={20}
-                className={`transition-colors duration-200 ${
-                  isActive
-                    ? "text-indigo-600"
-                    : "text-slate-400 group-hover:text-indigo-500"
-                }`}
-              />
-              <span className="truncate">{item.label}</span>
-            </button>
-          );
-        })}
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(item.id)}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`group w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200
+                    focus:outline-none focus:ring-2 focus:ring-indigo-500/40
+                    ${
+                      isActive
+                        ? "bg-indigo-50 text-indigo-700 shadow-sm"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-indigo-600"
+                    }`}
+                >
+                  <Icon
+                    size={20}
+                    className={`transition-colors duration-200 ${
+                      isActive
+                        ? "text-indigo-600"
+                        : "text-slate-400 group-hover:text-indigo-500"
+                    }`}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
       {/* ================= CTA ================= */}
@@ -85,8 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate }) => {
             Cần hỗ trợ?
           </p>
           <p className="text-sm font-semibold mb-3 leading-snug">
-            Nâng cấp <span className="font-black">Pro</span> để dùng AI không
-            giới hạn.
+            Nâng cấp <span className="font-black">Pro</span> để dùng AI không giới hạn.
           </p>
           <button
             type="button"
