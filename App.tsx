@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 import type { AppUser, UserRole } from "./types";
 
@@ -54,7 +54,7 @@ export default function App() {
   const loadProfile = async (userId: string, email: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, role, full_name, approval_status")
+      .select("id, role, display_name, approved")
       .eq("id", userId)
       .single();
 
@@ -62,8 +62,8 @@ export default function App() {
       setUser({
         id: data.id,
         role: data.role,
-        full_name: data.full_name,
-        approval_status: data.approval_status,
+        full_name: data.display_name,
+        approval_status: data.approved,
         email,
       });
     }
@@ -72,7 +72,7 @@ export default function App() {
   /* ================= PROTECTED ================= */
 
   const protect = (component: JSX.Element, allowed: UserRole[]) => {
-    if (loading) return <div className="p-10">Đang tải...</div>;
+    if (loading) return <FullScreenLoader />;
 
     if (!user) return <Navigate to="/" replace />;
 
@@ -83,11 +83,35 @@ export default function App() {
     return component;
   };
 
+  /* ================= REDIRECT ROOT ================= */
+
+  const RootRedirect = () => {
+    if (loading) return <FullScreenLoader />;
+
+    if (!user) {
+      return <LoginScreen onLoginSuccess={() => {}} />;
+    }
+
+    if (user.role === "teacher") {
+      return <Navigate to="/teacher" replace />;
+    }
+
+    if (user.role === "student") {
+      return <Navigate to="/student" replace />;
+    }
+
+    if (user.role === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+
+    return <Navigate to="/" replace />;
+  };
+
   /* ================= ROUTES ================= */
 
   return (
     <Routes>
-      <Route path="/" element={<LoginScreen />} />
+      <Route path="/" element={<RootRedirect />} />
 
       <Route
         path="/student"
@@ -106,5 +130,15 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+/* ================= LOADING UI ================= */
+
+function FullScreenLoader() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-700 text-white text-xl font-semibold">
+      <div className="animate-pulse">Đang tải hệ thống...</div>
+    </div>
   );
 }
