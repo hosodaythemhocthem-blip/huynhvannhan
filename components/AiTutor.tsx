@@ -5,6 +5,8 @@ import {
   Upload,
   Trash2,
   Download,
+  Loader2,
+  Copy,
 } from "lucide-react";
 import { askGemini } from "../services/geminiService";
 import MathPreview from "./MathPreview";
@@ -15,7 +17,7 @@ import { v4 as uuidv4 } from "uuid";
 import { supabase } from "../services/supabaseClient";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface ChatMessage {
   id: string;
@@ -24,18 +26,20 @@ interface ChatMessage {
   createdAt: number;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const CHUNK_SIZE = 6000;
+
 const AiTutor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const sendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* ==============================
-     LOAD USER + INIT CONVERSATION
-  ============================== */
+  /* ================= INIT ================= */
 
   useEffect(() => {
     const init = async () => {
@@ -45,7 +49,6 @@ const AiTutor: React.FC = () => {
 
       if (!user) return;
 
-      // Tìm conversation gần nhất
       const { data: existing } = await supabase
         .from("conversations")
         .select("*")
@@ -58,7 +61,7 @@ const AiTutor: React.FC = () => {
         setConversationId(existing.id);
         loadMessages(existing.id);
       } else {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("conversations")
           .insert({
             user_id: user.id,
@@ -67,49 +70,41 @@ const AiTutor: React.FC = () => {
           .select()
           .single();
 
-        if (!error && data) {
-          setConversationId(data.id);
-        }
+        if (data) setConversationId(data.id);
       }
     };
 
     init();
   }, []);
 
-  /* ==============================
-     LOAD MESSAGES
-  ============================== */
+  /* ================= LOAD MESSAGES ================= */
 
   const loadMessages = async (convId: string) => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("messages")
       .select("*")
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
 
-    if (!error && data) {
-      const formatted = data.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        createdAt: new Date(m.created_at).getTime(),
-      }));
-
-      setMessages(formatted);
+    if (data) {
+      setMessages(
+        data.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          createdAt: new Date(m.created_at).getTime(),
+        }))
+      );
     }
   };
 
-  /* ==============================
-     AUTO SCROLL
-  ============================== */
+  /* ================= AUTO SCROLL ================= */
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ==============================
-     SAVE MESSAGE
-  ============================== */
+  /* ================= SAVE MESSAGE ================= */
 
   const saveMessage = async (msg: ChatMessage) => {
     if (!conversationId) return;
@@ -122,16 +117,15 @@ const AiTutor: React.FC = () => {
     });
   };
 
-  /* ==============================
-     SEND MESSAGE
-  ============================== */
+  /* ================= SEND ================= */
 
   const handleSend = async (customText?: string) => {
-    if (!conversationId) return;
+    if (!conversationId || sendingRef.current) return;
 
     const text = customText || input.trim();
-    if (!text || loading) return;
+    if (!text) return;
 
+    sendingRef.current = true;
     setInput("");
 
     const userMessage: ChatMessage = {
@@ -152,55 +146,42 @@ const AiTutor: React.FC = () => {
       const aiMessage: ChatMessage = {
         id: uuidv4(),
         role: "ai",
-        content: aiReply,
+        content: aiReply || "⚠️ AI không trả lời.",
         createdAt: Date.now(),
       };
 
       setMessages((prev) => [...prev, aiMessage]);
       await saveMessage(aiMessage);
-    } catch (error) {
+    } catch {
       const errorMsg: ChatMessage = {
         id: uuidv4(),
         role: "ai",
         content: "❌ AI đang quá tải, thử lại sau.",
         createdAt: Date.now(),
       };
+
       setMessages((prev) => [...prev, errorMsg]);
       await saveMessage(errorMsg);
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
   };
 
-  /* ==============================
-     DELETE MESSAGE
-  ============================== */
+  /* ================= DELETE MESSAGE ================= */
 
   const deleteMessage = async (id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
     await supabase.from("messages").delete().eq("id", id);
   };
 
-  /* ==============================
-     CLEAR CHAT
-  ============================== */
+  /* ================= COPY MESSAGE ================= */
 
-  const handleClearChat = async () => {
-    if (!conversationId) return;
-
-    if (window.confirm("Xóa toàn bộ cuộc trò chuyện?")) {
-      await supabase
-        .from("messages")
-        .delete()
-        .eq("conversation_id", conversationId);
-
-      setMessages([]);
-    }
+  const copyMessage = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
 
-  /* ==============================
-     EXPORT CHAT
-  ============================== */
+  /* ================= EXPORT ================= */
 
   const exportChat = () => {
     const text = messages
@@ -211,9 +192,7 @@ const AiTutor: React.FC = () => {
     saveAs(blob, "lumina-chat.txt");
   };
 
-  /* ==============================
-     FILE UPLOAD (PDF + DOCX)
-  ============================== */
+  /* ================= FILE UPLOAD ================= */
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -223,13 +202,18 @@ const AiTutor: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > MAX_FILE_SIZE) {
+      alert("File tối đa 10MB");
+      return;
+    }
+
     let extractedText = "";
 
     try {
       if (file.type === "application/pdf") {
-        const arrayBuffer = await file.arrayBuffer();
+        const buffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({
-          data: new Uint8Array(arrayBuffer),
+          data: new Uint8Array(buffer),
         }).promise;
 
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -240,10 +224,7 @@ const AiTutor: React.FC = () => {
               .map((item: any) => ("str" in item ? item.str : ""))
               .join(" ") + "\n";
         }
-      } else if (
-        file.type ===
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      ) {
+      } else if (file.type.includes("wordprocessingml")) {
         const result = await mammoth.extractRawText({
           arrayBuffer: await file.arrayBuffer(),
         });
@@ -253,44 +234,94 @@ const AiTutor: React.FC = () => {
         return;
       }
 
-      // Đổi tên file tránh trùng
       const filePath = `${conversationId}/${uuidv4()}-${file.name}`;
 
-      const { error } = await supabase.storage
-        .from("uploads")
-        .upload(filePath, file);
-
-      if (error) throw error;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("uploads").getPublicUrl(filePath);
-
-      await supabase.from("uploads").insert({
-        conversation_id: conversationId,
-        file_name: file.name,
-        file_url: publicUrl,
-      });
+      await supabase.storage.from("uploads").upload(filePath, file);
 
       handleSend(extractedText);
     } catch (err) {
       console.error(err);
-      alert("Upload file thất bại");
+      alert("Upload thất bại");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
+  /* ================= UI ================= */
+
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] max-w-4xl mx-auto bg-white rounded-[32px] border shadow-2xl overflow-hidden">
-      {/* GIỮ NGUYÊN UI CỦA BẠN */}
+
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
         {messages.map((msg) => (
-          <div key={msg.id}>
-            <MathPreview content={msg.content} />
+          <div key={msg.id} className="relative group">
+
+            <div className="absolute right-0 top-0 flex gap-2 opacity-0 group-hover:opacity-100 transition">
+              <button onClick={() => copyMessage(msg.content)}>
+                <Copy size={14} />
+              </button>
+              <button onClick={() => deleteMessage(msg.id)}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            <div
+              className={`p-4 rounded-2xl ${
+                msg.role === "user"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-slate-100"
+              }`}
+            >
+              <MathPreview content={msg.content} />
+            </div>
           </div>
         ))}
+
+        {loading && (
+          <Loader2 className="animate-spin text-indigo-600" />
+        )}
+
         <div ref={messagesEndRef} />
+      </div>
+
+      <div className="border-t p-4 flex gap-2 bg-white">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          placeholder="Nhập câu hỏi..."
+          className="flex-1 border rounded-xl px-4 py-2"
+        />
+
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="bg-slate-200 px-3 rounded-xl"
+        >
+          <Upload size={16} />
+        </button>
+
+        <button
+          onClick={() => handleSend()}
+          className="bg-indigo-600 text-white px-4 rounded-xl"
+        >
+          <Send size={16} />
+        </button>
+
+        <button
+          onClick={exportChat}
+          className="bg-slate-200 px-3 rounded-xl"
+        >
+          <Download size={16} />
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          hidden
+          onChange={handleFileUpload}
+        />
       </div>
     </div>
   );
