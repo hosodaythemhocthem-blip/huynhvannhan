@@ -6,18 +6,11 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { supabase } from "../supabase";
-
-interface Props {
-  onLoginSuccess: () => void;
-}
+import { authService } from "../services/authService";
 
 type Role = "teacher" | "student" | null;
 
-const TEACHER_EMAIL = "huynhvannhan@gmail.com";
-const TEACHER_DISPLAY = "Thầy Huỳnh Văn Nhẫn";
-
-const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
+const LoginScreen: React.FC = () => {
   const [role, setRole] = useState<Role>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,95 +18,44 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  /* ================= LOGIN ================= */
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error || !data.user) {
-      setError("Sai email hoặc mật khẩu");
-      setLoading(false);
-      return;
-    }
-
-    const user = data.user;
-
-    // Kiểm tra profile
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    // Nếu là giáo viên chính
-    if (email === TEACHER_EMAIL) {
-      if (!profile) {
-        await supabase.from("profiles").insert({
-          id: user.id,
-          email,
-          role: "teacher",
-          display_name: TEACHER_DISPLAY,
-          approved: true,
-        });
-      }
-      setLoading(false);
-      onLoginSuccess();
-      return;
-    }
-
-    // Nếu là học sinh
-    if (!profile) {
-      setError("Tài khoản chưa được cấu hình.");
-      setLoading(false);
-      return;
-    }
-
-    if (!profile.approved) {
-      setError("Tài khoản đang chờ giáo viên duyệt.");
-      setLoading(false);
-      return;
+    try {
+      await authService.login(email, password);
+      // Không cần redirect ở đây
+      // App.tsx sẽ tự redirect theo role
+    } catch (err: any) {
+      setError(err.message || "Đăng nhập thất bại");
     }
 
     setLoading(false);
-    onLoginSuccess();
   };
+
+  /* ================= REGISTER STUDENT ================= */
 
   const handleRegisterStudent = async () => {
     setError("");
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error || !data.user) {
-      setError("Đăng ký thất bại");
-      setLoading(false);
-      return;
+    try {
+      await authService.register(email, password, "student");
+      alert("Đăng ký thành công! Chờ giáo viên duyệt.");
+    } catch (err: any) {
+      setError(err.message || "Đăng ký thất bại");
     }
 
-    await supabase.from("profiles").insert({
-      id: data.user.id,
-      email,
-      role: "student",
-      display_name: email.split("@")[0],
-      approved: false,
-    });
-
     setLoading(false);
-    alert("Đăng ký thành công! Chờ giáo viên duyệt.");
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-700 px-4 relative overflow-hidden">
 
-      {/* Background Glow */}
+      {/* Glow */}
       <div className="absolute w-[500px] h-[500px] bg-purple-500/30 rounded-full blur-3xl -top-20 -left-20 animate-pulse" />
       <div className="absolute w-[400px] h-[400px] bg-indigo-500/30 rounded-full blur-3xl bottom-0 right-0 animate-pulse" />
 
