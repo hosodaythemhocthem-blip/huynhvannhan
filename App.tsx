@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import type { AppUser, UserRole } from "./types";
 
 import LoginScreen from "./components/LoginScreen";
 import StudentDashboard from "./pages/StudentDashboard";
 import TeacherPortal from "./pages/TeacherPortal";
 import AdminDashboard from "./pages/AdminDashboard";
-
-type UserRole = "student" | "teacher" | "admin";
-
-interface AppUser {
-  id: string;
-  role: UserRole;
-}
 
 export default function App() {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -24,10 +18,12 @@ export default function App() {
     let mounted = true;
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (data.session && mounted) {
-        await loadProfile(data.session.user.id);
+      if (session && mounted) {
+        await loadProfile(session.user.id, session.user.email || "");
       }
 
       if (mounted) setLoading(false);
@@ -41,7 +37,7 @@ export default function App() {
       if (!mounted) return;
 
       if (session) {
-        await loadProfile(session.user.id);
+        await loadProfile(session.user.id, session.user.email || "");
       } else {
         setUser(null);
       }
@@ -55,10 +51,10 @@ export default function App() {
 
   /* ================= LOAD PROFILE ================= */
 
-  const loadProfile = async (userId: string) => {
+  const loadProfile = async (userId: string, email: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, role")
+      .select("id, role, full_name, approval_status")
       .eq("id", userId)
       .single();
 
@@ -66,6 +62,9 @@ export default function App() {
       setUser({
         id: data.id,
         role: data.role,
+        full_name: data.full_name,
+        approval_status: data.approval_status,
+        email,
       });
     }
   };
@@ -97,7 +96,7 @@ export default function App() {
 
       <Route
         path="/teacher"
-        element={protect(<TeacherPortal />, ["teacher"])}
+        element={protect(<TeacherPortal user={user} />, ["teacher"])}
       />
 
       <Route
