@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+// components/ExamCard.tsx
+import React, { useMemo, useRef, useState, memo } from "react";
 import {
   Clock,
   FileText,
@@ -11,6 +12,7 @@ import {
   Calendar,
   ExternalLink,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { Exam } from "../types";
 import {
@@ -27,7 +29,7 @@ interface ExamCardProps {
   onAssign?: (exam: Exam) => void;
 }
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 const ExamCard: React.FC<ExamCardProps> = ({
   exam,
@@ -39,6 +41,7 @@ const ExamCard: React.FC<ExamCardProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formattedDate = useMemo(() => {
@@ -49,28 +52,25 @@ const ExamCard: React.FC<ExamCardProps> = ({
   const assignedClassCount =
     exam.assignedClassIds?.length ?? 0;
 
-  /* =========================
-     DELETE EXAM
-  ========================= */
+  const fileName = useMemo(() => {
+    if (!exam.file_url) return null;
+    return exam.file_url.split("/").pop();
+  }, [exam.file_url]);
+
+  /* ========================= DELETE EXAM ========================= */
   const handleDelete = async () => {
     if (!onDelete || loading) return;
-
-    if (!window.confirm("⚠️ Xóa đề thi vĩnh viễn?")) return;
+    if (!confirm("Xóa đề thi vĩnh viễn?")) return;
 
     try {
       setLoading(true);
       await onDelete(exam.id);
-    } catch (err) {
-      console.error(err);
-      alert("Xóa thất bại");
     } finally {
       setLoading(false);
     }
   };
 
-  /* =========================
-     UPLOAD FILE
-  ========================= */
+  /* ========================= UPLOAD FILE ========================= */
   const handleUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -97,12 +97,8 @@ const ExamCard: React.FC<ExamCardProps> = ({
     try {
       setUploading(true);
       await uploadExamFile(file, exam.id);
-
-      if (fileInputRef.current) {
+      if (fileInputRef.current)
         fileInputRef.current.value = "";
-      }
-
-      alert("Upload thành công");
     } catch (error) {
       console.error(error);
       alert("Upload thất bại");
@@ -111,52 +107,75 @@ const ExamCard: React.FC<ExamCardProps> = ({
     }
   };
 
-  /* =========================
-     DELETE FILE
-  ========================= */
+  /* ========================= DELETE FILE ========================= */
   const handleDeleteFile = async () => {
     if (!exam.file_url || uploading) return;
-
-    if (!window.confirm("Xóa file đề thi?")) return;
+    if (!confirm("Xóa file đề thi?")) return;
 
     try {
       setUploading(true);
       await deleteExamFile(exam.id, exam.file_url);
-      alert("Đã xóa file");
-    } catch (error) {
-      console.error(error);
-      alert("Xóa thất bại");
     } finally {
       setUploading(false);
     }
   };
 
+  const renderPreview = () => {
+    if (!exam.file_url) return null;
+
+    const url = exam.file_url;
+
+    if (url.endsWith(".pdf")) {
+      return (
+        <iframe
+          src={url}
+          className="w-full h-[400px] rounded-xl border mt-4"
+        />
+      );
+    }
+
+    if (
+      url.endsWith(".doc") ||
+      url.endsWith(".docx")
+    ) {
+      return (
+        <iframe
+          src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+            url
+          )}`}
+          className="w-full h-[400px] rounded-xl border mt-4"
+        />
+      );
+    }
+
+    return null;
+  };
+
   return (
-    <div className="group bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between h-full relative">
+    <div className="group bg-white border border-slate-200 rounded-3xl p-6 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full relative">
 
-      {/* HEADER */}
+      {/* STATUS BADGE */}
       <div className="flex justify-between items-start mb-4">
-        <div className="flex-1 pr-4">
-          <span
-            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
-              exam.isLocked
-                ? "bg-red-50 text-red-600 border-red-200"
-                : "bg-emerald-50 text-emerald-600 border-emerald-200"
-            }`}
-          >
-            {exam.isLocked ? "Đã khóa" : "Đang mở"}
-          </span>
-
-          <h3
-            className="font-bold text-lg text-slate-800 hover:text-indigo-600 cursor-pointer mt-2 transition-colors"
-            onClick={() => onView?.(exam)}
-          >
-            {exam.title}
-          </h3>
-        </div>
+        <span
+          className={`px-3 py-1 text-[10px] font-black uppercase rounded-full border ${
+            exam.isLocked
+              ? "bg-red-50 text-red-600 border-red-200"
+              : "bg-emerald-50 text-emerald-600 border-emerald-200"
+          }`}
+        >
+          {exam.isLocked ? "Đã khóa" : "Đang mở"}
+        </span>
       </div>
 
-      {/* INFO */}
+      {/* TITLE */}
+      <h3
+        className="font-black text-lg text-slate-800 hover:text-indigo-600 cursor-pointer transition mb-4"
+        onClick={() => onView?.(exam)}
+      >
+        {exam.title}
+      </h3>
+
+      {/* INFO GRID */}
       <div className="grid grid-cols-2 gap-3 text-xs text-slate-500 mb-6">
         <div className="flex items-center gap-2">
           <Clock size={14} />
@@ -179,8 +198,8 @@ const ExamCard: React.FC<ExamCardProps> = ({
         </div>
       </div>
 
-      {/* FILE */}
-      <div className="mb-4 space-y-3">
+      {/* FILE SECTION */}
+      <div className="space-y-3 mb-4">
         <div className="flex items-center gap-3">
           <input
             ref={fileInputRef}
@@ -190,37 +209,53 @@ const ExamCard: React.FC<ExamCardProps> = ({
             disabled={uploading}
             className="text-xs"
           />
-
           {uploading && (
             <Loader2 className="animate-spin text-indigo-600" size={16} />
           )}
         </div>
 
         {exam.file_url && (
-          <div className="flex items-center gap-3 text-xs">
-            <a
-              href={exam.file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-indigo-600 flex items-center gap-1 hover:underline"
-            >
-              <ExternalLink size={14} />
-              Xem file
-            </a>
+          <>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-slate-500 truncate max-w-[150px]">
+                {fileName}
+              </span>
 
-            <button
-              onClick={handleDeleteFile}
-              disabled={uploading}
-              className="text-red-500 hover:text-red-700 transition"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+              <button
+                onClick={() =>
+                  setPreviewOpen(!previewOpen)
+                }
+                className="text-indigo-600 flex items-center gap-1 hover:underline"
+              >
+                <Eye size={14} />
+                {previewOpen ? "Ẩn" : "Xem"}
+              </button>
+
+              <a
+                href={exam.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 flex items-center gap-1 hover:underline"
+              >
+                <ExternalLink size={14} />
+              </a>
+
+              <button
+                onClick={handleDeleteFile}
+                disabled={uploading}
+                className="text-red-500 hover:text-red-700 transition"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            {previewOpen && renderPreview()}
+          </>
         )}
       </div>
 
-      {/* FOOTER */}
-      <div className="flex gap-2 border-t pt-3 mt-auto">
+      {/* FOOTER ACTIONS */}
+      <div className="flex gap-2 border-t pt-4 mt-auto">
         <button
           onClick={() => onView?.(exam)}
           className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95"
@@ -270,4 +305,4 @@ const ExamCard: React.FC<ExamCardProps> = ({
   );
 };
 
-export default ExamCard;
+export default memo(ExamCard);
