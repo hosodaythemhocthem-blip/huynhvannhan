@@ -8,7 +8,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("❌ Supabase ENV chưa cấu hình");
+  throw new Error("❌ Supabase ENV chưa cấu hình trên Vercel");
 }
 
 export const supabase: SupabaseClient = createClient(
@@ -27,6 +27,35 @@ export const supabase: SupabaseClient = createClient(
     },
   }
 );
+
+/* =====================================================
+   AUTH HELPERS – STABLE
+===================================================== */
+
+export const getCurrentSession = async () => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error("❌ getSession error:", error.message);
+    return null;
+  }
+  return data.session;
+};
+
+export const getCurrentUser = async () => {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error("❌ getUser error:", error.message);
+    return null;
+  }
+  return data.user ?? null;
+};
+
+export const signOut = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("❌ signOut error:", error.message);
+  }
+};
 
 /* =====================================================
    STORAGE CONFIG – LMS EXAM FILES
@@ -53,29 +82,6 @@ function validateFile(file: File) {
   }
 }
 
-/* =====================================================
-   AUTH HELPERS
-===================================================== */
-
-export const getCurrentSession = async () => {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data.session;
-};
-
-export const getCurrentUser = async () => {
-  const { data } = await supabase.auth.getUser();
-  return data.user ?? null;
-};
-
-export const signOut = async () => {
-  await supabase.auth.signOut();
-};
-
-/* =====================================================
-   STORAGE HELPERS
-===================================================== */
-
 export const uploadExamFile = async (file: File) => {
   validateFile(file);
 
@@ -98,6 +104,7 @@ export const uploadExamFile = async (file: File) => {
     });
 
   if (error) {
+    console.error("❌ Upload error:", error.message);
     throw new Error("Upload file thất bại");
   }
 
@@ -110,6 +117,7 @@ export const getSignedFileUrl = async (filePath: string) => {
     .createSignedUrl(filePath, 60 * 60 * 24);
 
   if (error || !data?.signedUrl) {
+    console.error("❌ Signed URL error:", error?.message);
     throw new Error("Không tạo được link tải file");
   }
 
@@ -122,12 +130,13 @@ export const deleteExamFile = async (filePath: string) => {
     .remove([filePath]);
 
   if (error) {
+    console.error("❌ Delete file error:", error.message);
     throw new Error("Xóa file thất bại");
   }
 };
 
 /* =====================================================
-   GENERIC DB HELPERS – LMS READY
+   GENERIC DB HELPERS – SAFE
 ===================================================== */
 
 export async function dbInsert<T>(
@@ -140,6 +149,7 @@ export async function dbInsert<T>(
     .select();
 
   if (error) {
+    console.error(`❌ Insert ${table}:`, error.message);
     throw new Error(`Insert ${table} thất bại`);
   }
 
@@ -159,6 +169,7 @@ export async function dbSelect<T>(
   const { data, error } = await query;
 
   if (error) {
+    console.error(`❌ Select ${table}:`, error.message);
     throw new Error(`Select ${table} thất bại`);
   }
 
@@ -178,6 +189,7 @@ export async function dbUpdate<T>(
     .single();
 
   if (error) {
+    console.error(`❌ Update ${table}:`, error.message);
     throw new Error(`Update ${table} thất bại`);
   }
 
@@ -194,6 +206,7 @@ export async function dbDelete(
     .eq("id", id);
 
   if (error) {
+    console.error(`❌ Delete ${table}:`, error.message);
     throw new Error(`Delete ${table} thất bại`);
   }
 }
