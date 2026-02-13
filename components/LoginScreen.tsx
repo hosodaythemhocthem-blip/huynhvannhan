@@ -1,59 +1,54 @@
+// components/LoginScreen.tsx
 import React, { useState } from "react";
-import { loginUser, registerUser } from "../services/authService";
-import { UserRole } from "../types";
+import { loginUser, registerUser, UserRole } from "../services/authService";
 
-interface Props {
-  onLoginSuccess: (user: any) => void;
-}
-
-const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
+const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
+  const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<UserRole>("student");
+  const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const handleLogin = async () => {
+  const handleSubmit = async () => {
     try {
       setLoading(true);
-      setError("");
 
-      const user = await loginUser(email, password);
-      onLoginSuccess(user);
-    } catch (err: any) {
-      setError(err.message || "Đăng nhập thất bại");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      await registerUser(email, password, email, role);
-      setMode("login");
-      setError("Đăng ký thành công. Vui lòng đăng nhập.");
-    } catch (err: any) {
-      setError(err.message || "Đăng ký thất bại");
+      if (isRegister) {
+        await registerUser(email, password, fullName, role);
+        alert("Đăng ký thành công!");
+      } else {
+        const user = await loginUser(email, password);
+        alert(`Xin chào ${user.full_name}`);
+      }
+    } catch (error: any) {
+      alert(error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-      <div className="bg-slate-800 p-8 rounded-xl w-full max-w-md space-y-4">
-        <h2 className="text-xl font-bold text-center">
-          {mode === "login" ? "Đăng nhập" : "Đăng ký"}
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white p-6 rounded shadow w-96">
+        <h2 className="text-xl font-bold mb-4 text-center">
+          {isRegister ? "Đăng ký" : "Đăng nhập"}
         </h2>
+
+        {isRegister && (
+          <input
+            type="text"
+            placeholder="Họ tên"
+            className="w-full p-2 border mb-3"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+        )}
 
         <input
           type="email"
           placeholder="Email"
-          className="w-full p-2 rounded bg-slate-700"
+          className="w-full p-2 border mb-3"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -61,61 +56,40 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
         <input
           type="password"
           placeholder="Mật khẩu"
-          className="w-full p-2 rounded bg-slate-700"
+          className="w-full p-2 border mb-3"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        {mode === "register" && (
+        {isRegister && (
           <select
-            className="w-full p-2 rounded bg-slate-700"
+            className="w-full p-2 border mb-3"
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
           >
-            <option value={UserRole.STUDENT}>Học sinh</option>
-            <option value={UserRole.TEACHER}>Giáo viên</option>
+            <option value="student">Học sinh</option>
+            <option value="teacher">Giáo viên</option>
+            <option value="admin">Admin</option>
           </select>
         )}
 
-        {error && (
-          <div className="text-red-400 text-sm text-center">{error}</div>
-        )}
-
         <button
-          onClick={mode === "login" ? handleLogin : handleRegister}
+          onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-indigo-600 py-2 rounded hover:bg-indigo-700"
+          className="w-full bg-blue-500 text-white p-2 rounded"
         >
-          {loading
-            ? "Đang xử lý..."
-            : mode === "login"
-            ? "Đăng nhập"
-            : "Đăng ký"}
+          {loading ? "Đang xử lý..." : isRegister ? "Đăng ký" : "Đăng nhập"}
         </button>
 
-        <div className="text-center text-sm">
-          {mode === "login" ? (
-            <button
-              onClick={() => {
-                setError("");
-                setMode("register");
-              }}
-              className="text-indigo-400"
-            >
-              Chưa có tài khoản? Đăng ký
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setError("");
-                setMode("login");
-              }}
-              className="text-indigo-400"
-            >
-              Đã có tài khoản? Đăng nhập
-            </button>
-          )}
-        </div>
+        <p className="text-center mt-3 text-sm">
+          {isRegister ? "Đã có tài khoản?" : "Chưa có tài khoản?"}{" "}
+          <span
+            className="text-blue-500 cursor-pointer"
+            onClick={() => setIsRegister(!isRegister)}
+          >
+            {isRegister ? "Đăng nhập" : "Đăng ký"}
+          </span>
+        </p>
       </div>
     </div>
   );
