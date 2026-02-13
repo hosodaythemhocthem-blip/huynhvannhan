@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ApprovalStatus, AppUser } from "../types";
+import type { ApprovalStatus, AppUser } from "../types";
 
 interface Props {
   user: AppUser | null;
@@ -7,14 +7,13 @@ interface Props {
 }
 
 const TeacherPortal: React.FC<Props> = ({ user, onCreateExam }) => {
-
   const status = useMemo<ApprovalStatus>(() => {
-    if (!user) return ApprovalStatus.PENDING;
-    return user.approval_status ?? ApprovalStatus.PENDING;
+    if (!user) return "pending";
+    return user.approval_status ?? "pending";
   }, [user]);
 
-  const isApproved = status === ApprovalStatus.APPROVED;
-  const isRejected = status === ApprovalStatus.REJECTED;
+  const isApproved = status === "approved";
+  const isRejected = status === "rejected";
 
   if (!user) return null;
 
@@ -36,7 +35,6 @@ const TeacherPortal: React.FC<Props> = ({ user, onCreateExam }) => {
       {isApproved ? (
         <div className="space-y-6">
           <div className="bg-white rounded-[32px] p-8 shadow-xl border border-indigo-50 flex flex-col md:flex-row justify-between items-center gap-6">
-
             <div>
               <h2 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">
                 Chào {user.full_name || user.email}
