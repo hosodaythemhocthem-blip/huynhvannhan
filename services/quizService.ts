@@ -1,112 +1,74 @@
-import { supabase } from "../supabase";
 
-/* =====================================================
-   TYPES
-===================================================== */
+import { GoogleGenAI, Type } from "@google/genai";
 
-export interface QuizResult {
-  id?: string;
-  exam_id: string;
-  student_id: string;
-  student_name: string;
-  score: number;
-  answers: any;
-  created_at?: string;
-  deleted?: boolean;
-}
+export const geminiService = {
+  async askGemini(prompt: string, systemInstruction?: string): Promise<string> {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return "⚠️ Thiếu API Key trong hệ thống.";
 
-/* =====================================================
-   SAVE QUIZ RESULT
-===================================================== */
-
-export async function saveQuizResult(data: QuizResult) {
-  try {
-    if (!data.exam_id || !data.student_id) {
-      throw new Error("Thiếu exam_id hoặc student_id");
+    try {
+      // Khởi tạo SDK theo chuẩn mới: dùng named parameter { apiKey }
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+          systemInstruction: systemInstruction || 
+            "Bạn là Lumina AI, trợ lý học tập của Thầy Huỳnh Văn Nhẫn. Hãy giải đáp toán học một cách chuyên sâu, sử dụng LaTeX $...$ cho mọi công thức.",
+          temperature: 0.7,
+        },
+      });
+      // Lấy text trực tiếp từ thuộc tính .text (KHÔNG dùng .text())
+      return response.text || "Lumina đang suy nghĩ...";
+    } catch (error) {
+      console.error("Lỗi AI:", error);
+      return "⚠️ Hệ thống AI Lumina đang bảo trì hoặc API Key hết hạn. Thầy hãy kiểm tra lại nhé.";
     }
+  },
 
-    const { data: inserted, error } = await supabase
-      .from("quiz_results")
-      .insert({
-        exam_id: data.exam_id,
-        student_id: data.student_id,
-        student_name: data.student_name,
-        score: data.score,
-        answers: data.answers,
-        created_at: new Date().toISOString(),
-        deleted: false,
-      })
-      .select()
-      .single();
+  async parseExamWithAI(rawText: string): Promise<any> {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) throw new Error("API Key missing");
 
-    if (error) throw error;
-
-    return inserted;
-  } catch (error) {
-    console.error("❌ saveQuizResult error:", error);
-    throw error;
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: `Chuyển văn bản sau thành cấu hình JSON đề thi chuẩn: ${rawText}`,
+        config: {
+          responseMimeType: "application/json",
+          systemInstruction: "Bạn là chuyên gia bóc tách đề thi Toán học. Trích xuất tiêu đề và danh sách câu hỏi. Mọi công thức Toán phải dùng LaTeX $...$. Đảm bảo đúng định dạng JSON yêu cầu.",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    text: { type: Type.STRING },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    correctAnswer: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                    type: { type: Type.STRING }
+                  },
+                  required: ["text", "options", "correctAnswer"]
+                }
+              }
+            },
+            required: ["title", "questions"]
+          }
+        },
+      });
+      // Lấy text trực tiếp từ thuộc tính .text
+      const jsonStr = response.text || '{}';
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      console.error("AI Parsing Error:", error);
+      throw new Error("AI không thể bóc tách nội dung này.");
+    }
   }
-}
+};
 
-/* =====================================================
-   GET QUIZ RESULTS
-===================================================== */
-
-export async function getQuizResults(): Promise<QuizResult[]> {
-  try {
-    const { data, error } = await supabase
-      .from("quiz_results")
-      .select("*")
-      .eq("deleted", false)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return data ?? [];
-  } catch (error) {
-    console.error("❌ getQuizResults error:", error);
-    return [];
-  }
-}
-
-/* =====================================================
-   GET RESULTS BY STUDENT
-===================================================== */
-
-export async function getQuizResultsByStudent(student_id: string) {
-  try {
-    const { data, error } = await supabase
-      .from("quiz_results")
-      .select("*")
-      .eq("student_id", student_id)
-      .eq("deleted", false)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return data ?? [];
-  } catch (error) {
-    console.error("❌ getQuizResultsByStudent error:", error);
-    return [];
-  }
-}
-
-/* =====================================================
-   DELETE RESULT (SOFT DELETE)
-===================================================== */
-
-export async function deleteQuizResult(id: string) {
-  try {
-    const { error } = await supabase
-      .from("quiz_results")
-      .update({ deleted: true })
-      .eq("id", id);
-
-    if (error) throw error;
-
-    return true;
-  } catch (error) {
-    console.error("❌ deleteQuizResult error:", error);
-    return false;
-  }
-}
+export const askGemini = geminiService.askGemini;
