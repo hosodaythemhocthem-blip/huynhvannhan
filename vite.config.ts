@@ -1,3 +1,4 @@
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -7,47 +8,43 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  plugins: [react()],
-
+  plugins: [
+    react()
+  ],
+  base: "./", // Quan trọng: Đảm bảo tương thích với sub-directory và HashRouter
   resolve: {
     alias: {
-      "@": __dirname, // Alias về root để không lỗi nếu không có src
+      "@": path.resolve(__dirname, "./"),
     },
   },
-
   build: {
     outDir: "dist",
-    target: "es2018",
+    target: "esnext",
     minify: "esbuild",
-    sourcemap: false,
     cssCodeSplit: true,
-    emptyOutDir: true,
-
+    sourcemap: false,
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id) return;
-
           if (id.includes("node_modules")) {
             if (id.includes("react")) return "vendor-react";
-            if (id.includes("@supabase")) return "vendor-supabase";
-            if (id.includes("pdfjs")) return "vendor-pdf";
-            if (id.includes("mammoth")) return "vendor-docx";
-            return "vendor";
+            if (id.includes("framer-motion")) return "vendor-motion";
+            if (id.includes("lucide-react")) return "vendor-icons";
+            if (id.includes("@google/genai")) return "vendor-ai";
+            if (id.includes("katex") || id.includes("pdfjs-dist")) return "vendor-math-pdf";
+            return "vendor-common";
           }
         },
       },
     },
   },
-
+  optimizeDeps: {
+    include: ["react", "react-dom", "framer-motion", "lucide-react", "katex"],
+  },
   server: {
     port: 5173,
     strictPort: true,
-    host: true,
-  },
-
-  preview: {
-    port: 4173,
-    host: true,
-  },
+    host: true
+  }
 });
