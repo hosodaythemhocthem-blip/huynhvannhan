@@ -1,252 +1,87 @@
-import React, { useMemo, useState, useEffect } from "react";
-import {
-  LayoutDashboard,
-  BookOpen,
-  Award,
-  Settings,
-  Search,
-  Bell,
-  LogOut,
-  User,
-  Loader2,
-} from "lucide-react";
-import { authService } from "../services/authService";
-import { supabase } from "../supabase";
+
+import React, { useState, useEffect } from 'react';
+import { User } from '../types';
+import Sidebar from './Sidebar';
+import Header from './Header';
+import AiAssistant from './AiAssistant';
+import { RefreshCw } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
+  user: User;
   activeTab: string;
-  setActiveTab: (tab: string) => void;
+  onTabChange: (tab: string) => void;
+  onLogout: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({
-  children,
-  activeTab,
-  setActiveTab,
-}) => {
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-
-  /* =========================
-     LOAD USER PROFILE SAFE
-  ========================= */
-  useEffect(() => {
-    let mounted = true;
-
-    const loadProfile = async () => {
-      try {
-        setLoadingProfile(true);
-
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          setLoadingProfile(false);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (error) {
-          console.error("Load profile error:", error.message);
-        }
-
-        if (mounted) {
-          setProfile(data || null);
-        }
-      } catch (err) {
-        console.error("Unexpected profile error:", err);
-      } finally {
-        if (mounted) setLoadingProfile(false);
-      }
-    };
-
-    loadProfile();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      loadProfile();
-    });
-
-    return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
-
-  /* =========================
-     NAVIGATION
-  ========================= */
-  const navItems = useMemo(
-    () => [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { id: "courses", label: "Courses", icon: BookOpen },
-      { id: "achievements", label: "Achievements", icon: Award },
-      { id: "settings", label: "Settings", icon: Settings },
-    ],
-    []
-  );
-
-  /* =========================
-     LOGOUT
-  ========================= */
-  const handleLogout = async () => {
-    try {
-      setLoggingOut(true);
-      await authService.logout();
-      window.location.href = "/";
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi đăng xuất");
-    } finally {
-      setLoggingOut(false);
-    }
-  };
-
-  const initials =
-    profile?.full_name
-      ?.split(" ")
-      .map((n: string) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "U";
+const Layout: React.FC<LayoutProps> = ({ children, user, activeTab, onTabChange, onLogout }) => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 to-slate-100">
-
-      {/* ================= SIDEBAR ================= */}
-      <aside className="hidden md:flex w-72 flex-col bg-white/80 backdrop-blur-xl border-r border-slate-200 transition-all duration-300">
-
-        {/* Logo */}
-        <div className="px-6 py-6 flex items-center gap-4 border-b border-slate-100">
-          <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-md">
-            <BookOpen size={22} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800 leading-tight">
-              Toán Học Cloud
-            </h1>
-            <p className="text-xs text-slate-500">
-              LMS Thế hệ mới
-            </p>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={[
-                  "group w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                  active
-                    ? "bg-indigo-100 text-indigo-700 font-semibold shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100",
-                ].join(" ")}
-              >
-                <Icon
-                  size={20}
-                  className="transition-transform group-hover:scale-110"
-                />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Logout */}
-        <div className="p-4 border-t border-slate-100">
-          <button
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-          >
-            {loggingOut ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <LogOut size={20} />
-            )}
-            Đăng xuất
-          </button>
-        </div>
-      </aside>
-
-      {/* ================= MAIN ================= */}
-      <div className="flex-1 flex flex-col min-w-0">
-
-        {/* Header */}
-        <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-slate-200">
-          <div className="h-16 flex items-center justify-between px-6 md:px-10">
-
-            {/* Search */}
-            <div className="flex-1 max-w-xl">
-              <div className="relative">
-                <Search
-                  size={18}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
-                  placeholder="Tìm kiếm khóa học, đề thi..."
-                  className="w-full pl-11 pr-4 py-2.5 rounded-full bg-slate-100 focus:bg-white border border-transparent focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100 outline-none text-sm transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Right */}
-            <div className="flex items-center gap-5">
-
-              <button className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500 transition">
-                <Bell size={20} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
-              </button>
-
-              <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                <div className="hidden sm:block text-right">
-                  {loadingProfile ? (
-                    <div className="animate-pulse">
-                      <div className="h-3 w-20 bg-slate-200 rounded mb-2" />
-                      <div className="h-2 w-14 bg-slate-200 rounded" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-sm font-semibold text-slate-800">
-                        {profile?.full_name || "Người dùng"}
-                      </div>
-                      <div className="text-xs text-slate-500 capitalize">
-                        {profile?.role || "User"}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-sm text-sm font-bold">
-                  {initials}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="flex-1 px-6 py-8 md:px-10">
-          <div className="max-w-7xl mx-auto w-full animate-fade-in">
-            {children}
-          </div>
-        </main>
-
+    <div className="min-h-screen bg-[#020617] flex font-sans selection:bg-indigo-500/20 selection:text-indigo-200 relative overflow-hidden">
+      
+      {/* 🎭 PREMIUM BACKGROUND MESH */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[120px]"></div>
+        <div className="absolute top-[30%] left-[50%] w-[40%] h-[40%] bg-indigo-400/5 rounded-full blur-[100px]"></div>
       </div>
+
+      {/* 🛡 SIDEBAR */}
+      <Sidebar 
+        user={user} 
+        activeTab={activeTab} 
+        onTabChange={onTabChange} 
+        onLogout={onLogout} 
+      />
+
+      {/* 🚀 MAIN CONTENT */}
+      <div className={`flex-1 flex flex-col transition-all duration-500 ease-in-out relative z-10 ${isSidebarOpen ? 'lg:ml-72' : 'lg:ml-24'}`}>
+        
+        <Header user={user} activeTab={activeTab} />
+
+        <main className="flex-1 p-6 md:p-10 lg:p-12 w-full max-w-[1600px] mx-auto">
+          
+          <div className="mb-8 flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-500">
+             <div className="w-1 h-6 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
+             <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">
+               LMS Core / <span className="text-white">{activeTab.replace('-', ' ')}</span>
+             </p>
+          </div>
+
+          <div className="animate-in fade-in zoom-in-95 duration-700">
+             {children}
+          </div>
+
+          <footer className="mt-24 py-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 opacity-40 hover:opacity-100 transition-opacity">
+             <div className="flex items-center gap-3">
+                <RefreshCw size={16} className="text-indigo-400 animate-spin-slow" />
+                <div>
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Cơ sở dữ liệu vĩnh viễn</p>
+                   <p className="text-[9px] font-bold text-emerald-500 uppercase mt-1 tracking-tighter">Supabase Cloud Connected</p>
+                </div>
+             </div>
+
+             <div className="flex items-center gap-8 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                <span className="hover:text-indigo-400 cursor-pointer transition-colors">Điều khoản</span>
+                <span className="hover:text-indigo-400 cursor-pointer transition-colors">Bản quyền Huỳnh Văn Nhẫn</span>
+                <div className="px-4 py-1.5 bg-indigo-500/10 rounded-full text-indigo-400 border border-indigo-500/20">
+                   v5.8.0-ELITE
+                </div>
+             </div>
+          </footer>
+        </main>
+      </div>
+
+      <AiAssistant 
+        user={{ id: user.id, displayName: user.fullName }} 
+        context={`Thầy đang xem phân hệ ${activeTab}`}
+      />
+
+      <style>{`
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 12s linear infinite; }
+      `}</style>
     </div>
   );
 };
