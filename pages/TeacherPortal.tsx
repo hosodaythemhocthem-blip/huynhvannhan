@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from "react";
 import { 
   Plus, LayoutDashboard, FileText, Users, BarChart3, 
-  ShieldCheck, Loader2, Sparkles, Zap, History, Settings
+  ShieldCheck, Loader2, Sparkles, Zap, History, Settings,
+  UploadCloud, Wand2, ClipboardPaste
 } from "lucide-react";
 import { User, Exam } from "../types";
 import { supabase } from "../supabase";
@@ -13,6 +13,7 @@ import ExamEditor from "../components/ExamEditor";
 import ClassManagement from "../components/ClassManagement";
 import GradeManagement from "../components/GradeManagement";
 import GameManagement from "../components/GameManagement";
+import ImportExamFromFile from "../components/ImportExamFromFile"; // Component mới cho Word/PDF
 import { useToast } from "../components/Toast";
 
 const MotionDiv = motion.div as any;
@@ -27,15 +28,22 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
+  // Tải dữ liệu từ Supabase Cloud vĩnh viễn
   useEffect(() => {
     const fetchExams = async () => {
       setLoading(true);
       try {
-        const { data } = await supabase.from('exams').select();
+        const { data, error } = await supabase
+          .from('exams')
+          .select('*')
+          .order('updatedAt', { ascending: false });
+        
+        if (error) throw error;
         setExams(data || []);
-      } catch (err) {
-        showToast("Lỗi đồng bộ Supabase Cloud.", "error");
+      } catch (err: any) {
+        showToast("Lỗi kết nối Supabase: " + err.message, "error");
       } finally {
         setLoading(false);
       }
@@ -43,16 +51,17 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     fetchExams();
   }, [showToast]);
 
+  // Tạo đề thi thủ công siêu nhanh
   const handleCreateNew = () => {
     const newExam: Exam = {
       id: `exam_${Date.now()}`,
-      title: "Đề thi mới chưa đặt tên",
-      description: "Thầy Nhẫn hãy nhập mô tả tại đây...",
+      title: "Đề thi mới " + new Date().toLocaleDateString('vi-VN'),
+      description: "Thầy Nhẫn hãy nhập mô tả hoặc dán nội dung vào đây...",
       teacherId: user.id,
       questions: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      duration: 60,
+      duration: 90,
       isLocked: false,
       subject: "Toán học",
       grade: "12"
@@ -61,23 +70,47 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   };
 
   const renderContent = () => {
+    // Ưu tiên hiển thị màn hình Import file Word/PDF
+    if (isImporting) {
+      return (
+        <ImportExamFromFile 
+          onImported={(newExam) => {
+            setExams([newExam, ...exams]);
+            setIsImporting(false);
+            setEditingExam(newExam); // Cho phép chỉnh sửa ngay sau khi import
+          }}
+          onCancel={() => setIsImporting(false)}
+        />
+      );
+    }
+
+    // Hiển thị trình biên tập đề thi (Hỗ trợ Latex/Mathjax)
     if (editingExam) {
       return (
         <ExamEditor 
           exam={editingExam} 
-          onSave={(updated) => {
-            setExams(prev => {
-              const idx = prev.findIndex(e => e.id === updated.id);
-              if (idx > -1) return prev.map(e => e.id === updated.id ? updated : e);
-              return [updated, ...prev];
-            });
-            setEditingExam(null);
+          onSave={async (updated) => {
+            try {
+              const { error } = await supabase.from('exams').upsert(updated);
+              if (error) throw error;
+              
+              setExams(prev => {
+                const idx = prev.findIndex(e => e.id === updated.id);
+                if (idx > -1) return prev.map(e => e.id === updated.id ? updated : e);
+                return [updated, ...prev];
+              });
+              setEditingExam(null);
+              showToast("Đã lưu đề thi vĩnh viễn vào hệ thống!", "success");
+            } catch (err) {
+              showToast("Lỗi khi lưu dữ liệu.", "error");
+            }
           }}
           onCancel={() => setEditingExam(null)}
         />
       );
     }
 
+    // Chuyển đổi giữa các phân hệ quản lý
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard user={user} onNavigate={() => {}} onCreateExam={handleCreateNew} />;
@@ -85,11 +118,18 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
       case 'exams':
         return (
           <ExamDashboard 
-            exams={exams as any}
+            exams={exams}
             onCreate={handleCreateNew}
-            onAdd={(e) => setExams(prev => [e as any, ...prev])}
-            onEdit={(e) => setEditingExam(e as any)}
-            onDelete={(id) => setExams(prev => prev.filter(e => e.id !== id))}
+            onEdit={(e) => setEditingExam(e)}
+            onDelete={async (id) => {
+              if(confirm("Thầy có chắc chắn muốn xóa vĩnh viễn đề thi này?")) {
+                const { error } = await supabase.from('exams').delete().eq('id', id);
+                if (!error) {
+                  setExams(prev => prev.filter(e => e.id !== id));
+                  showToast("Đã xóa vĩnh viễn.", "success");
+                }
+              }
+            }}
           />
         );
 
@@ -99,75 +139,73 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
 
       default:
         return (
-          <div className="flex flex-col items-center justify-center py-48 text-center">
-            <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center text-indigo-400 mb-6 shadow-2xl">
-               <Settings size={40} className="animate-spin-slow" />
-            </div>
-            <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-xs">Phân hệ đang bảo trì định kỳ...</p>
+          <div className="flex flex-col items-center justify-center py-48 text-center bg-slate-50 rounded-[4rem] border-2 border-dashed border-slate-200">
+            <Settings size={60} className="text-slate-200 animate-spin-slow mb-6" />
+            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Phân hệ đang được nâng cấp...</p>
           </div>
         );
     }
   };
 
   return (
-    <div className="w-full">
-      {!editingExam && (
-        <header className="mb-14 animate-in fade-in slide-in-from-left-6 duration-700">
-           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                   <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-pulse shadow-[0_0_15px_rgba(79,70,229,0.6)]"></div>
-                   <span className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.5em]">Node Giáo viên Đã kết nối</span>
-                </div>
-                <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter capitalize italic">
-                  {activeTab.replace('-', ' ')}
-                </h1>
-              </div>
+    <div className="w-full max-w-[1600px] mx-auto">
+      {!editingExam && !isImporting && (
+        <header className="mb-14 flex flex-col md:flex-row justify-between items-end gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm">
+                Elite v5.9 Active
+              </span>
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
+            </div>
+            <h1 className="text-6xl font-black text-slate-900 tracking-tighter italic">
+              {activeTab === 'exams' ? "Kho Đề Thi" : activeTab.toUpperCase()}
+            </h1>
+          </div>
 
-              {activeTab === 'exams' && (
-                <button 
-                  onClick={handleCreateNew}
-                  className="px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-3xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-1 transition-all flex items-center gap-4 active:scale-95"
-                >
-                  <Plus size={22} strokeWidth={3} /> SOẠN ĐỀ THỦ CÔNG
-                </button>
-              )}
-           </div>
+          {activeTab === 'exams' && (
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setIsImporting(true)}
+                className="px-8 py-5 bg-white border-2 border-slate-900 text-slate-900 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-xl shadow-slate-200"
+              >
+                <UploadCloud size={20} /> NHẬP TỪ WORD/PDF
+              </button>
+              <button 
+                onClick={handleCreateNew}
+                className="px-8 py-5 bg-indigo-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-1 transition-all flex items-center gap-3"
+              >
+                <Plus size={20} strokeWidth={3} /> SOẠN ĐỀ MỚI
+              </button>
+            </div>
+          )}
         </header>
       )}
 
-      <div className="relative min-h-[700px]">
+      <div className="relative">
         <AnimatePresence mode="wait">
           <MotionDiv
-            key={activeTab + (editingExam ? '_editing' : '')}
-            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-            transition={{ duration: 0.5, ease: "circOut" }}
+            key={activeTab + (editingExam ? '_edit' : '') + (isImporting ? '_import' : '')}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
           >
             {loading && activeTab === 'exams' ? (
-              <div className="flex flex-col items-center justify-center py-48 space-y-6">
-                <div className="w-24 h-24 border-8 border-indigo-50 border-t-indigo-600 rounded-full animate-spin shadow-inner"></div>
-                <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Cloud Sync Active...</p>
+              <div className="flex flex-col items-center justify-center py-40">
+                <Loader2 className="w-16 h-16 text-indigo-600 animate-spin mb-4" />
+                <p className="text-slate-400 font-black text-[10px] tracking-[0.5em]">SYNCHRONIZING WITH SUPABASE...</p>
               </div>
             ) : renderContent()}
           </MotionDiv>
         </AnimatePresence>
       </div>
       
-      <footer className="mt-40 py-12 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between opacity-50 hover:opacity-100 transition-opacity">
-         <div className="flex items-center gap-4">
-            <ShieldCheck size={24} className="text-emerald-500" />
-            <div>
-              <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">NhanLMS Core Pro v5.8.0</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Permanent Encryption Active</p>
-            </div>
-         </div>
-         <div className="flex gap-10 mt-6 md:mt-0">
-            <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-               <FileText size={16} /> {exams.length} ĐỀ THI
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-               <History size={16} /> REGION: ASIA-VNVN
-            </div>
+      <footer className="mt-40 py-10 border-t border-slate-100 flex justify-between items-center opacity-40 italic">
+         <p className="text-[10px] font-bold text-slate-500 uppercase">Hệ sinh thái toán học Thầy Nhẫn © 2026</p>
+         <div className="flex gap-6">
+            <Zap size={16} className="text-amber-500" />
+            <Sparkles size={16} className="text-indigo-500" />
          </div>
       </footer>
     </div>
