@@ -4,15 +4,21 @@
   "version": "5.9.0",
   "type": "module",
   "description": "NhanLMS Pro - Hệ sinh thái Toán học Thầy Huỳnh Văn Nhẫn (Supabase Edition)",
+
   "engines": {
-    "node": ">=20.x"
+    "node": "20.x"
   },
+
+  "sideEffects": false,
+
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run type-check && vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules .vite"
   },
+
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.47.10",
@@ -23,18 +29,19 @@
     "lucide-react": "^0.468.0",
     "mammoth": "^1.8.0",
     "pdfjs-dist": "^4.8.69",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-katex": "^3.0.1",
     "react-router-dom": "^6.22.3",
     "tailwind-merge": "^2.5.5",
     "uuid": "^11.0.3"
   },
+
   "devDependencies": {
     "@types/katex": "^0.16.7",
     "@types/lodash.debounce": "^4.0.9",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "^18.2.67",
+    "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
