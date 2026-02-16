@@ -1,12 +1,11 @@
 /**
- * LOCAL SUPABASE ENGINE - LMS PRO VERSION
- * Tương thích types.ts mới
- * Không lỗi TS - Không any bừa bãi
+ * LOCAL SUPABASE ENGINE - LMS PRO MAX VERSION
+ * Stable – Type Safe – Persistent – Supabase Compatible
  */
 
 import { User } from "./types";
 
-const STORAGE_KEY = "nhanlms_permanent_final_v64_pro";
+const STORAGE_KEY = "nhanlms_permanent_final_v70_pro";
 
 /* =====================================================
    DATABASE STRUCTURE
@@ -91,18 +90,21 @@ const saveDb = (db: LocalDB) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 };
 
+const generateId = (prefix = "id") =>
+  `${prefix}_${crypto.randomUUID()}`;
+
 /* =====================================================
-   AUTH SYSTEM
+   AUTH
 ===================================================== */
 
 const auth = {
-  signInWithPassword: async ({
+  async signInWithPassword({
     email,
     password,
   }: {
     email: string;
     password: string;
-  }) => {
+  }) {
     const db = getDb();
     const user = db.users.find(
       (u) => u.email === email && u.password === password
@@ -118,7 +120,7 @@ const auth = {
     return { data: { user }, error: null };
   },
 
-  signUp: async ({
+  async signUp({
     email,
     password,
     fullName,
@@ -126,7 +128,7 @@ const auth = {
     email: string;
     password: string;
     fullName: string;
-  }) => {
+  }) {
     const db = getDb();
 
     if (db.users.find((u) => u.email === email)) {
@@ -134,7 +136,7 @@ const auth = {
     }
 
     const newUser: User = {
-      id: `user_${Date.now()}`,
+      id: generateId("user"),
       email,
       password,
       fullName,
@@ -149,14 +151,14 @@ const auth = {
     return { data: { user: newUser }, error: null };
   },
 
-  signOut: async () => {
+  async signOut() {
     const db = getDb();
     db.session.userId = null;
     saveDb(db);
     return { error: null };
   },
 
-  getUser: async () => {
+  async getUser() {
     const db = getDb();
     const user = db.users.find((u) => u.id === db.session.userId);
     return { data: { user }, error: null };
@@ -164,35 +166,62 @@ const auth = {
 };
 
 /* =====================================================
-   QUERY BUILDER
+   QUERY BUILDER (SUPABASE-LIKE)
 ===================================================== */
 
 const from = (table: keyof LocalDB) => {
-  const db = getDb();
-  let tableData = Array.isArray(db[table]) ? [...(db[table] as any[])] : [];
+  let db = getDb();
+  let data = [...(db[table] as any[])];
 
-  let filterCol: string | null = null;
-  let filterVal: any = null;
+  let filterKey: string | null = null;
+  let filterValue: any = null;
 
-  const builder: any = {
-    select: async () => ({ data: tableData, error: null }),
+  const builder = {
+    select() {
+      return builder;
+    },
 
-    eq: (column: string, value: any) => {
-      filterCol = column;
-      filterVal = value;
-      tableData = tableData.filter(
-        (item) => String(item?.[column]) === String(value)
+    eq(column: string, value: any) {
+      filterKey = column;
+      filterValue = value;
+      data = data.filter((item) => item?.[column] === value);
+      return builder;
+    },
+
+    order(column: string, { ascending }: { ascending: boolean }) {
+      data.sort((a, b) =>
+        ascending
+          ? a[column] > b[column]
+            ? 1
+            : -1
+          : a[column] < b[column]
+          ? 1
+          : -1
       );
       return builder;
     },
 
-    insert: async (item: any) => {
-      const db = getDb();
+    async single() {
+      return {
+        data: data[0] || null,
+        error: null,
+      };
+    },
+
+    async maybeSingle() {
+      return {
+        data: data[0] || null,
+        error: null,
+      };
+    },
+
+    async insert(item: any) {
+      db = getDb();
       const items = Array.isArray(item) ? item : [item];
 
       const newItems = items.map((i) => ({
         ...i,
-        id: i.id || `id_${Date.now()}_${Math.random()}`,
+        id: i.id || generateId(),
         createdAt: new Date().toISOString(),
       }));
 
@@ -202,12 +231,40 @@ const from = (table: keyof LocalDB) => {
       return { data: newItems, error: null };
     },
 
-    update: async (updates: any) => {
-      const db = getDb();
+    async upsert(items: any[], options?: { onConflict?: string }) {
+      db = getDb();
+      const key = options?.onConflict || "id";
+
+      items.forEach((item) => {
+        const index = (db[table] as any[]).findIndex(
+          (row) => row[key] === item[key]
+        );
+
+        if (index >= 0) {
+          (db[table] as any[])[index] = {
+            ...db[table][index],
+            ...item,
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          (db[table] as any[]).push({
+            ...item,
+            id: item.id || generateId(),
+            createdAt: new Date().toISOString(),
+          });
+        }
+      });
+
+      saveDb(db);
+      return { error: null };
+    },
+
+    async update(updates: any) {
+      db = getDb();
 
       db[table] = (db[table] as any[]).map((item) =>
-        filterCol && String(item?.[filterCol]) === String(filterVal)
-          ? { ...item, ...updates }
+        filterKey && item?.[filterKey] === filterValue
+          ? { ...item, ...updates, updatedAt: new Date().toISOString() }
           : item
       );
 
@@ -215,19 +272,20 @@ const from = (table: keyof LocalDB) => {
       return { error: null };
     },
 
-    delete: async () => {
-      const db = getDb();
+    async delete() {
+      db = getDb();
 
       db[table] = (db[table] as any[]).filter(
         (item) =>
-          !(
-            filterCol &&
-            String(item?.[filterCol]) === String(filterVal)
-          )
+          !(filterKey && item?.[filterKey] === filterValue)
       );
 
       saveDb(db);
       return { error: null };
+    },
+
+    async then(resolve: any) {
+      resolve({ data, error: null });
     },
   };
 
@@ -235,16 +293,17 @@ const from = (table: keyof LocalDB) => {
 };
 
 /* =====================================================
-   STORAGE (FILE UPLOAD)
+   STORAGE (WORD / PDF SUPPORT)
 ===================================================== */
 
 const storage = {
   from: (_bucket: string) => ({
-    upload: async (path: string, file: File) => {
+    async upload(path: string, file: File) {
       const db = getDb();
 
-      const reader = new FileReader();
       return new Promise((resolve) => {
+        const reader = new FileReader();
+
         reader.onload = () => {
           db.files.push({
             path,
@@ -253,15 +312,18 @@ const storage = {
           saveDb(db);
           resolve({ data: { path }, error: null });
         };
+
         reader.readAsDataURL(file);
       });
     },
 
-    getPublicUrl: (path: string) => ({
-      data: {
-        publicUrl: path,
-      },
-    }),
+    getPublicUrl(path: string) {
+      return {
+        data: {
+          publicUrl: path,
+        },
+      };
+    },
   }),
 };
 
