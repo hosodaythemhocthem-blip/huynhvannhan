@@ -1,38 +1,60 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY
+ * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V4
  * Tối ưu Supabase + Word/PDF + AI + Math Render
  */
 
 export type Role = "teacher" | "student" | "admin";
 
 /* =====================================================
+   COMMON BASE MODEL (SUPABASE SYNC SAFE)
+===================================================== */
+
+export interface BaseEntity {
+  id: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/* =====================================================
    USER
 ===================================================== */
-export interface User {
-  id: string; // Supabase Auth UID
+
+export interface User extends BaseEntity {
   email: string;
   fullName: string;
   role: Role;
+
   avatar?: string;
 
-  isApproved?: boolean; // Giáo viên duyệt học sinh
+  isApproved?: boolean;
+
   classId?: string;
   className?: string;
 
-  createdAt?: string;
-  updatedAt?: string;
-
   lastLoginAt?: string;
 
-  /**
-   * ⚠ Không lưu password trong public table
-   * Supabase Auth xử lý password
-   */
+  isActive?: boolean;
+}
+
+/* =====================================================
+   FILE STORAGE
+===================================================== */
+
+export type FileType = "pdf" | "docx" | "image" | "text";
+
+export interface UploadedFile extends BaseEntity {
+  fileName: string;
+  fileUrl: string;
+  fileType: FileType;
+  fileSize?: number;
+
+  uploadedBy: string;
 }
 
 /* =====================================================
    QUESTION TYPES
 ===================================================== */
+
 export enum QuestionType {
   MCQ = "multiple-choice",
   TRUE_FALSE = "true-false",
@@ -44,8 +66,8 @@ export enum QuestionType {
 /* =====================================================
    QUESTION BASE
 ===================================================== */
-export interface BaseQuestion {
-  id: string;
+
+export interface BaseQuestion extends BaseEntity {
   type: QuestionType;
 
   content: string; // Render bằng MathPreview
@@ -56,8 +78,9 @@ export interface BaseQuestion {
 
   image_url?: string;
 
-  createdAt?: string;
-  updatedAt?: string;
+  order?: number;
+
+  isDeleted?: boolean;
 }
 
 /* =====================================================
@@ -67,7 +90,7 @@ export interface BaseQuestion {
 export interface MCQQuestion extends BaseQuestion {
   type: QuestionType.MCQ;
   options: string[];
-  correctAnswer: number; // index
+  correctAnswer: number;
 }
 
 export interface TrueFalseQuestion extends BaseQuestion {
@@ -88,13 +111,14 @@ export interface EssayQuestion extends BaseQuestion {
 
 export interface MathQuestion extends BaseQuestion {
   type: QuestionType.MATH;
-  latex?: string;
   correctAnswer: string;
+  latexSource?: string; // nguồn latex riêng nếu import từ file
 }
 
 /* =====================================================
-   UNION TYPE
+   UNION QUESTION
 ===================================================== */
+
 export type Question =
   | MCQQuestion
   | TrueFalseQuestion
@@ -105,9 +129,8 @@ export type Question =
 /* =====================================================
    EXAM
 ===================================================== */
-export interface Exam {
-  id: string;
 
+export interface Exam extends BaseEntity {
   title: string;
   description: string;
 
@@ -116,12 +139,9 @@ export interface Exam {
 
   questions: Question[];
 
-  duration: number; // phút
+  duration: number;
   subject: string;
   grade: string;
-
-  createdAt: string;
-  updatedAt: string;
 
   isLocked: boolean;
   isPublished?: boolean;
@@ -129,8 +149,8 @@ export interface Exam {
 
   assignedClassIds?: string[];
 
-  file_url?: string; // Word/PDF gốc
-  file_type?: "pdf" | "docx" | "image" | "text";
+  file_url?: string;
+  file_type?: FileType;
 
   totalPoints?: number;
   questionCount?: number;
@@ -139,14 +159,15 @@ export interface Exam {
 
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
+
+  aiGenerated?: boolean;
 }
 
 /* =====================================================
    EXAM SUBMISSION
 ===================================================== */
-export interface ExamSubmission {
-  id: string;
 
+export interface ExamSubmission extends BaseEntity {
   examId: string;
   studentId: string;
 
@@ -162,17 +183,13 @@ export interface ExamSubmission {
 /* =====================================================
    COURSE
 ===================================================== */
-export interface Course {
-  id: string;
+
+export interface Course extends BaseEntity {
   title: string;
   description?: string;
 
   teacherId: string;
-
   grade: string;
-
-  createdAt: string;
-  updatedAt?: string;
 
   lessonCount?: number;
   fileCount?: number;
@@ -183,8 +200,8 @@ export interface Course {
 /* =====================================================
    CLASS
 ===================================================== */
-export interface Class {
-  id: string;
+
+export interface Class extends BaseEntity {
   name: string;
 
   teacherId: string;
@@ -193,7 +210,4 @@ export interface Class {
 
   studentIds?: string[];
   pendingStudentIds?: string[];
-
-  createdAt: string;
-  updatedAt?: string;
 }
