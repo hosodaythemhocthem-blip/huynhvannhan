@@ -2,70 +2,157 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
     <title>NhanLMS Elite v6.0 – Hệ Sinh Thái Toán Học</title>
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: { 50: '#f5f7ff', 100: '#ebf0fe', 200: '#ced9fd', 300: '#a3b6fb', 400: '#7188f7', 500: '#4f46e5', 600: '#3e31d6', 700: '#3226c1', 800: '#2a20a2', 900: '#272081', 950: '#17124b' },
-              slate: { 950: '#020617' }
-            }
-          }
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=JetBrains+Mono:wght@100..800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- KaTeX CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+    />
+
+    <!-- Meta Security -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="theme-color" content="#020617" />
+
+    <style>
+      :root {
+        --primary-indigo: #4f46e5;
+        --dark-bg: #020617;
+      }
+
+      body {
+        background-color: var(--dark-bg);
+        font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+        color: #f8fafc;
+        margin: 0;
+        overflow-x: hidden;
+      }
+
+      #root {
+        min-height: 100vh;
+        width: 100%;
+      }
+
+      .loader-container {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(
+          circle at center,
+          #1e1b4b 0%,
+          var(--dark-bg) 100%
+        );
+        z-index: 9999;
+        transition: opacity 0.6s ease-out;
+      }
+
+      .ring-loader {
+        width: 80px;
+        height: 80px;
+        border: 4px solid rgba(79, 70, 229, 0.1);
+        border-top: 4px solid var(--primary-indigo);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
         }
       }
-    </script>
-    <style>
-      :root { --primary-indigo: #4f46e5; --dark-bg: #020617; }
-      body { background-color: var(--dark-bg); font-family: 'Plus Jakarta Sans', sans-serif; color: #f8fafc; margin: 0; overflow-x: hidden; }
-      #root { min-height: 100vh; width: 100vw; background-color: var(--dark-bg); }
-      .loader-container { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, #1e1b4b 0%, var(--dark-bg) 100%); z-index: 9999; transition: opacity 0.6s ease-out; }
-      .ring-loader { width: 80px; height: 80px; border: 4px solid rgba(79, 70, 229, 0.1); border-top: 4px solid var(--primary-indigo); border-radius: 50%; animation: spin 1s linear infinite; }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-      #fallback-error { display: none; position: fixed; inset: 0; z-index: 10000; background: var(--dark-bg); padding: 2rem; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+
+      #fallback-error {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: var(--dark-bg);
+        padding: 2rem;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.4",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.624",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
-    "framer-motion": "https://esm.sh/framer-motion@^12.34.0",
-    "mammoth": "https://esm.sh/mammoth@^1.11.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "katex": "https://esm.sh/katex@^0.16.28",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
-    "path": "https://esm.sh/path@^0.12.7",
-    "url": "https://esm.sh/url@^0.11.4"
-  }
-}
-</script>
-</head>
+  </head>
+
   <body class="antialiased">
     <div id="root"></div>
+
+    <!-- Boot Loader -->
     <div class="loader-container" id="system-loader">
       <div class="ring-loader"></div>
-      <div class="mt-8 text-center">
-        <h1 style="font-weight: 900; font-size: 16px; letter-spacing: 0.5em; text-transform: uppercase; color: #6366f1; margin-bottom: 12px;">NhanLMS Elite</h1>
-        <p id="boot-status" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #475569; letter-spacing: 0.2em;">Initializing System...</p>
+      <div style="margin-top: 32px; text-align: center">
+        <h1
+          style="
+            font-weight: 900;
+            font-size: 16px;
+            letter-spacing: 0.5em;
+            text-transform: uppercase;
+            color: #6366f1;
+            margin-bottom: 12px;
+          "
+        >
+          NhanLMS Elite
+        </h1>
+        <p
+          style="
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #475569;
+            letter-spacing: 0.2em;
+          "
+        >
+          Initializing System...
+        </p>
       </div>
     </div>
+
+    <!-- Fallback Error -->
     <div id="fallback-error">
-      <div style="background: rgba(15, 23, 42, 0.8); padding: 48px; border-radius: 40px; border: 1px solid rgba(239, 68, 68, 0.2);">
-        <h2 style="color: #ef4444; font-weight: 800;">LỖI HỆ THỐNG</h2>
-        <button onclick="localStorage.clear(); location.reload();" style="background: #ef4444; color: white; border: none; padding: 16px 32px; border-radius: 16px; margin-top: 20px; cursor: pointer;">KHỞI ĐỘNG LẠI</button>
+      <div
+        style="
+          background: rgba(15, 23, 42, 0.8);
+          padding: 48px;
+          border-radius: 40px;
+          border: 1px solid rgba(239, 68, 68, 0.2);
+        "
+      >
+        <h2 style="color: #ef4444; font-weight: 800">
+          LỖI HỆ THỐNG
+        </h2>
+        <button
+          onclick="localStorage.clear(); location.reload();"
+          style="
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 16px;
+            margin-top: 20px;
+            cursor: pointer;
+          "
+        >
+          KHỞI ĐỘNG LẠI
+        </button>
       </div>
     </div>
-    <script type="module" src="index.tsx"></script>
+
+    <!-- Vite Entry -->
+    <script type="module" src="/main.tsx"></script>
   </body>
 </html>
