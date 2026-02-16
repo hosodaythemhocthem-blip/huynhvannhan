@@ -1,221 +1,60 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===============================
-   GLOBAL RESET
-   =============================== */
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui,
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
-  color: #0f172a;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background 0.3s ease, color 0.3s ease;
-}
-
-/* ===============================
-   CONTAINER WRAPPER
-   =============================== */
-.app-container {
-  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-}
-
-/* ===============================
-   SCROLLBAR (MODERN + CLEAN)
-   =============================== */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #6366f1, #8b5cf6);
-  border-radius: 999px;
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #6366f1 transparent;
-}
-
-/* ===============================
-   INPUT / FORM SYSTEM
-   =============================== */
-input,
-textarea,
-select {
-  @apply bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm;
-  transition: all 0.2s ease;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  @apply ring-2 ring-primary-400 border-primary-400;
-  outline: none;
-}
-
-/* ===============================
-   BUTTON SYSTEM
-   =============================== */
-.btn {
-  @apply px-4 py-2 rounded-xl font-medium transition-all duration-200;
-}
-
-.btn-primary {
-  @apply bg-gradient-to-r from-indigo-500 to-purple-600 
-  text-white shadow-md hover:shadow-lg 
-  hover:opacity-95 active:scale-[0.98];
-}
-
-.btn-danger {
-  @apply bg-rose-500 text-white shadow-md 
-  hover:bg-rose-600 active:scale-[0.98];
-}
-
-.btn-success {
-  @apply bg-emerald-500 text-white shadow-md 
-  hover:bg-emerald-600 active:scale-[0.98];
-}
-
-.btn-ghost {
-  @apply bg-transparent hover:bg-slate-100 text-slate-700;
-}
-
-/* ===============================
-   CARD SYSTEM (ELEVATION)
-   =============================== */
-.card {
-  @apply bg-white rounded-2xl shadow-sm border border-slate-200;
-}
-
-.card-elevated {
-  @apply bg-white rounded-2xl shadow-lg border border-slate-100;
-}
-
-.card-hover {
-  @apply hover:shadow-xl transition-shadow duration-300;
-}
-
-/* ===============================
-   BADGE SYSTEM
-   =============================== */
-.badge {
-  @apply px-3 py-1 text-xs font-semibold rounded-full;
-}
-
-.badge-pending {
-  @apply bg-yellow-100 text-yellow-800;
-}
-
-.badge-approved {
-  @apply bg-green-100 text-green-800;
-}
-
-.badge-rejected {
-  @apply bg-red-100 text-red-800;
-}
-
-/* ===============================
-   TYPOGRAPHY POLISH
-   =============================== */
-h1,
-h2,
-h3 {
-  letter-spacing: -0.02em;
-}
-
-h1 {
-  @apply text-3xl font-bold;
-}
-
-h2 {
-  @apply text-2xl font-semibold;
-}
-
-h3 {
-  @apply text-xl font-semibold;
-}
-
-/* ===============================
-   SMOOTH ANIMATION
-   =============================== */
-.fade-in {
-  animation: fadeIn 0.4s ease-out both;
-}
-
-.scale-in {
-  animation: scaleIn 0.2s ease-out both;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* ===============================
-   MATH RENDER READY (KaTeX)
-   =============================== */
-.katex-display {
-  overflow-x: auto;
-  padding: 0.5rem 0;
-}
-
-.katex {
-  font-size: 1.05em;
-}
-
-/* ===============================
-   DARK MODE (THỰC SỰ)
-   =============================== */
-@media (prefers-color-scheme: dark) {
+@layer base {
   body {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    color: #e2e8f0;
+    @apply bg-[#020617] text-slate-100 antialiased selection:bg-indigo-500/30 selection:text-indigo-200;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-premium {
+    @apply bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+  
+  .glass-card {
+    @apply bg-slate-900/40 backdrop-blur-xl border border-white/5 shadow-2xl transition-all duration-500 hover:border-indigo-500/30 hover:bg-slate-900/60;
   }
 
-  .card,
-  .card-elevated {
-    @apply bg-slate-800 border-slate-700;
+  .shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
   }
 
-  input,
-  textarea,
-  select {
-    @apply bg-slate-800 border-slate-600 text-slate-100;
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-white via-indigo-200 to-indigo-400;
   }
+}
 
-  .btn-ghost {
-    @apply hover:bg-slate-700 text-slate-200;
-  }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Tối ưu KaTeX cho phong cách Dark Mode */
+.katex {
+  @apply text-indigo-100 font-medium;
+}
+.katex-display {
+  @apply bg-white/5 p-6 rounded-3xl border border-white/5 my-6 overflow-x-auto;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-indigo-500/50 transition-colors;
 }
