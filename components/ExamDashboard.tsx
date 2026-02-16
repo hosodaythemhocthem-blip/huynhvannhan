@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from "react";
 import { 
   Plus, 
@@ -14,14 +13,18 @@ import {
   FileUp,
   History,
   AlertCircle,
-  X
+  X,
+  PlusCircle
 } from "lucide-react";
-import { OnlineExam } from "../examFo";
+import { OnlineExam } from "../types";
 import ExamCard from "./ExamCard";
 import ImportExamFromFile from "./ImportExamFromFile";
 import AiExamGenerator from "./AiExamGenerator";
 import { supabase } from "../supabase";
 import { useToast } from "./Toast";
+import { motion, AnimatePresence } from "framer-motion";
+
+const MotionDiv = motion.div as any;
 
 interface Props {
   exams: OnlineExam[];
@@ -30,6 +33,7 @@ interface Props {
   onEdit: (exam: OnlineExam) => void;
   onDelete: (id: string) => void;
   onView?: (exam: OnlineExam) => void;
+  userId: string;
 }
 
 const ExamDashboard: React.FC<Props> = ({
@@ -39,6 +43,7 @@ const ExamDashboard: React.FC<Props> = ({
   onEdit,
   onDelete,
   onView,
+  userId
 }) => {
   const { showToast } = useToast();
   const [search, setSearch] = useState("");
@@ -48,226 +53,127 @@ const ExamDashboard: React.FC<Props> = ({
 
   const filteredExams = useMemo(() => {
     if (!search.trim()) return exams;
-    const s = search.toLowerCase();
-    return exams.filter((exam) =>
-      exam.title.toLowerCase().includes(s) || 
-      exam.description.toLowerCase().includes(s)
+    return exams.filter(exam => 
+      exam.title.toLowerCase().includes(search.toLowerCase()) ||
+      exam.grade?.toLowerCase().includes(search.toLowerCase())
     );
   }, [exams, search]);
 
-  const handleQuickPasteCreate = async () => {
+  const handlePermanentDelete = async (id: string) => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text) {
-        showToast("Bộ nhớ đệm trống. Thầy hãy copy nội dung đề thi trước nhé!", "warning");
-        return;
-      }
-      setActiveTool('ai');
-      showToast("Đã nhận nội dung! Thầy hãy tinh chỉnh lại trong trình AI nhé.", "success");
+      const { error } = await (supabase.from('exams') as any).delete().eq('id', id);
+      if (error) throw error;
+      onDelete(id);
+      showToast("Đã xóa đề thi vĩnh viễn khỏi Cloud!", "success");
     } catch (err) {
-      showToast("Hãy dùng Ctrl + V thủ công.", "info");
-    }
-  };
-
-  const handleDeleteAll = async () => {
-    if (confirm("Thầy Nhẫn có chắc muốn xóa VĨNH VIỄN toàn bộ đề thi? Hành động này không thể khôi phục!")) {
-      setLoading(true);
-      try {
-        for (const exam of exams) {
-          await supabase.from('exams').delete(exam.id);
-        }
-        window.location.reload();
-      } catch (err) {
-        showToast("Lỗi khi xóa dữ liệu Cloud.", "error");
-      } finally {
-        setLoading(false);
-      }
+      showToast("Lỗi khi xóa dữ liệu vĩnh viễn.", "error");
     }
   };
 
   return (
-    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
-      
-      {/* 🚀 CREATIVE ACTION HUB */}
-      <section className="bg-white rounded-[4rem] p-10 md:p-14 border border-indigo-50 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-50/40 rounded-full blur-[120px] -mr-64 -mt-64"></div>
-        
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 mb-14">
-          <div>
-            <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Khu vực Sáng tạo</h2>
-            <p className="text-slate-500 font-medium mt-2 text-lg">Phòng lab AI & Công cụ quản lý đề thi tối tân của Thầy Nhẫn.</p>
-          </div>
-          
-          <div className="flex flex-wrap gap-4 w-full lg:w-auto">
-            <button
-              onClick={onCreate}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-3 px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-sm hover:bg-black transition-all shadow-2xl active:scale-95"
-            >
-              <Plus size={22} /> SOẠN THỦ CÔNG
-            </button>
-            <button
-              onClick={handleQuickPasteCreate}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-3 px-10 py-5 bg-indigo-50 text-indigo-600 rounded-[2rem] font-black text-sm hover:bg-indigo-100 transition-all border border-indigo-100"
-              title="Tạo nhanh từ Clipboard (Ctrl+V)"
-            >
-              <ClipboardPaste size={22} /> DÁN ĐỀ NHANH
-            </button>
-            {exams.length > 0 && (
-              <button
-                onClick={handleDeleteAll}
-                className="p-5 bg-rose-50 text-rose-400 hover:text-rose-600 rounded-2xl transition-all shadow-sm"
-                title="Xóa tất cả đề thi vĩnh viễn"
-              >
-                {loading ? <Loader2 className="animate-spin" /> : <Trash2 size={22} />}
-              </button>
-            )}
-          </div>
+    <div className="space-y-10 animate-in fade-in duration-700">
+      {/* Header Dashboard */}
+      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-white p-10 rounded-[3.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-slate-50">
+        <div>
+          <h2 className="text-4xl font-black text-slate-900 tracking-tighter italic uppercase flex items-center gap-4">
+            <FileText className="text-indigo-600" size={36} /> Kho Đề Thi v6.0
+          </h2>
+          <p className="text-slate-400 font-bold text-sm uppercase tracking-widest mt-2">
+            Thầy Nhẫn đang quản lý {exams.length} đề thi vĩnh viễn
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <div 
-             className={`group p-10 rounded-[3rem] transition-all duration-500 cursor-pointer relative overflow-hidden
-               ${activeTool === 'ai' ? 'bg-indigo-600 text-white shadow-2xl ring-4 ring-indigo-200' : 'bg-slate-50 hover:bg-white border border-transparent hover:border-indigo-100 hover:shadow-xl'}`} 
-             onClick={() => setActiveTool(activeTool === 'ai' ? null : 'ai')}
-           >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-              <Sparkles className={`absolute -bottom-6 -right-6 transition-transform duration-700 ${activeTool === 'ai' ? 'text-white/20 scale-150' : 'text-slate-200 group-hover:scale-125'}`} size={160} />
-              <div className="relative z-10">
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-lg ${activeTool === 'ai' ? 'bg-white/20' : 'bg-indigo-600 text-white'}`}>
-                    <Wand2 size={28} />
-                 </div>
-                 <h4 className="text-2xl font-black mb-3">Lumina AI Generator</h4>
-                 <p className={`text-base font-medium leading-relaxed ${activeTool === 'ai' ? 'text-indigo-100' : 'text-slate-500'}`}>
-                    Dùng AI chuyển ghi chú, văn bản thô hoặc công thức viết tay thành đề thi chuẩn tắc vĩnh viễn.
-                 </p>
-              </div>
-           </div>
-
-           <div 
-             className={`group p-10 rounded-[3rem] transition-all duration-500 cursor-pointer relative overflow-hidden
-               ${activeTool === 'import' ? 'bg-emerald-600 text-white shadow-2xl ring-4 ring-emerald-200' : 'bg-slate-50 hover:bg-white border border-transparent hover:border-emerald-100 hover:shadow-xl'}`} 
-             onClick={() => setActiveTool(activeTool === 'import' ? null : 'import')}
-           >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-              <FileUp className={`absolute -bottom-6 -right-6 transition-transform duration-700 ${activeTool === 'import' ? 'text-white/20 scale-150' : 'text-slate-200 group-hover:scale-125'}`} size={160} />
-              <div className="relative z-10">
-                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 shadow-lg ${activeTool === 'import' ? 'bg-white/20' : 'bg-emerald-600 text-white'}`}>
-                    <FileUp size={28} />
-                 </div>
-                 <h4 className="text-2xl font-black mb-3">Nhập tệp Word / PDF</h4>
-                 <p className={`text-base font-medium leading-relaxed ${activeTool === 'import' ? 'text-emerald-50' : 'text-slate-500'}`}>
-                    Tự động nhận diện công thức LaTeX từ file tài liệu và lưu trữ vĩnh viễn vào hệ thống của Thầy.
-                 </p>
-              </div>
-           </div>
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={() => setActiveTool(activeTool === 'import' ? null : 'import')}
+            className={`px-8 py-4 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-2 ${activeTool === 'import' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            <FileUp size={18} /> Nhập Word/PDF
+          </button>
+          <button 
+            onClick={() => setActiveTool(activeTool === 'ai' ? null : 'ai')}
+            className={`px-8 py-4 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-2 ${activeTool === 'ai' ? 'bg-purple-600 text-white shadow-xl shadow-purple-100' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}
+          >
+            <Wand2 size={18} /> Tạo Đề AI
+          </button>
+          <button 
+            onClick={onCreate}
+            className="px-10 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest hover:bg-black transition-all shadow-2xl flex items-center gap-2"
+          >
+            <PlusCircle size={18} /> Tạo Thủ Công
+          </button>
         </div>
+      </header>
 
-        {/* DYNAMIC TOOL RENDERER */}
+      {/* Area hiển thị Tool mở rộng */}
+      <AnimatePresence>
         {activeTool && (
-          <div className="mt-12 pt-12 border-t border-slate-100 animate-in slide-in-from-top-6 duration-700">
-             <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
-                   <h5 className="font-black text-slate-800 uppercase tracking-[0.2em] text-xs">
-                      {activeTool === 'import' ? "Trình nhập File thông minh" : "Trình tạo đề AI Lumina Pro"}
-                   </h5>
-                </div>
-                <button onClick={() => setActiveTool(null)} className="p-3 bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500 rounded-full transition-all">
-                   <X size={20} />
-                </button>
-             </div>
-             
-             {activeTool === 'import' ? (
-               <ImportExamFromFile 
-                 teacherId="teacher-nhan"
-                 onCreated={(exam) => {
-                   onAdd(exam);
-                   setActiveTool(null);
-                 }} 
-               />
-             ) : (
-               <AiExamGenerator userId="teacher-nhan" onGenerate={onAdd} />
-             )}
-          </div>
+          <MotionDiv 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-slate-900 rounded-[3rem] p-10 relative">
+              <button 
+                onClick={() => setActiveTool(null)}
+                className="absolute top-8 right-8 text-slate-500 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+              {activeTool === 'import' ? (
+                <ImportExamFromFile onImport={onAdd} />
+              ) : (
+                <AiExamGenerator userId={userId} onGenerate={onAdd} />
+              )}
+            </div>
+          </MotionDiv>
         )}
-      </section>
+      </AnimatePresence>
 
-      {/* 📚 EXAM LIBRARY */}
-      <section className="space-y-8">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 px-4">
-           <div className="flex items-center gap-5">
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Thư viện Đề thi</h3>
-              <div className="px-5 py-2 bg-indigo-50 text-indigo-600 rounded-full text-xs font-black uppercase tracking-widest shadow-sm">
-                 {filteredExams.length} Bản ghi vĩnh viễn
-              </div>
-           </div>
-
-           <div className="flex items-center gap-4 w-full md:w-auto">
-              <div className="relative flex-1 md:w-96">
-                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                 <input
-                   type="text"
-                   placeholder="Tìm đề thi theo tiêu đề..."
-                   value={search}
-                   onChange={(e) => setSearch(e.target.value)}
-                   className="w-full pl-14 pr-10 py-5 rounded-[2rem] bg-white border border-slate-100 shadow-xl shadow-slate-200/20 focus:ring-4 focus:ring-indigo-100 outline-none font-bold transition-all"
-                 />
-              </div>
-              <div className="flex bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
-                 <button onClick={() => setViewMode('grid')} className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
-                    <LayoutGrid size={20} />
-                 </button>
-                 <button onClick={() => setViewMode('list')} className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
-                    <List size={20} />
-                 </button>
-              </div>
-           </div>
+      {/* Tìm kiếm và Lọc */}
+      <div className="flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 group w-full">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
+          <input 
+            type="text" 
+            placeholder="Tìm kiếm đề thi theo tên hoặc khối lớp..." 
+            className="w-full pl-16 pr-8 py-5 rounded-[2rem] bg-white border border-slate-100 shadow-sm outline-none font-bold text-sm focus:ring-4 focus:ring-indigo-50 transition-all"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+        <div className="flex bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
+           <button onClick={() => setViewMode('grid')} className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><LayoutGrid size={20}/></button>
+           <button onClick={() => setViewMode('list')} className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}><List size={20}/></button>
+        </div>
+      </div>
 
+      {/* Danh sách đề thi */}
+      <section className="min-h-[400px]">
         {filteredExams.length > 0 ? (
-          <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10" 
-            : "flex flex-col gap-6"
-          }>
+          <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8" : "flex flex-col gap-4"}>
             {filteredExams.map((exam) => (
-              <ExamCard
-                key={exam.id}
-                exam={exam}
+              <ExamCard 
+                key={exam.id} 
+                exam={exam} 
+                onEdit={onEdit}
+                onDelete={handlePermanentDelete}
                 onView={onView}
-                onEdit={() => onEdit(exam)}
-                onDelete={() => onDelete(exam.id)}
                 role="teacher"
               />
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[4rem] border-4 border-dashed border-slate-100 group hover:border-indigo-100 transition-all">
-            <div className="w-28 h-28 bg-slate-50 rounded-[3rem] flex items-center justify-center shadow-inner mb-10 group-hover:scale-110 transition-transform duration-700">
-              <FileText size={56} className="text-slate-200" />
+          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-[4rem] border border-slate-100 border-dashed">
+            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+              <History size={40} className="text-slate-200" />
             </div>
-            <p className="font-black text-2xl text-slate-800 tracking-tight">Thư viện của Thầy đang trống</p>
-            <p className="text-lg font-medium text-slate-400 mt-4 text-center max-w-sm leading-relaxed">
-              Thầy Nhẫn hãy bắt đầu bằng việc dán đề thi nhanh từ Clipboard hoặc tải file Word lên nhé.
-            </p>
-            <button
-              onClick={onCreate}
-              className="mt-12 bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-base flex items-center gap-4 hover:bg-black transition-all shadow-2xl active:scale-95"
-            >
-              <Sparkles size={24} /> BẮT ĐẦU NGAY
-            </button>
+            <p className="font-black text-xl text-slate-800 tracking-tight italic">Chưa tìm thấy đề thi phù hợp</p>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Thầy Nhẫn hãy thử thay đổi từ khóa tìm kiếm</p>
           </div>
         )}
       </section>
-
-      <footer className="flex flex-col md:flex-row items-center justify-center gap-10 py-12 opacity-30 hover:opacity-100 transition-all duration-500">
-         <div className="flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-            <History size={16} /> Cloud Synced Permanent
-         </div>
-         <div className="w-1 h-1 bg-slate-300 rounded-full hidden md:block"></div>
-         <div className="flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-            <AlertCircle size={16} /> Design for Thầy Huỳnh Văn Nhẫn v5.8
-         </div>
-      </footer>
     </div>
   );
 };
