@@ -1,6 +1,6 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - PRODUCTION LMS
- * Đã tối ưu Supabase + Word/PDF + Math Render
+ * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY
+ * Tối ưu Supabase + Word/PDF + AI + Math Render
  */
 
 export type Role = "teacher" | "student" | "admin";
@@ -9,21 +9,25 @@ export type Role = "teacher" | "student" | "admin";
    USER
 ===================================================== */
 export interface User {
-  id: string;
+  id: string; // Supabase Auth UID
   email: string;
   fullName: string;
   role: Role;
   avatar?: string;
+
   isApproved?: boolean; // Giáo viên duyệt học sinh
   classId?: string;
   className?: string;
+
   createdAt?: string;
+  updatedAt?: string;
+
+  lastLoginAt?: string;
 
   /**
-   * ⚠ Chỉ dùng tạm local mock
-   * Không lưu password trong Supabase table public
+   * ⚠ Không lưu password trong public table
+   * Supabase Auth xử lý password
    */
-  password?: string;
 }
 
 /* =====================================================
@@ -43,12 +47,17 @@ export enum QuestionType {
 export interface BaseQuestion {
   id: string;
   type: QuestionType;
-  content: string; // Hiển thị LaTeX
+
+  content: string; // Render bằng MathPreview
   points: number;
+
   explanation?: string;
   section?: number;
+
   image_url?: string;
+
   createdAt?: string;
+  updatedAt?: string;
 }
 
 /* =====================================================
@@ -98,8 +107,10 @@ export type Question =
 ===================================================== */
 export interface Exam {
   id: string;
+
   title: string;
   description: string;
+
   teacherId: string;
   teacherName?: string;
 
@@ -113,12 +124,39 @@ export interface Exam {
   updatedAt: string;
 
   isLocked: boolean;
+  isPublished?: boolean;
+  isArchived?: boolean;
+
   assignedClassIds?: string[];
 
   file_url?: string; // Word/PDF gốc
+  file_type?: "pdf" | "docx" | "image" | "text";
+
   totalPoints?: number;
   questionCount?: number;
+
   version?: number;
+
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+}
+
+/* =====================================================
+   EXAM SUBMISSION
+===================================================== */
+export interface ExamSubmission {
+  id: string;
+
+  examId: string;
+  studentId: string;
+
+  answers: Record<string, any>;
+
+  score?: number;
+  graded?: boolean;
+
+  submittedAt: string;
+  gradedAt?: string;
 }
 
 /* =====================================================
@@ -128,11 +166,18 @@ export interface Course {
   id: string;
   title: string;
   description?: string;
+
   teacherId: string;
+
   grade: string;
+
   createdAt: string;
+  updatedAt?: string;
+
   lessonCount?: number;
   fileCount?: number;
+
+  isArchived?: boolean;
 }
 
 /* =====================================================
@@ -141,7 +186,14 @@ export interface Course {
 export interface Class {
   id: string;
   name: string;
+
   teacherId: string;
+
   studentCount?: number;
+
+  studentIds?: string[];
+  pendingStudentIds?: string[];
+
   createdAt: string;
+  updatedAt?: string;
 }
