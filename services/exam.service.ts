@@ -1,5 +1,9 @@
 import { supabase } from "../supabase";
-import { OnlineExam, MathQuestion } from "../examFo";
+import {
+  Exam,
+  Question,
+  QuestionType,
+} from "../types";
 
 /* =========================================================
    UTILITIES
@@ -8,38 +12,100 @@ import { OnlineExam, MathQuestion } from "../examFo";
 const generateId = (prefix: string = "id") =>
   `${prefix}_${crypto.randomUUID()}`;
 
-const normalizeQuestion = (q: any): MathQuestion => ({
-  id: q.id || generateId("q"),
-  type: q.type || "MCQ",
-  text: q.text || q.content || "",
-  options:
-    q.type === "MCQ"
-      ? q.options && q.options.length === 4
-        ? q.options
-        : ["", "", "", ""]
-      : [],
-  correctAnswer: q.correctAnswer || "",
-  points: q.points ?? 1,
-});
+/* =========================================================
+   NORMALIZE QUESTION (V4 SAFE)
+========================================================= */
+
+const normalizeQuestion = (q: any): Question => {
+  const base = {
+    id: q.id || generateId("q"),
+    content: q.content ?? q.text ?? "",
+    points: q.points ?? 1,
+    explanation: q.explanation,
+    section: q.section,
+    order: q.order,
+  };
+
+  switch (q.type) {
+    case QuestionType.MCQ:
+    case "MCQ":
+    case "multiple-choice":
+      return {
+        ...base,
+        type: QuestionType.MCQ,
+        options:
+          Array.isArray(q.options) && q.options.length > 0
+            ? q.options
+            : ["", "", "", ""],
+        correctAnswer:
+          typeof q.correctAnswer === "number"
+            ? q.correctAnswer
+            : 0,
+      };
+
+    case QuestionType.TRUE_FALSE:
+      return {
+        ...base,
+        type: QuestionType.TRUE_FALSE,
+        options: ["True", "False"],
+        correctAnswer:
+          typeof q.correctAnswer === "boolean"
+            ? q.correctAnswer
+            : false,
+      };
+
+    case QuestionType.SHORT_ANSWER:
+      return {
+        ...base,
+        type: QuestionType.SHORT_ANSWER,
+        correctAnswer: q.correctAnswer ?? "",
+      };
+
+    case QuestionType.ESSAY:
+      return {
+        ...base,
+        type: QuestionType.ESSAY,
+        correctAnswer: q.correctAnswer,
+      };
+
+    case QuestionType.MATH:
+      return {
+        ...base,
+        type: QuestionType.MATH,
+        correctAnswer: q.correctAnswer ?? "",
+        latexSource: q.latexSource,
+      };
+
+    default:
+      return {
+        ...base,
+        type: QuestionType.MCQ,
+        options: ["", "", "", ""],
+        correctAnswer: 0,
+      };
+  }
+};
 
 /* =========================================================
-   EXAM SERVICE – SUPABASE PRO VERSION
+   EXAM SERVICE – SUPABASE PRO VERSION (V4 READY)
 ========================================================= */
 
 export const ExamService = {
   /* =========================================================
      SAVE OR UPDATE EXAM (UPSERT)
   ========================================================= */
-  async saveExam(exam: OnlineExam): Promise<boolean> {
+  async saveExam(exam: Exam): Promise<boolean> {
     try {
-      if (!exam.title) throw new Error("Tiêu đề đề thi không được để trống.");
+      if (!exam.title)
+        throw new Error("Tiêu đề đề thi không được để trống.");
 
-      const normalizedExam: OnlineExam = {
+      const normalizedExam: Exam = {
         ...exam,
         id: exam.id || generateId("exam"),
         questions: (exam.questions || []).map(normalizeQuestion),
         updatedAt: new Date().toISOString(),
-        createdAt: exam.createdAt || new Date().toISOString(),
+        createdAt:
+          exam.createdAt || new Date().toISOString(),
       };
 
       const { error } = await supabase
@@ -59,7 +125,7 @@ export const ExamService = {
   },
 
   /* =========================================================
-     DELETE EXAM PERMANENTLY
+     DELETE EXAM
   ========================================================= */
   async deleteExam(examId: string): Promise<boolean> {
     try {
@@ -81,9 +147,9 @@ export const ExamService = {
   },
 
   /* =========================================================
-     GET ALL EXAMS (ORDER NEWEST FIRST)
+     GET ALL EXAMS
   ========================================================= */
-  async getAllExams(): Promise<OnlineExam[]> {
+  async getAllExams(): Promise<Exam[]> {
     try {
       const { data, error } = await supabase
         .from("exams")
@@ -95,7 +161,7 @@ export const ExamService = {
         return [];
       }
 
-      return (data as OnlineExam[]) || [];
+      return (data as Exam[]) || [];
     } catch (err) {
       console.error("❌ Lỗi hệ thống:", err);
       return [];
@@ -103,11 +169,13 @@ export const ExamService = {
   },
 
   /* =========================================================
-     IMPORT FILE (WORD / PDF) → UPLOAD TO STORAGE
+     UPLOAD FILE
   ========================================================= */
   async uploadExamFile(file: File): Promise<string | null> {
     try {
-      const filePath = `exam_files/${generateId("file")}_${file.name}`;
+      const filePath = `exam_files/${generateId(
+        "file"
+      )}_${file.name}`;
 
       const { error } = await supabase.storage
         .from("exam-files")
@@ -130,11 +198,10 @@ export const ExamService = {
   },
 
   /* =========================================================
-     FORMAT RAW QUESTIONS FROM AI OR FILE
+     FORMAT RAW QUESTIONS
   ========================================================= */
-  formatQuestionsForUI(rawQs: any[]): MathQuestion[] {
+  formatQuestionsForUI(rawQs: any[]): Question[] {
     if (!Array.isArray(rawQs)) return [];
-
     return rawQs.map(normalizeQuestion);
   },
 };
