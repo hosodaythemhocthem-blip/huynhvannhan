@@ -1,38 +1,3 @@
-import { Course, QuestionType, Exam } from "./types"
-
-/* ======================================================
-   BIỂU ĐỒ TIẾN ĐỘ HỌC TẬP HÀNG TUẦN
-====================================================== */
-export const STUDY_DATA = Object.freeze([
-  { name: "Thứ 2", hours: 1.5 },
-  { name: "Thứ 3", hours: 3.8 },
-  { name: "Thứ 4", hours: 2.2 },
-  { name: "Thứ 5", hours: 4.5 },
-  { name: "Thứ 6", hours: 3.1 },
-  { name: "Thứ 7", hours: 5.4 },
-  { name: "CN", hours: 2.0 },
-])
-
-/* ======================================================
-   MOCK COURSES
-====================================================== */
-export const MOCK_COURSES: Readonly<Course[]> = Object.freeze([
-  {
-    id: "c1",
-    title: "Giải tích 12: Đạo hàm & Khảo sát hàm số",
-    grade: "12",
-    teacherId: "teacher-nhan",
-    description:
-      "Nắm vững phương pháp giải nhanh trắc nghiệm 3 phần chuẩn cấu trúc Bộ GD 2025.",
-    createdAt: new Date().toISOString(),
-    lessonCount: 15,
-    fileCount: 8,
-  },
-])
-
-/* ======================================================
-   MOCK EXAMS – PRODUCTION READY
-====================================================== */
 export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
   {
     id: "exam-001",
@@ -44,12 +9,12 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
     duration: 90,
     subject: "Toán học",
     grade: "12",
-    difficulty: "medium",
+
     isLocked: false,
     totalPoints: 0.5,
     questionCount: 2,
     version: 1,
-    allowFileImport: true,
+
     questions: [
       {
         id: "q1",
@@ -69,8 +34,7 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
       {
         id: "q2",
         type: QuestionType.MCQ,
-        content:
-          "Giá trị cực đại của hàm số $y = x^3 - 3x + 2$ là:",
+        content: "Giá trị cực đại của hàm số $y = x^3 - 3x + 2$ là:",
         options: ["0", "2", "4", "-1"],
         correctAnswer: 2,
         points: 0.25,
