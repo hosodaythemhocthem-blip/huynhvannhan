@@ -1,24 +1,14 @@
 import React, { useState, useRef } from "react";
-import { OnlineExam, ExamQuestion } from "../types/examFormat";
-import {
-  Upload,
-  Sparkles,
-  Loader2,
-  Wand2,
-  AlertCircle,
-  Trash2,
-  Save,
-  ClipboardPaste,
-  CheckCircle2,
+import { OnlineExam, QuestionType } from "../types";
+import { 
+  Upload, Sparkles, Loader2, Wand2, AlertCircle, Trash2, 
+  Save, FileText, X, ClipboardPaste, CheckCircle2
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
 import MathPreview from "./MathPreview";
 import { geminiService } from "../services/geminiService";
 import { supabase } from "../supabase";
-import { v4 as uuidv4 } from "uuid";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Props {
   userId: string;
@@ -29,10 +19,9 @@ const AiExamGenerator: React.FC<Props> = ({ userId, onGenerate }) => {
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [previewExam, setPreviewExam] = useState<OnlineExam | null>(null);
+  const [previewExam, setPreviewExam] = useState<any | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // ================== FILE EXTRACT ==================
   const extractText = async (file: File): Promise<string> => {
     if (file.type === "application/pdf") {
       const buffer = await file.arrayBuffer();
@@ -41,208 +30,120 @@ const AiExamGenerator: React.FC<Props> = ({ userId, onGenerate }) => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        text += content.items.map((i: any) => i.str).join(" ") + "\n";
+        text += content.items.map((item: any) => item.str).join(" ") + "\n";
       }
       return text;
-    }
-
-    if (
-      file.type.includes("wordprocessingml") ||
-      file.type.includes("msword")
-    ) {
+    } else if (file.name.endsWith(".docx")) {
       const buffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer: buffer });
       return result.value;
     }
-
-    throw new Error("Chỉ hỗ trợ PDF và Word");
+    return "";
   };
 
-  // ================== GENERATE ==================
   const handleGenerate = async (rawInput: string) => {
-    if (!rawInput.trim()) {
-      setError("Vui lòng nhập nội dung đề thi.");
-      return;
-    }
-
+    if (!rawInput.trim()) return setError("Hãy nhập nội dung bài tập.");
     setLoading(true);
     setError("");
-
     try {
-      const aiData = await geminiService.parseExamWithAI(rawInput);
-
-      if (!aiData?.questions?.length) {
-        throw new Error("AI không trả về dữ liệu hợp lệ.");
+      const data = await geminiService.parseExamWithAI(rawInput);
+      if (data && data.questions) {
+        setPreviewExam(data);
       }
-
-      const exam: OnlineExam = {
-        id: uuidv4(),
-        title: aiData.title || "Đề thi AI tạo",
-        subject: "Toán học",
-        grade: "12",
-        questions: aiData.questions.map((q: any, index: number): ExamQuestion => ({
-          id: uuidv4(),
-          order: index + 1,
-          type: q.type === "essay" ? "essay" : "multiple_choice",
-          content: q.text,
-          choices: q.options?.map((opt: string) => ({
-            id: uuidv4(),
-            content: opt,
-          })),
-          correctAnswer: q.correctAnswer,
-          maxScore: q.points || 1,
-        })),
-        createdBy: userId,
-        createdAt: Date.now(),
-        durationMinutes: 60,
-        shuffleQuestions: false,
-      };
-
-      setPreviewExam(exam);
     } catch (err) {
-      setError("AI Lumina đang bận. Thử lại nhé.");
+      setError("AI đang bận, thử lại sau nhé.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ================== FILE UPLOAD ==================
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setLoading(true);
-      const text = await extractText(file);
-      await handleGenerate(text);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ================== SAVE SUPABASE ==================
   const handleSave = async () => {
     if (!previewExam) return;
-
     setLoading(true);
-
     try {
-      const { error } = await supabase.from("exams").insert({
-        id: previewExam.id,
-        title: previewExam.title,
-        description: JSON.stringify(previewExam.questions),
-        teacher_id: userId,
-        file_url: null,
-        created_at: new Date().toISOString(),
-      });
-
-      if (error) throw error;
-
-      alert("Đề thi đã lưu vĩnh viễn vào Supabase.");
-      onGenerate(previewExam);
+      const newExam: OnlineExam = {
+        id: String(Date.now()),
+        title: previewExam.title || 'Đề thi mới từ AI',
+        description: `Tạo bởi AI vào ${new Date().toLocaleDateString()}`,
+        teacherId: userId,
+        questions: previewExam.questions.map((q: any) => ({
+          id: Math.random().toString(36).substr(2, 9),
+          type: QuestionType.MCQ,
+          text: q.text,
+          points: 1,
+          correctAnswer: q.correctAnswer || "A",
+          choices: (q.options || []).map((opt: string, i: number) => ({
+            id: `c${i}`,
+            label: String.fromCharCode(65 + i),
+            content: opt
+          }))
+        })),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        duration: 60,
+        isLocked: false,
+        subject: "Toán học",
+        grade: "12"
+      };
+      
+      await (supabase.from('exams') as any).insert(newExam);
+      onGenerate(newExam);
       setPreviewExam(null);
       setTopic("");
     } catch (err) {
-      alert("Lỗi lưu Supabase.");
+      setError("Lỗi lưu trữ Cloud.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ================== DELETE QUESTION ==================
-  const deleteQuestion = (idx: number) => {
-    if (!previewExam) return;
-    if (!confirm("Xóa câu hỏi này?")) return;
-
-    const updated = { ...previewExam };
-    updated.questions.splice(idx, 1);
-    setPreviewExam(updated);
-  };
-
-  // ================== UI ==================
   return (
     <div className="space-y-8">
-      <div className="bg-white rounded-3xl p-8 shadow-xl">
-        <div className="flex justify-between mb-6">
-          <h3 className="text-2xl font-bold flex items-center gap-3">
-            <Sparkles size={24} /> AI Tạo Đề
-          </h3>
-
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="bg-slate-900 text-white px-6 py-3 rounded-xl flex gap-2 items-center"
-          >
-            <Upload size={18} /> Upload Word/PDF
-          </button>
-
-          <input
-            hidden
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={handleFileUpload}
-          />
-        </div>
-
+      <div className="bg-white rounded-[3rem] p-8 md:p-12 shadow-2xl relative">
+        <h3 className="text-3xl font-black text-slate-900 mb-8 italic">AI Exam Generator</h3>
         <textarea
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="Dán đề thi vào đây..."
-          className="w-full border rounded-xl p-4 min-h-[160px]"
+          placeholder="Dán nội dung bài tập tại đây..."
+          className="w-full px-8 py-6 rounded-[2rem] bg-slate-50 border-none outline-none font-bold text-slate-700 shadow-inner min-h-[150px]"
         />
-
-        <button
-          onClick={() => handleGenerate(topic)}
-          disabled={loading}
-          className="mt-4 bg-indigo-600 text-white px-8 py-3 rounded-xl flex items-center gap-2"
-        >
-          {loading ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
-          Tạo đề
-        </button>
-
-        {error && (
-          <div className="mt-4 text-rose-600 flex gap-2 items-center">
-            <AlertCircle size={18} /> {error}
-          </div>
-        )}
+        <div className="flex gap-4 mt-6 justify-end">
+           <button onClick={() => fileRef.current?.click()} className="px-6 py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center gap-2">
+              <Upload size={20} /> Word/PDF
+           </button>
+           <input ref={fileRef} type="file" hidden accept=".pdf,.docx" onChange={async (e) => {
+             const f = e.target.files?.[0];
+             if(f) { setLoading(true); const t = await extractText(f); handleGenerate(t); }
+           }} />
+           <button onClick={() => handleGenerate(topic)} disabled={loading} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black flex items-center gap-2 shadow-xl shadow-indigo-100">
+              {loading ? <Loader2 className="animate-spin" /> : <Sparkles />} TẠO ĐỀ AI
+           </button>
+        </div>
       </div>
 
       {previewExam && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h4 className="text-xl font-bold">{previewExam.title}</h4>
-            <button
-              onClick={handleSave}
-              className="bg-emerald-600 text-white px-6 py-3 rounded-xl flex gap-2 items-center"
-            >
-              <Save size={18} /> Lưu vĩnh viễn
+        <div className="space-y-8 animate-in slide-in-from-bottom-8">
+          <div className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] shadow-sm">
+            <h4 className="text-2xl font-black text-slate-800 italic">{previewExam.title}</h4>
+            <button onClick={handleSave} className="bg-emerald-600 text-white px-10 py-5 rounded-[2rem] font-black shadow-2xl flex items-center gap-3">
+              <Save size={24} /> LƯU ĐỀ VĨNH VIỄN
             </button>
           </div>
-
-          {previewExam.questions.map((q, idx) => (
-            <div key={q.id} className="bg-white p-6 rounded-2xl shadow">
-              <div className="flex justify-between mb-4">
-                <strong>Câu {idx + 1}</strong>
-                <button onClick={() => deleteQuestion(idx)}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
-
-              <MathPreview content={q.content} />
-
-              {q.choices?.map((c, i) => (
-                <div key={c.id} className="mt-2 flex gap-2">
-                  <span>{String.fromCharCode(65 + i)}.</span>
-                  <MathPreview content={c.content} />
-                  {q.correctAnswer === c.id && (
-                    <CheckCircle2 size={16} className="text-green-600" />
-                  )}
+          <div className="grid grid-cols-1 gap-6">
+            {previewExam.questions.map((q: any, idx: number) => (
+              <div key={idx} className="p-8 bg-white rounded-[3rem] border border-slate-100">
+                <MathPreview content={q.text} className="text-lg font-bold mb-6" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(q.options || []).map((opt: string, oIdx: number) => (
+                    <div key={oIdx} className="p-5 rounded-2xl bg-slate-50 flex items-center gap-4">
+                      <span className="font-black text-indigo-600">{String.fromCharCode(65+oIdx)}.</span>
+                      <MathPreview content={opt} />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
