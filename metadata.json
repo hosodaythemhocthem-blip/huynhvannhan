@@ -1,36 +1,18 @@
 {
-  "id": "/",
-  "name": "Kiến Thức Toán Học LMS",
-  "short_name": "Toán LMS",
-  "description": "Hệ thống LMS Toán học tích hợp AI, hỗ trợ LaTeX, quản lý lớp học, đề thi và bảng điểm.",
-
+  "id": "nhanlms-pro-v59-elite",
+  "name": "NhanLMS Elite – Hệ Sinh Thái Toán Học",
+  "short_name": "NhanLMS Pro",
+  "description": "Nền tảng quản lý học tập Toán học tích hợp AI Lumina, hỗ trợ LaTeX chuẩn hóa, quản lý lớp học và đề thi vĩnh viễn trên Cloud.",
   "lang": "vi",
   "dir": "ltr",
-
   "start_url": "/",
   "scope": "/",
-
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "orientation": "portrait-primary",
-
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
-
-  "categories": ["education", "productivity"],
-
-  "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+  "background_color": "#020617",
+  "theme_color": "#4f46e5",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
   ]
 }
