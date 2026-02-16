@@ -1,217 +1,229 @@
 import React, { useState, useEffect } from "react";
 import { 
   Trash2, ClipboardPaste, Save, Plus, CheckCircle2, 
-  Loader2, Sparkles, X, ChevronRight, LayoutGrid, Info 
+  Loader2, Sparkles, X, ChevronRight, LayoutGrid, Info,
+  PlusCircle, RefreshCcw, Type
 } from "lucide-react";
 import { supabase } from "../supabase";
 import MathPreview from "./MathPreview";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { Exam, Question } from "../types";
+import { OnlineExam, Question } from "../types";
 
-// Tránh lỗi JSX tag
+// Khắc phục lỗi Build Vercel cho Framer Motion
 const MotionDiv = motion.div as any;
 
 interface Props {
-  exam: Exam;
-  onSave?: (exam: Exam) => void;
+  exam: OnlineExam;
+  onSave?: (exam: OnlineExam) => void;
   onCancel?: () => void;
 }
 
 const ExamEditor: React.FC<Props> = ({ exam, onSave, onCancel }) => {
   const { showToast } = useToast();
-  const [data, setData] = useState<Exam>({ ...exam });
+  const [data, setData] = useState<OnlineExam>({ ...exam });
   const [saving, setSaving] = useState(false);
 
-  // Tự động cuộn lên đầu khi mở trình soạn thảo
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const updateQuestion = (idx: number, updates: Partial<Question>) => {
-    const newQs = [...data.questions];
+    const newQs = [...(data.questions || [])];
     newQs[idx] = { ...newQs[idx], ...updates };
-    setData({ ...data, questions: newQs, updatedAt: new Date().toISOString() });
+    setData({ ...data, questions: newQs });
   };
 
   const handlePaste = async (idx: number, field: 'text' | number) => {
     try {
       const text = await navigator.clipboard.readText();
-      if (!text) return;
-      
       if (field === 'text') {
-        updateQuestion(idx, { content: (data.questions[idx].content || "") + text });
+        updateQuestion(idx, { text });
       } else {
-        const options = [...(data.questions[idx].options || [])];
-        options[field] = text;
-        updateQuestion(idx, { options });
+        const newOptions = [...(data.questions[idx].options || [])];
+        newOptions[field] = text;
+        updateQuestion(idx, { options: newOptions });
       }
-      showToast("Đã dán và đồng bộ dữ liệu!", "success");
-    } catch (e) { 
-      showToast("Hãy nhấn Ctrl+V trực tiếp vào ô nhập liệu.", "info"); 
+      showToast("Đã dán nội dung thành công!", "success");
+    } catch (err) {
+      showToast("Không thể truy cập bộ nhớ tạm!", "error");
     }
   };
 
-  const deleteQuestion = (idx: number) => {
-    if (confirm("Thầy có chắc chắn muốn xóa VĨNH VIỄN câu hỏi này khỏi Cloud?")) {
+  const addQuestion = () => {
+    const newQ: Question = {
+      id: `q_${Date.now()}`,
+      text: "",
+      options: ["", "", "", ""],
+      correctAnswer: 0,
+      explanation: ""
+    };
+    setData({ ...data, questions: [...(data.questions || []), newQ] });
+  };
+
+  const removeQuestion = (idx: number) => {
+    if (confirm("Thầy Nhẫn muốn xóa câu hỏi này vĩnh viễn?")) {
       const newQs = data.questions.filter((_, i) => i !== idx);
       setData({ ...data, questions: newQs });
-      showToast("Đã xóa câu hỏi.", "info");
     }
   };
 
-  const handleSaveToCloud = async () => {
-    if (data.questions.length === 0) {
-      showToast("Đề thi chưa có câu hỏi nào!", "error");
-      return;
-    }
+  const handleSaveVinhVien = async () => {
     setSaving(true);
     try {
-      // Sử dụng hàm upsert đã được sửa lỗi chaining ở supabase.ts
-      await supabase.from('exams').upsert(data);
-      showToast("Đã lưu trữ vĩnh viễn lên Cloud!", "success");
-      onSave?.(data);
+      const { error } = await (supabase.from('exams') as any)
+        .upsert({ 
+          ...data, 
+          updated_at: new Date().toISOString(),
+          teacher_id: "huynhvannhan@gmail.com" // Email định danh của Thầy
+        });
+
+      if (error) throw error;
+      showToast("Đã lưu đề thi vĩnh viễn lên Supabase!", "success");
+      if (onSave) onSave(data);
     } catch (err) {
-      showToast("Lỗi đồng bộ. Thầy vui lòng kiểm tra kết nối.", "error");
+      showToast("Lỗi đồng bộ dữ liệu Cloud.", "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 pb-32">
-      {/* Menu điều khiển Pro */}
-      <header className="flex justify-between items-center bg-slate-900/95 backdrop-blur-xl p-6 rounded-[2.5rem] border border-white/10 sticky top-4 z-50 shadow-2xl">
+    <div className="min-h-screen bg-slate-50 pb-32">
+      {/* Thanh công cụ cố định */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
-             <Sparkles size={24} />
-          </div>
-          <div className="hidden md:block">
-            <h3 className="text-xl font-black text-white italic tracking-tight">NhanLMS <span className="text-indigo-500">Editor</span></h3>
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Cấu hình Cloud v5.9</p>
+          <button onClick={onCancel} className="p-3 hover:bg-slate-100 rounded-2xl transition-all">
+            <X size={24} className="text-slate-400" />
+          </button>
+          <div>
+            <h2 className="text-xl font-black text-slate-800 italic uppercase tracking-tighter leading-none">
+              Trình soạn đề Elite v6.0
+            </h2>
+            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-1">Đang chỉnh sửa: {data.title}</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <button onClick={onCancel} className="px-6 py-3 text-slate-400 font-bold hover:text-white transition-all text-xs uppercase">Hủy bỏ</button>
+        <div className="flex items-center gap-3">
           <button 
-            onClick={handleSaveToCloud} 
-            disabled={saving} 
-            className="px-8 py-4 bg-indigo-600 text-white rounded-[1.2rem] font-black flex items-center gap-3 shadow-xl hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50"
+            onClick={handleSaveVinhVien}
+            disabled={saving}
+            className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl flex items-center gap-2"
           >
-            {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} 
-            <span className="hidden sm:inline">LƯU VĨNH VIỄN</span>
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
+            Lưu vĩnh viễn
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* Danh sách câu hỏi */}
-      <div className="space-y-8">
-        <AnimatePresence mode="popLayout">
+      <div className="max-w-5xl mx-auto mt-12 px-6 space-y-8">
+        {/* Thông tin chung */}
+        <section className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Tiêu đề đề thi</label>
+              <input 
+                value={data.title}
+                onChange={(e) => setData({...data, title: e.target.value})}
+                className="w-full bg-slate-50 border-none rounded-[1.5rem] px-6 py-4 font-bold text-slate-700 focus:ring-4 focus:ring-indigo-100 transition-all"
+              />
+           </div>
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Thời gian (Phút)</label>
+              <input 
+                type="number"
+                value={data.duration}
+                onChange={(e) => setData({...data, duration: parseInt(e.target.value)})}
+                className="w-full bg-slate-50 border-none rounded-[1.5rem] px-6 py-4 font-bold text-slate-700 focus:ring-4 focus:ring-indigo-100 transition-all"
+              />
+           </div>
+        </section>
+
+        {/* Danh sách câu hỏi */}
+        <AnimatePresence>
           {data.questions.map((q, idx) => (
-            <MotionDiv 
-              layout 
-              key={q.id || idx}
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              exit={{ opacity: 0, x: -50 }}
-              className="bg-slate-900 border border-white/5 rounded-[3.5rem] p-8 md:p-12 shadow-2xl relative group"
+            <MotionDiv
+              key={q.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="bg-white rounded-[3rem] border border-slate-100 shadow-sm p-10 relative group"
             >
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-4">
-                  <span className="w-12 h-12 bg-white text-slate-900 rounded-xl flex items-center justify-center font-black text-xl">
-                    {idx + 1}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Câu hỏi toán học</span>
-                    <span className="text-xs text-slate-500 font-bold">Loại: Trắc nghiệm 4 lựa chọn</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => deleteQuestion(idx)} className="p-3 bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all" title="Xóa vĩnh viễn">
-                    <Trash2 size={18} />
+              <div className="flex justify-between items-start mb-8">
+                <span className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black italic">
+                  #{idx + 1}
+                </span>
+                <button 
+                  onClick={() => removeQuestion(idx)}
+                  className="p-3 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+
+              {/* Nội dung câu hỏi */}
+              <div className="space-y-4 mb-10">
+                <div className="relative group/input">
+                  <textarea
+                    value={q.text}
+                    onChange={(e) => updateQuestion(idx, { text: e.target.value })}
+                    placeholder="Nhập câu hỏi (Hỗ trợ LaTeX: $...$)"
+                    className="w-full bg-slate-50 border-none rounded-[2rem] p-8 font-bold text-slate-700 min-h-[120px] focus:ring-4 focus:ring-indigo-100 transition-all"
+                  />
+                  <button 
+                    onClick={() => handlePaste(idx, 'text')}
+                    className="absolute right-4 top-4 p-3 bg-white text-slate-400 hover:text-indigo-600 rounded-xl shadow-sm opacity-0 group-hover/input:opacity-100 transition-all"
+                  >
+                    <ClipboardPaste size={18} />
                   </button>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Khu vực nhập nội dung */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center px-4">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nội dung (Hỗ trợ Latex)</label>
-                    <button onClick={() => handlePaste(idx, 'text')} className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-[10px] font-bold">
-                      <ClipboardPaste size={14} /> DÁN NHANH
-                    </button>
-                  </div>
-                  <textarea
-                    value={q.content}
-                    onChange={(e) => updateQuestion(idx, { content: e.target.value })}
-                    className="w-full p-6 bg-white/5 border-2 border-transparent focus:border-indigo-500 rounded-[2rem] font-bold text-white outline-none transition-all text-base min-h-[180px] shadow-inner"
-                    placeholder="VD: Cho hàm số $y=f(x)$ có đạo hàm..."
-                  />
-                </div>
-
-                {/* Khu vực xem trước */}
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest px-4">Xem trước hiển thị</label>
-                  <div className="p-6 bg-indigo-500/5 rounded-[2rem] border border-indigo-500/10 min-h-[180px] flex items-center justify-center text-center">
-                    <MathPreview content={q.content || "*Chưa có nội dung câu hỏi*"} className="text-xl text-slate-300 font-medium" />
-                  </div>
+                <div className="px-8 py-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                   <MathPreview content={q.text || "Xem trước công thức toán học tại đây..."} className="text-sm font-medium text-indigo-900" />
                 </div>
               </div>
 
-              {/* Đáp án */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-8 border-t border-white/5">
-                {q.options.map((option, oIdx) => {
-                  const label = String.fromCharCode(65 + oIdx);
-                  const isCorrect = q.correctAnswer === oIdx;
-                  return (
-                    <div key={oIdx} className="relative group/opt">
-                      <div className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-indigo-500 text-xs">{label}.</div>
-                      <input
-                        value={option}
+              {/* Lựa chọn đáp án */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {q.options.map((opt, oIdx) => (
+                  <div key={oIdx} className="relative group/opt">
+                    <div className={`flex items-center gap-4 p-2 rounded-[1.5rem] border-2 transition-all ${q.correctAnswer === oIdx ? 'border-emerald-500 bg-emerald-50' : 'border-slate-50 bg-slate-50'}`}>
+                      <button 
+                        onClick={() => updateQuestion(idx, { correctAnswer: oIdx })}
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-black transition-all ${q.correctAnswer === oIdx ? 'bg-emerald-500 text-white' : 'bg-white text-slate-300'}`}
+                      >
+                        {String.fromCharCode(65 + oIdx)}
+                      </button>
+                      <input 
+                        value={opt}
                         onChange={(e) => {
                           const newOpts = [...q.options];
                           newOpts[oIdx] = e.target.value;
                           updateQuestion(idx, { options: newOpts });
                         }}
-                        className={`w-full pl-12 pr-12 py-4 rounded-[1.5rem] border-2 transition-all font-bold text-sm outline-none
-                          ${isCorrect ? 'border-emerald-500/50 bg-emerald-500/10 text-white' : 'border-white/5 bg-white/5 text-slate-400 focus:border-indigo-500'}`}
-                        placeholder={`Đáp án ${label}`}
+                        className="flex-1 bg-transparent border-none focus:ring-0 font-bold text-slate-600 text-sm"
+                        placeholder={`Đáp án ${String.fromCharCode(65 + oIdx)}`}
                       />
                       <button 
-                        onClick={() => updateQuestion(idx, { correctAnswer: oIdx })}
-                        className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all
-                          ${isCorrect ? 'text-emerald-500 bg-emerald-500/10' : 'text-slate-600 hover:text-indigo-400'}`}
+                        onClick={() => handlePaste(idx, oIdx)}
+                        className="p-2 text-slate-300 hover:text-indigo-600"
                       >
-                        <CheckCircle2 size={18} />
+                        <ClipboardPaste size={16} />
                       </button>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </MotionDiv>
           ))}
         </AnimatePresence>
 
-        {/* Nút thêm câu hỏi siêu to */}
         <button
-          onClick={() => {
-            const newQ: Question = { 
-              id: `q_${Date.now()}`, 
-              content: "", 
-              options: ["", "", "", ""], 
-              correctAnswer: 0,
-              explanation: ""
-            };
-            setData({...data, questions: [...data.questions, newQ]});
-          }}
-          className="w-full py-16 border-4 border-dashed border-white/5 rounded-[3rem] text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/5 hover:border-indigo-500/20 transition-all font-black flex flex-col items-center justify-center gap-4 group"
+          onClick={addQuestion}
+          className="w-full py-12 border-4 border-dashed border-slate-200 rounded-[3rem] text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-white transition-all font-black flex flex-col items-center justify-center gap-4"
         >
-          <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
+          <div className="p-4 bg-slate-100 rounded-2xl group-hover:bg-indigo-600 transition-all">
             <Plus size={32} />
           </div>
-          <span className="text-lg uppercase tracking-widest italic">Thêm câu hỏi mới</span>
+          <span className="uppercase tracking-[0.2em] text-xs">Thêm câu hỏi mới</span>
         </button>
       </div>
     </div>
