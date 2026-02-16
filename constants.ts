@@ -1,7 +1,7 @@
-import { Course, QuestionType, Exam } from "./types";
+import { Course, QuestionType, Exam } from "./types"
 
 /* ======================================================
-   BIỂU ĐỒ TIẾN ĐỘ HỌC TẬP HÀNG TUẦN (SUPABASE READY)
+   BIỂU ĐỒ TIẾN ĐỘ HỌC TẬP HÀNG TUẦN
 ====================================================== */
 export const STUDY_DATA = Object.freeze([
   { name: "Thứ 2", hours: 1.5 },
@@ -11,10 +11,10 @@ export const STUDY_DATA = Object.freeze([
   { name: "Thứ 6", hours: 3.1 },
   { name: "Thứ 7", hours: 5.4 },
   { name: "CN", hours: 2.0 },
-]);
+])
 
 /* ======================================================
-   KHÓA HỌC MẪU (LUXURY VERSION)
+   MOCK COURSES
 ====================================================== */
 export const MOCK_COURSES: Readonly<Course[]> = Object.freeze([
   {
@@ -22,25 +22,16 @@ export const MOCK_COURSES: Readonly<Course[]> = Object.freeze([
     title: "Giải tích 12: Đạo hàm & Khảo sát hàm số",
     grade: "12",
     teacherId: "teacher-nhan",
-    description: "Nắm vững phương pháp giải nhanh trắc nghiệm 3 phần chuẩn cấu trúc Bộ GD 2025.",
+    description:
+      "Nắm vững phương pháp giải nhanh trắc nghiệm 3 phần chuẩn cấu trúc Bộ GD 2025.",
     createdAt: new Date().toISOString(),
     lessonCount: 15,
-    fileCount: 8
+    fileCount: 8,
   },
-  {
-    id: "c2",
-    title: "Hình học Oxyz: Tọa độ trong không gian",
-    grade: "12",
-    teacherId: "teacher-nhan",
-    description: "Trọn bộ kỹ thuật giải toán không gian bằng phương pháp tọa độ.",
-    createdAt: new Date().toISOString(),
-    lessonCount: 12,
-    fileCount: 5
-  }
-]);
+])
 
 /* ======================================================
-   DANH SÁCH ĐỀ THI MẪU (ĐÃ FIX LỖI TYPE TS2322)
+   MOCK EXAMS – PRODUCTION READY
 ====================================================== */
 export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
   {
@@ -53,7 +44,12 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
     duration: 90,
     subject: "Toán học",
     grade: "12",
+    difficulty: "medium",
     isLocked: false,
+    totalPoints: 0.5,
+    questionCount: 2,
+    version: 1,
+    allowFileImport: true,
     questions: [
       {
         id: "q1",
@@ -63,21 +59,24 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
           "$y' = \\frac{-3}{(x-1)^2}$",
           "$y' = \\frac{3}{(x-1)^2}$",
           "$y' = \\frac{-1}{(x-1)^2}$",
-          "$y' = \\frac{1}{(x-1)^2}$"
+          "$y' = \\frac{1}{(x-1)^2}$",
         ],
         correctAnswer: 0,
         points: 0.25,
-        explanation: "Áp dụng công thức đạo hàm hàm phân thức bậc nhất: $(ad-bc)/(cx+d)^2$"
+        explanation:
+          "Áp dụng công thức đạo hàm hàm phân thức bậc nhất: $(ad-bc)/(cx+d)^2$",
       },
       {
         id: "q2",
         type: QuestionType.MCQ,
-        content: "Giá trị cực đại của hàm số $y = x^3 - 3x + 2$ là:",
+        content:
+          "Giá trị cực đại của hàm số $y = x^3 - 3x + 2$ là:",
         options: ["0", "2", "4", "-1"],
         correctAnswer: 2,
         points: 0.25,
-        explanation: "$y' = 3x^2 - 3 = 0 \\Leftrightarrow x = \\pm 1$. Tại $x = -1, y = 4$."
-      }
-    ]
-  }
-]);
+        explanation:
+          "$y' = 3x^2 - 3 = 0 \\Leftrightarrow x = \\pm 1$. Tại x = -1, y = 4.",
+      },
+    ],
+  },
+])
