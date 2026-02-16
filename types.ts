@@ -1,69 +1,129 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - PHIÊN BẢN THẦY HUỲNH VĂN NHẪN
- * Đã sửa toàn bộ lỗi TS2322, TS2741, TS2353
+ * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - PRODUCTION LMS
+ * Đã tối ưu Supabase + Word/PDF + Math Render
  */
 
-export type Role = 'teacher' | 'student' | 'admin';
+export type Role = "teacher" | "student" | "admin";
 
+/* =====================================================
+   USER
+===================================================== */
 export interface User {
   id: string;
   email: string;
   fullName: string;
   role: Role;
   avatar?: string;
-  isApproved?: boolean; // Dùng để Thầy Nhẫn duyệt học sinh
+  isApproved?: boolean; // Giáo viên duyệt học sinh
   classId?: string;
   className?: string;
   createdAt?: string;
-  password?: string; // Tránh lỗi TS2353 trong authService
+
+  /**
+   * ⚠ Chỉ dùng tạm local mock
+   * Không lưu password trong Supabase table public
+   */
+  password?: string;
 }
 
+/* =====================================================
+   QUESTION TYPES
+===================================================== */
 export enum QuestionType {
-  MCQ = 'multiple-choice',
-  TRUE_FALSE = 'true-false',
-  SHORT_ANSWER = 'short-answer',
-  ESSAY = 'essay',
-  MATH = 'math' // Loại chuyên biệt cho Toán học
+  MCQ = "multiple-choice",
+  TRUE_FALSE = "true-false",
+  SHORT_ANSWER = "short-answer",
+  ESSAY = "essay",
+  MATH = "math",
 }
 
-export interface Question {
+/* =====================================================
+   QUESTION BASE
+===================================================== */
+export interface BaseQuestion {
   id: string;
   type: QuestionType;
-  content: string;        // Luôn dùng content để hiện công thức Toán
-  options: string[];      // Danh sách đáp án A, B, C, D
-  correctAnswer: any;     // Vị trí index hoặc text đáp án đúng
+  content: string; // Hiển thị LaTeX
   points: number;
-  explanation?: string;   // Lời giải chi tiết
+  explanation?: string;
   section?: number;
-  image_url?: string;     // Hỗ trợ chèn ảnh vào câu hỏi
-  text?: string;          // Giữ lại để tương thích ngược (Mapping)
+  image_url?: string;
+  createdAt?: string;
 }
 
-// Chuyên biệt cho các đề thi Toán học siêu đỉnh
-export interface MathQuestion extends Question {
+/* =====================================================
+   SPECIFIC QUESTION TYPES
+===================================================== */
+
+export interface MCQQuestion extends BaseQuestion {
+  type: QuestionType.MCQ;
+  options: string[];
+  correctAnswer: number; // index
+}
+
+export interface TrueFalseQuestion extends BaseQuestion {
+  type: QuestionType.TRUE_FALSE;
+  options: ["True", "False"];
+  correctAnswer: boolean;
+}
+
+export interface ShortAnswerQuestion extends BaseQuestion {
+  type: QuestionType.SHORT_ANSWER;
+  correctAnswer: string;
+}
+
+export interface EssayQuestion extends BaseQuestion {
+  type: QuestionType.ESSAY;
+  correctAnswer?: string;
+}
+
+export interface MathQuestion extends BaseQuestion {
+  type: QuestionType.MATH;
   latex?: string;
+  correctAnswer: string;
 }
 
+/* =====================================================
+   UNION TYPE
+===================================================== */
+export type Question =
+  | MCQQuestion
+  | TrueFalseQuestion
+  | ShortAnswerQuestion
+  | EssayQuestion
+  | MathQuestion;
+
+/* =====================================================
+   EXAM
+===================================================== */
 export interface Exam {
   id: string;
   title: string;
   description: string;
   teacherId: string;
   teacherName?: string;
+
   questions: Question[];
-  duration: number;       // Phút
+
+  duration: number; // phút
   subject: string;
   grade: string;
+
   createdAt: string;
   updatedAt: string;
+
   isLocked: boolean;
   assignedClassIds?: string[];
-  file_url?: string;      // Đường dẫn file Word/PDF gốc trên Supabase
+
+  file_url?: string; // Word/PDF gốc
+  totalPoints?: number;
+  questionCount?: number;
+  version?: number;
 }
 
-// Kiểu dữ liệu đồng bộ cho trang LMS
-export type OnlineExam = Exam;
-
+/* =====================================================
+   COURSE
+===================================================== */
 export interface Course {
   id: string;
   title: string;
@@ -75,6 +135,9 @@ export interface Course {
   fileCount?: number;
 }
 
+/* =====================================================
+   CLASS
+===================================================== */
 export interface Class {
   id: string;
   name: string;
