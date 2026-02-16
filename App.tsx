@@ -1,17 +1,17 @@
-
 import React, { useState, useEffect } from "react";
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { User } from "./types.ts";
-import { authService } from "./services/authService.ts";
-import { ToastProvider } from "./components/Toast.tsx";
+// FIX LỖI TS5097: Xóa .ts, .tsx ở cuối đường dẫn
+import { User } from "./types";
+import { authService } from "./services/authService";
+import { ToastProvider } from "./components/Toast";
 import { AnimatePresence, motion } from "framer-motion";
 
 // Layout & Pages
-import Layout from "./components/Layout.tsx";
-import LoginScreen from "./pages/LoginScreen.tsx";
-import TeacherPortal from "./pages/TeacherPortal.tsx";
-import StudentDashboard from "./pages/StudentDashboard.tsx";
-import AdminDashboard from "./pages/AdminDashboard.tsx";
+import Layout from "./components/Layout";
+import LoginScreen from "./pages/LoginScreen";
+import TeacherPortal from "./pages/TeacherPortal";
+import StudentDashboard from "./pages/StudentDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const APP_VERSION = "6.0.0-ELITE-FINAL";
 
@@ -43,7 +43,6 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
 
   useEffect(() => {
-    // === VERSION GUARD ===
     const lastVersion = localStorage.getItem('app_version');
     if (lastVersion !== APP_VERSION) {
       localStorage.clear();
