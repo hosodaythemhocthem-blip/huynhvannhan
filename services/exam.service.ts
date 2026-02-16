@@ -1,125 +1,43 @@
-// services/exam.service.ts
-
-import { supabase, safeQuery } from "../supabase";
-import { OnlineExam, ExamQuestion } from "../types/examFormat";
-
-/**
- * ==========================================================
- * EXAM SERVICE – SUPABASE STABLE VERSION
- * ==========================================================
- * ✔ Typed
- * ✔ Mapping chuẩn DB
- * ✔ Lưu questions JSON
- * ✔ Không crash
- * ✔ Production safe
- * ==========================================================
- */
+import { supabase } from "../supabase";
+import { OnlineExam, MathQuestion } from "../examFo";
 
 export const ExamService = {
-  /* ========================================================
-     SAVE / UPDATE EXAM
-  ======================================================== */
+  // Lưu hoặc cập nhật đề thi vĩnh viễn
   async saveExam(exam: OnlineExam): Promise<boolean> {
     try {
-      // 1️⃣ Lưu metadata vào bảng exams
-      await safeQuery(
-        supabase.from("exams").upsert({
-          id: exam.id,
-          title: exam.title,
-          description: `Môn: ${exam.subject || ""} | Khối: ${
-            exam.grade || ""
-          }`,
-          teacher_id: exam.createdBy,
-          file_url: null,
-          created_at: new Date(exam.createdAt).toISOString(),
-        })
-      );
-
-      // 2️⃣ Lưu full JSON đề thi vào app_sync
-      await safeQuery(
-        supabase.from("app_sync").upsert({
-          id: exam.id,
-          type: "online_exam",
-          payload: exam,
-          created_at: new Date().toISOString(),
-        })
-      );
-
-      return true;
+      const { error } = await (supabase.from('exams') as any).upsert(exam);
+      return !error;
     } catch (err) {
-      console.error("❌ Lỗi lưu đề:", err);
+      console.error("Lỗi lưu đề:", err);
       return false;
     }
   },
 
-  /* ========================================================
-     DELETE EXAM
-  ======================================================== */
+  // Xóa đề thi vĩnh viễn
   async deleteExam(examId: string): Promise<boolean> {
     try {
-      await safeQuery(
-        supabase.from("exams").delete().eq("id", examId)
-      );
-
-      await safeQuery(
-        supabase.from("app_sync").delete().eq("id", examId)
-      );
-
-      return true;
+      const { error } = await (supabase.from('exams') as any).eq('id', examId).delete();
+      return !error;
     } catch (err) {
-      console.error("❌ Lỗi xoá đề:", err);
       return false;
     }
   },
 
-  /* ========================================================
-     GET ALL EXAMS OF TEACHER
-  ======================================================== */
-  async getAllExams(teacherId: string): Promise<OnlineExam[]> {
-    try {
-      const data = await safeQuery(
-        supabase
-          .from("app_sync")
-          .select("payload")
-          .eq("type", "online_exam")
-          .order("created_at", { ascending: false })
-      );
-
-      return (data.map((row: any) => row.payload) ||
-        []) as OnlineExam[];
-    } catch (err) {
-      console.error("❌ Lỗi load đề:", err);
-      return [];
-    }
+  // Lấy toàn bộ đề thi của Thầy
+  async getAllExams(): Promise<OnlineExam[]> {
+    const { data } = await (supabase.from('exams') as any).select();
+    return (data as OnlineExam[]) || [];
   },
 
-  /* ========================================================
-     FORMAT AI RAW QUESTIONS → UI FORMAT
-  ======================================================== */
-  formatQuestionsForUI(rawQs: any[]): ExamQuestion[] {
-    return rawQs.map((q, index) => ({
-      id:
-        q.id ||
-        `q_${Date.now()}_${Math.random()
-          .toString(36)
-          .substring(2, 9)}`,
-      order: index + 1,
-      type: q.type || "multiple_choice",
-      content: q.content || q.text || "",
-
-      choices:
-        q.choices ||
-        (q.options
-          ? q.options.map((opt: string, i: number) => ({
-              id: String.fromCharCode(65 + i),
-              content: opt,
-            }))
-          : []),
-
-      correctAnswer:
-        q.correctAnswer || q.answer || undefined,
-
-      maxScore: q.points || 1,
+  // AI bóc tách đề từ văn bản thô
+  formatQuestionsForUI(rawQs: any[]): MathQuestion[] {
+    return rawQs.map(q => ({
+      id: q.id || `q_${Math.random().toString(36).substr(2, 9)}`,
+      type: q.type || 'MCQ',
+      text: q.text || q.content || "",
+      options: q.options || ["", "", "", ""],
+      correctAnswer: q.correctAnswer || "A",
+      points: q.points || 1
     }));
-  },
+  }
 };
