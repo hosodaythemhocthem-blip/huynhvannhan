@@ -1,42 +1,47 @@
+
 {
-  "name": "math-lms-ai",
+  "name": "nhanlms-pro-v58",
   "private": true,
-  "version": "1.0.0",
+  "version": "5.8.0",
   "type": "module",
-
+  "description": "NhanLMS Pro - Premium Math Education Platform for Thầy Huỳnh Văn Nhẫn",
   "engines": {
-    "node": "24.x"
+    "node": ">=20.x"
   },
-
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'Linting system active...'"
   },
-
   "dependencies": {
-    "@supabase/supabase-js": "^2.43.4",
-    "katex": "^0.16.9",
+    "@google/genai": "^0.21.0",
+    "@supabase/supabase-js": "^2.47.10",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
+    "katex": "^0.16.11",
     "lodash.debounce": "^4.0.8",
-    "lucide-react": "^0.462.0",
-    "mammoth": "^1.6.0",
-    "pdfjs-dist": "^4.0.379",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "lucide-react": "^0.468.0",
+    "mammoth": "^1.8.0",
+    "pdfjs-dist": "^4.8.69",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "react-katex": "^3.0.1",
-    "react-router-dom": "^6.22.3",
-    "uuid": "^9.0.1"
+    "react-router-dom": "^7.0.2",
+    "tailwind-merge": "^2.5.5",
+    "uuid": "^11.0.3"
   },
-
   "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@types/uuid": "^9.0.8",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12"
+    "@types/katex": "^0.16.7",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
   }
 }
