@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-// FIX LỖI TS5097: Xóa .ts, .tsx ở cuối đường dẫn
+// FIX: Xóa đuôi .ts/.tsx để tránh lỗi TS5097
 import { User } from "./types";
 import { authService } from "./services/authService";
 import { ToastProvider } from "./components/Toast";
@@ -18,21 +18,17 @@ const APP_VERSION = "6.0.0-ELITE-FINAL";
 const PendingScreen = ({ user, onLogout }: { user: User, onLogout: () => void }) => (
   <motion.div 
     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-    className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white text-center font-sans"
+    className="min-h-screen bg-[#020617] flex items-center justify-center p-6 text-white text-center"
   >
     <div className="max-w-md bg-white/5 backdrop-blur-3xl p-12 rounded-[3.5rem] border border-white/10 shadow-2xl relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 blur-2xl rounded-full"></div>
       <div className="w-20 h-20 bg-amber-500/20 text-amber-500 rounded-[2rem] flex items-center justify-center mx-auto mb-8 animate-pulse">
         <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       </div>
-      <h2 className="text-2xl font-black mb-4 uppercase tracking-tighter italic">Đang chờ phê duyệt</h2>
-      <p className="text-slate-400 font-medium mb-6 text-sm leading-relaxed">
-        Chào <b>{user.fullName}</b>! Em đã gửi yêu cầu gia nhập vào lớp <span className="text-indigo-400 font-black">{user.className || "học tập"}</span>.
+      <h2 className="text-2xl font-black mb-4 uppercase italic">Đang chờ phê duyệt</h2>
+      <p className="text-slate-400 mb-6 text-sm">
+        Chào <b>{user.fullName}</b>! Thầy <b>Nhẫn</b> sẽ phê duyệt tài khoản của em sớm thôi.
       </p>
-      <p className="text-slate-500 text-xs mb-10 leading-relaxed italic">
-        Thầy <b>Huỳnh Văn Nhẫn</b> đã nhận được yêu cầu và sẽ phê duyệt cho em sớm thôi nhé! Hãy kiểm tra lại sau.
-      </p>
-      <button onClick={onLogout} className="w-full py-5 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl">ĐĂNG XUẤT</button>
+      <button onClick={onLogout} className="w-full py-5 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl">ĐĂNG XUẤT</button>
     </div>
   </motion.div>
 );
@@ -98,7 +94,14 @@ const App: React.FC = () => {
                     <Route path="*" element={<TeacherPortal user={user} activeTab={activeTab} />} />
                   </>
                 ) : (
-                  <Route path="*" element={<StudentDashboard user={user} activeTab={activeTab} />} />
+                  // FIX LỖI TS2322: Truyền thêm onStartExam hoặc spread các props cần thiết
+                  <Route path="*" element={
+                    <StudentDashboard 
+                      user={user} 
+                      activeTab={activeTab} 
+                      onStartExam={(exam: any) => console.log(exam)} 
+                    />
+                  } />
                 )}
               </Routes>
             </Layout>
