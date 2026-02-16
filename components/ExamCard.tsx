@@ -1,40 +1,22 @@
-
 import React, { useMemo, useRef, useState, memo } from "react";
 import {
-  Clock,
-  FileText,
-  Lock,
-  Unlock,
-  Play,
-  Edit3,
-  Trash2,
-  Users,
-  Calendar,
-  ExternalLink,
-  Loader2,
-  Eye,
-  ClipboardPaste,
-  Sparkles,
-  FileUp,
-  MoreVertical
+  Clock, FileText, Lock, Unlock, Play, Edit3, Trash2, 
+  Users, Calendar, ExternalLink, Loader2, Eye, 
+  ClipboardPaste, Sparkles, FileUp, MoreVertical, Trash
 } from "lucide-react";
-// Fix: Import OnlineExam to unify types
-import { OnlineExam } from "../examFo";
+import { OnlineExam } from "../types"; // Đảm bảo đúng đường dẫn type
 import { supabase } from "../supabase";
 import MathPreview from "./MathPreview";
+import { motion } from "framer-motion";
 
 interface ExamCardProps {
-  // Fix: Use OnlineExam type consistently
   exam: OnlineExam & { assignedClassIds?: string[]; questionCount?: number };
   onView?: (exam: OnlineExam) => void;
   onEdit?: (exam: OnlineExam) => void;
   onDelete?: (id: string) => Promise<void> | void;
   onToggleLock?: (exam: OnlineExam) => void;
-  onAssign?: (exam: OnlineExam) => void;
   role?: 'teacher' | 'student';
 }
-
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB limit
 
 const ExamCard: React.FC<ExamCardProps> = ({
   exam,
@@ -42,217 +24,119 @@ const ExamCard: React.FC<ExamCardProps> = ({
   onEdit,
   onDelete,
   onToggleLock,
-  onAssign,
   role = 'teacher'
 }) => {
   const isTeacher = role === 'teacher';
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const formattedDate = useMemo(() => {
-    if (!exam.createdAt) return "Mới tạo";
-    return new Date(exam.createdAt).toLocaleDateString("vi-VN", {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  }, [exam.createdAt]);
+  const handleQuickPaste = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const text = await navigator.clipboard.readText();
+      const { error } = await (supabase.from('exams') as any)
+        .update({ description: text })
+        .eq('id', exam.id);
+      
+      if (error) throw error;
+      alert("Đã dán và cập nhật mô tả đề thi vĩnh viễn!");
+      window.location.reload();
+    } catch (err) {
+      alert("Không thể truy cập bộ nhớ tạm!");
+    }
+  };
 
-  const fileName = useMemo(() => {
-    if (!exam.file_url) return null;
-    return exam.file_url.split("/").pop()?.split('?')[0];
-  }, [exam.file_url]);
-
-  // Xử lý xóa đề thi vĩnh viễn
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!onDelete || loading) return;
-    if (confirm(`Thầy Nhẫn chắc chắn muốn xóa vĩnh viễn đề thi "${exam.title}"? Dữ liệu trên Cloud Supabase sẽ biến mất mãi mãi.`)) {
+    if (confirm(`Thầy Nhẫn có chắc muốn xóa VĨNH VIỄN đề thi: ${exam.title}?`)) {
+      setLoading(true);
       try {
-        setLoading(true);
-        await supabase.from('exams').delete(exam.id);
-        if (onDelete) await onDelete(exam.id);
+        const { error } = await (supabase.from('exams') as any).delete().eq('id', exam.id);
+        if (error) throw error;
+        if (onDelete) onDelete(exam.id);
       } catch (err) {
-        alert("Lỗi xóa đề thi.");
+        alert("Lỗi khi xóa dữ liệu Cloud.");
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // Xử lý dán nhanh nội dung (Ctrl+V)
-  const handleQuickPaste = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        await supabase.from('exams').update(exam.id, { description: text });
-        alert("Đã cập nhật mô tả đề thi từ Clipboard!");
-        window.location.reload();
-      }
-    } catch (err) {
-      alert("Hãy dùng phím Ctrl+V hoặc cấp quyền Clipboard.");
-    }
-  };
-
-  // Xử lý upload Word/PDF
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > MAX_FILE_SIZE) {
-      alert("File quá lớn! Thầy hãy chọn file dưới 15MB nhé.");
-      return;
-    }
-
-    setUploading(true);
-    try {
-      // Giả lập lưu vào Storage Supabase
-      const filePath = `exams/${exam.id}/${file.name}`;
-      await supabase.storage.from('documents').upload(filePath, file);
-      
-      const fileUrl = `https://storage.nhanlms.cloud/${filePath}`;
-      await supabase.from('exams').update(exam.id, { file_url: fileUrl });
-      
-      alert(`Đã đính kèm file "${file.name}" thành công!`);
-      window.location.reload();
-    } catch (err) {
-      alert("Lỗi tải file lên hệ thống.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
-    <div 
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="group bg-white border border-slate-100 rounded-[2.5rem] p-7 hover:shadow-[0_20px_50px_rgba(79,70,229,0.15)] hover:-translate-y-2 transition-all duration-500 flex flex-col h-full relative overflow-hidden"
+    <motion.div
+      whileHover={{ y: -8 }}
+      className="group bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.03)] overflow-hidden flex flex-col h-full relative"
     >
-      {/* Background decoration */}
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-bl-[80px] -mr-10 -mt-10 transition-transform duration-700 ${isHovered ? 'scale-150' : 'scale-100'} blur-xl`}></div>
+      {/* Badge Trạng thái */}
+      <div className="absolute top-6 right-6 z-10">
+        <button 
+          onClick={(e) => { e.stopPropagation(); onToggleLock?.(exam); }}
+          className={`p-3 rounded-2xl transition-all shadow-lg ${exam.isLocked ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}
+        >
+          {exam.isLocked ? <Lock size={16} /> : <Unlock size={16} />}
+        </button>
+      </div>
 
-      {/* Header: Status & Actions */}
-      <div className="flex justify-between items-start mb-6 relative z-10">
-        <div className="flex items-center gap-2">
-          <span className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm ${
-            exam.isLocked 
-              ? 'bg-rose-50 text-rose-500 border-rose-100' 
-              : 'bg-emerald-50 text-emerald-500 border-emerald-100'
-          }`}>
-            {exam.isLocked ? <div className="flex items-center gap-1"><Lock size={10}/> Đã khóa</div> : <div className="flex items-center gap-1"><Unlock size={10}/> Đang mở</div>}
-          </span>
-          {exam.file_url && (
-             <span className="bg-amber-50 text-amber-600 px-3 py-1.5 rounded-full text-[10px] font-black border border-amber-100 flex items-center gap-1">
-               <FileText size={10} /> FILE ĐÍNH KÈM
-             </span>
-          )}
+      <div className="p-8 flex flex-col flex-1">
+        {/* Tiêu đề & Math */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-[0.2em] mb-2">
+            <Sparkles size={12} /> {exam.grade || "Tự do"}
+          </div>
+          <h3 className="text-xl font-black text-slate-800 italic leading-tight group-hover:text-indigo-600 transition-colors">
+            <MathPreview content={exam.title} />
+          </h3>
         </div>
 
-        {isTeacher && (
-           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
+        {/* Thông tin chi tiết */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="flex items-center gap-3 text-slate-400 font-bold text-[10px] uppercase">
+            <Clock size={14} className="text-slate-300" />
+            {exam.duration} Phút
+          </div>
+          <div className="flex items-center gap-3 text-slate-400 font-bold text-[10px] uppercase">
+            <FileText size={14} className="text-slate-300" />
+            {exam.questions?.length || 0} Câu hỏi
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+          <button
+            onClick={() => onView?.(exam)}
+            className="flex-1 mr-3 py-4 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2"
+          >
+            <Play size={14} fill="currentColor" /> Bắt đầu
+          </button>
+
+          {isTeacher && (
+            <div className="flex gap-2">
+              <button
                 onClick={handleQuickPaste}
-                className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                title="Dán nhanh mô tả (Ctrl+V)"
+                className="p-4 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-md rounded-2xl transition-all"
+                title="Dán nhanh (Ctrl+V)"
               >
                 <ClipboardPaste size={18} />
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                title="Đính kèm Word/PDF"
+              <button
+                onClick={() => onEdit?.(exam)}
+                className="p-4 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all"
+                title="Sửa đề"
               >
-                {uploading ? <Loader2 className="animate-spin" size={18} /> : <FileUp size={18} />}
+                <Edit3 size={18} />
               </button>
-              <input ref={fileInputRef} type="file" hidden accept=".pdf,.docx" onChange={handleFileUpload} />
-           </div>
-        )}
-      </div>
-
-      {/* Body: Title & Stats */}
-      <div className="relative z-10 flex-1">
-        <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-5 shadow-2xl group-hover:bg-indigo-600 transition-colors transform group-hover:rotate-3">
-          <FileText size={28} />
-        </div>
-
-        <h3 className="text-xl font-black text-slate-800 group-hover:text-indigo-600 transition-colors line-clamp-2 leading-tight mb-4">
-          <MathPreview content={exam.title} />
-        </h3>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-           <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400">
-             <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-indigo-400">
-                <Clock size={14} />
-             </div>
-             {exam.duration} Phút
-           </div>
-           <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400">
-             <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-emerald-400">
-                <Sparkles size={14} />
-             </div>
-             {exam.questions?.length || exam.questionCount || 0} Câu hỏi
-           </div>
-           <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400">
-             <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-amber-400">
-                <Calendar size={14} />
-             </div>
-             {formattedDate}
-           </div>
-           <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400">
-             <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-purple-400">
-                <Users size={14} />
-             </div>
-             {exam.assignedClassIds?.length || 0} Lớp học
-           </div>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className="p-4 bg-rose-50 text-rose-500 hover:bg-rose-600 hover:text-white rounded-2xl transition-all"
+                title="Xóa vĩnh viễn"
+              >
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <Trash size={18} />}
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Footer: Action Buttons */}
-      <div className="relative z-10 pt-6 mt-auto border-t border-slate-50 flex items-center gap-3">
-        <button
-          onClick={() => onView?.(exam)}
-          className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-3 group/play"
-        >
-          <Play size={16} className="fill-current group-hover/play:scale-125 transition-transform" />
-          Bắt đầu thi
-        </button>
-
-        {isTeacher && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onEdit?.(exam)}
-              className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-              title="Chỉnh sửa đề"
-            >
-              <Edit3 size={18} />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={loading}
-              className="p-4 bg-rose-50 text-rose-400 rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm disabled:opacity-50"
-              title="Xóa vĩnh viễn"
-            >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* File Preview Link (Floating) */}
-      {exam.file_url && isHovered && (
-        <a 
-          href={exam.file_url} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black text-indigo-600 animate-in zoom-in-50 duration-300"
-        >
-          <Eye size={14} /> XEM FILE ĐỀ THI
-        </a>
-      )}
-    </div>
+    </motion.div>
   );
 };
 
