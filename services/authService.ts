@@ -1,7 +1,7 @@
 import { User } from "../types";
 import { supabase } from "../supabase";
 
-const SESSION_KEY = "nhanlms_active_session_pro_v72";
+const SESSION_KEY = "nhanlms_active_session_v3";
 
 /* =========================================================
    SESSION HELPERS
@@ -15,28 +15,38 @@ const clearSession = () => {
   localStorage.removeItem(SESSION_KEY);
 };
 
+const getLocalSession = (): User | null => {
+  const raw = localStorage.getItem(SESSION_KEY);
+  return raw ? (JSON.parse(raw) as User) : null;
+};
+
 /* =========================================================
-   AUTH SERVICE – PRO MAX VERSION
+   AUTH SERVICE – STABLE PRO VERSION
 ========================================================= */
 
 export const authService = {
   /* =========================================================
-     GET CURRENT USER (SYNC WITH SUPABASE)
+     GET CURRENT USER (SYNC DB)
   ========================================================= */
   async getCurrentUser(): Promise<User | null> {
     try {
-      // Ưu tiên lấy từ supabase session
-      const { data } = await supabase.auth.getUser();
-      const user = data?.user as User | undefined;
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-      if (user) {
-        saveSession(user);
-        return user;
-      }
+      if (!authUser) return getLocalSession();
 
-      // fallback local
-      const local = localStorage.getItem(SESSION_KEY);
-      return local ? (JSON.parse(local) as User) : null;
+      // Lấy thông tin đầy đủ từ bảng users
+      const { data: dbUser, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+
+      if (error || !dbUser) return null;
+
+      saveSession(dbUser);
+      return dbUser as User;
     } catch {
       return null;
     }
@@ -46,7 +56,7 @@ export const authService = {
      LOGIN
   ========================================================= */
   async login(email: string, password: string): Promise<User> {
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = email.trim().toLowerCase();
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
@@ -57,33 +67,40 @@ export const authService = {
       throw new Error("Sai tài khoản hoặc mật khẩu.");
     }
 
-    const user = data.user as User;
+    // Lấy user từ bảng users
+    const { data: dbUser, error: dbError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
 
-    // Kiểm tra phê duyệt nếu là học sinh
-    if (user.role === "student" && !user.isApproved) {
-      throw new Error(
-        "Tài khoản đang chờ Thầy phê duyệt. Em vui lòng đợi nhé!"
-      );
+    if (dbError || !dbUser) {
+      throw new Error("Không tìm thấy dữ liệu người dùng.");
     }
 
-    saveSession(user);
-    return user;
+    // Nếu là student chưa duyệt
+    if (dbUser.role === "student" && !dbUser.isApproved) {
+      throw new Error("Tài khoản đang chờ Thầy phê duyệt.");
+    }
+
+    saveSession(dbUser);
+    return dbUser as User;
   },
 
   /* =========================================================
      REGISTER STUDENT
   ========================================================= */
-  async register(
+  async registerStudent(
     email: string,
+    password: string,
     fullName: string,
     classInfo: { id: string; name: string }
   ): Promise<void> {
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = email.trim().toLowerCase();
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
-      password: "123456",
-      fullName,
+      password,
     });
 
     if (error || !data?.user) {
@@ -92,24 +109,25 @@ export const authService = {
 
     const userId = data.user.id;
 
-    // Cập nhật thêm thông tin lớp
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({
+    const { error: insertError } = await supabase.from("users").insert([
+      {
+        id: userId,
+        email: normalizedEmail,
+        fullName,
+        role: "student",
         classId: classInfo.id,
         className: classInfo.name,
-        role: "student",
         isApproved: false,
-      })
-      .eq("id", userId);
+      },
+    ]);
 
-    if (updateError) {
-      throw new Error("Không thể cập nhật thông tin lớp.");
+    if (insertError) {
+      throw new Error("Không thể tạo hồ sơ học sinh.");
     }
   },
 
   /* =========================================================
-     APPROVE STUDENT (Teacher)
+     APPROVE STUDENT
   ========================================================= */
   async approveStudent(userId: string): Promise<void> {
     const { error } = await supabase
@@ -123,27 +141,38 @@ export const authService = {
   },
 
   /* =========================================================
-     GET ALL STUDENTS
+     GET STUDENTS
   ========================================================= */
   async getAllStudents(): Promise<User[]> {
-    const { data } = await supabase.from("users").select();
-    return (data as User[]).filter((u) => u.role === "student");
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "student");
+
+    if (error) return [];
+    return data as User[];
   },
 
-  /* =========================================================
-     GET PENDING STUDENTS
-  ========================================================= */
   async getPendingStudents(): Promise<User[]> {
-    const students = await this.getAllStudents();
-    return students.filter((u) => !u.isApproved);
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "student")
+      .eq("isApproved", false);
+
+    if (error) return [];
+    return data as User[];
   },
 
-  /* =========================================================
-     GET APPROVED STUDENTS
-  ========================================================= */
   async getApprovedStudents(): Promise<User[]> {
-    const students = await this.getAllStudents();
-    return students.filter((u) => u.isApproved);
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("role", "student")
+      .eq("isApproved", true);
+
+    if (error) return [];
+    return data as User[];
   },
 
   /* =========================================================
