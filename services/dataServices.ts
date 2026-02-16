@@ -1,116 +1,128 @@
-
 import { supabase } from "../supabase";
 import { Exam, Question, User } from "../types";
 
 /**
- * DỊCH VỤ QUẢN LÝ DỮ LIỆU TẬP TRUNG - NHANLMS PRO
- * Hỗ trợ lưu trữ vĩnh viễn Cloud Supabase
+ * HỆ THỐNG QUẢN LÝ DỮ LIỆU TẬP TRUNG - PHIÊN BẢN THẦY HUỲNH VĂN NHẪN
+ * Đã cấu hình lưu trữ vĩnh viễn trên Supabase Cloud
  */
 export const dataService = {
   
   /* ======================================================
-     🏫 QUẢN LÝ LỚP HỌC & HỌC SINH
+     🏫 QUẢN LÝ LỚP HỌC & PHÊ DUYỆT HỌC SINH
   ====================================================== */
   
-  // Lấy danh sách toàn bộ lớp học của Thầy
+  // Lấy danh sách học sinh đang chờ Thầy duyệt vào lớp
+  async getPendingStudents(): Promise<User[]> {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('role', 'student')
+      .eq('is_approved', false);
+    
+    if (error) {
+      console.error("Lỗi lấy DS chờ duyệt:", error);
+      return [];
+    }
+    return data as User[];
+  },
+
+  // Phê duyệt học sinh vào hệ thống vĩnh viễn
+  async approveStudent(userId: string) {
+    const { error } = await supabase
+      .from('users')
+      .update({ is_approved: true })
+      .eq('id', userId);
+    
+    if (error) throw error;
+    return true;
+  },
+
+  // Lấy danh sách lớp học của Thầy
   async getClasses() {
-    const { data, error } = await supabase.from('classes').select();
+    const { data, error } = await supabase.from('classes').select('*');
     if (error) throw error;
     return data;
   },
 
-  // Lấy danh sách học sinh đang chờ Thầy Nhẫn duyệt
-  async getPendingStudents(): Promise<User[]> {
-    const { data, error } = await supabase.from('users').select();
-    if (error) return [];
-    return (data as User[]).filter(u => u.role === 'student' && !u.isApproved);
-  },
-
-  // Phê duyệt học sinh vào lớp vĩnh viễn
-  async approveStudent(userId: string) {
-    const { error } = await supabase.from('users').update(userId, { isApproved: true });
-    if (error) throw error;
-    return true;
-  },
-
   /* ======================================================
-     📝 QUẢN LÝ ĐỀ THI & CÂU HỎI (Hỗ trợ LaTeX)
+     📝 QUẢN LÝ ĐỀ THI (Word/PDF/AI) - Hỗ trợ LaTeX
   ====================================================== */
 
-  // Lưu đề thi mới hoặc cập nhật đề thi cũ (Permanent Save)
+  // Lưu đề thi mới hoặc cập nhật đề cũ lên Cloud
   async saveExam(exam: Exam) {
-    const { data: existing } = await supabase.from('exams').select();
-    const isUpdate = (existing as Exam[]).some(e => e.id === exam.id);
-
-    if (isUpdate) {
-      const { error } = await supabase.from('exams').update(exam.id, exam);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('exams').insert(exam);
-      if (error) throw error;
-    }
-    return exam;
-  },
-
-  // Xóa đề thi vĩnh viễn khỏi Cloud
-  async deleteExam(examId: string) {
-    const { error } = await supabase.from('exams').delete(examId);
-    if (error) throw error;
-    return true;
-  },
-
-  /* ======================================================
-     📚 QUẢN LÝ BÀI GIẢNG & TÀI LIỆU (Word/PDF)
-  ====================================================== */
-
-  // Lưu tài liệu đính kèm (Word/PDF) vào bài học
-  async uploadLessonMaterial(lessonId: string, fileName: string, fileUrl: string) {
-    const { error } = await supabase.from('lessons').update(lessonId, {
-      file_name: fileName,
-      file_url: fileUrl,
+    // Chuẩn hóa dữ liệu trước khi lưu vĩnh viễn
+    const examData = {
+      ...exam,
       updated_at: new Date().toISOString()
-    });
+    };
+
+    const { data, error } = await supabase
+      .from('exams')
+      .upsert(examData)
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  },
+
+  // Xóa đề thi vĩnh viễn
+  async deleteExam(examId: string) {
+    const { error } = await supabase
+      .from('exams')
+      .delete()
+      .eq('id', examId);
+    
     if (error) throw error;
     return true;
   },
 
-  // Truy vấn toàn bộ bài học của một khóa học
-  async getLessonsByCourse(courseId: string) {
-    const { data, error } = await supabase.from('lessons').select();
+  // Lấy toàn bộ đề thi hiện có cho giáo viên
+  async getAllExams(teacherId: string): Promise<Exam[]> {
+    const { data, error } = await supabase
+      .from('exams')
+      .select('*')
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false });
+
     if (error) return [];
-    return (data as any[]).filter(l => l.course_id === courseId);
+    return data as Exam[];
   },
 
   /* ======================================================
-     📊 QUẢN LÝ ĐIỂM SỐ & BÀI LÀM
+     📊 QUẢN LÝ ĐIỂM SỐ & KẾT QUẢ BÀI LÀM
   ====================================================== */
 
-  // Ghi nhận điểm thi vĩnh viễn cho học sinh
-  async submitExamResult(submission: {
-    student_id: string;
-    exam_id: string;
-    score: number;
-    answers: any;
+  // Ghi nhận điểm thi vĩnh viễn khi học sinh nộp bài
+  async submitGrade(payload: {
+    student_id: string,
+    student_name: string,
+    exam_id: string,
+    exam_title: string,
+    score: number,
+    answers: any
   }) {
-    const submissionId = `${submission.student_id}_${submission.exam_id}`;
-    const { error } = await supabase.from('submissions').insert({
-      id: submissionId,
-      ...submission,
-      created_at: new Date().toISOString()
-    });
+    const { error } = await supabase
+      .from('grades')
+      .insert([{
+        ...payload,
+        completed_at: new Date().toISOString()
+      }]);
+
     if (error) throw error;
     return true;
   },
 
-  // Lấy bảng điểm tổng hợp cho Thầy Nhẫn
-  async getAllGrades() {
-    const { data, error } = await supabase.from('submissions').select();
+  // Lấy bảng điểm tổng hợp cho Thầy Nhẫn quản lý
+  async getGradesReport() {
+    const { data, error } = await supabase
+      .from('grades')
+      .select('*')
+      .order('completed_at', { ascending: false });
+    
     if (error) throw error;
     return data;
   }
 };
 
-// Export để tương thích với cấu trúc cũ nếu cần
-export const createClass = dataService.getClasses;
-export const getTeacherExams = (id: string) => dataService.getClasses();
-export const addQuestion = (q: Question) => Promise.resolve();
+// Export đồng bộ với cấu trúc cũ để không gãy hệ thống
+export default dataService;
