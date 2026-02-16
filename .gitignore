@@ -1,51 +1,31 @@
-# ======================
-# LOGS
-# ======================
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
 # ======================
-# DEPENDENCIES
+# NHANLMS PRO - SECURITY
 # ======================
+
+# Dependencies
 node_modules/
+.pnpm-store/
 
-# ======================
-# BUILD OUTPUT
-# ======================
+# Build outputs
 dist/
-dist-ssr/
 build/
 .vercel/
 
-# ======================
-# ENV FILES (TUYỆT ĐỐI KHÔNG COMMIT)
-# ======================
+# Environment Variables (IMPORTANT: Chặn lộ API Key)
 .env
-.env.*
-*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# ======================
-# SUPABASE
-# ======================
-.supabase/
-.supabase-cache/
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
 
-# ======================
-# CACHE / TEMP
-# ======================
-.cache/
-.eslintcache
-.vite/
-*.tsbuildinfo
-
-# ======================
-# EDITORS
-# ======================
+# Editor Settings
 .vscode/*
 !.vscode/extensions.json
 .idea/
@@ -56,23 +36,14 @@ build/
 *.sln
 *.sw?
 
-# ======================
-# TEST / COVERAGE
-# ======================
-coverage/
-*.lcov
-
-# ======================
-# UPLOADED FILES (AI / EXPORT)
-# ======================
+# Temporary Exam Files (Word/PDF)
 uploads/
-exports/
+temp/
 *.pdf
 *.doc
 *.docx
 *.xlsx
 
-# ======================
-# OS FILES
-# ======================
-Thumbs.db
+# Supabase Local Cache
+.supabase/
+.supabase-cache/
