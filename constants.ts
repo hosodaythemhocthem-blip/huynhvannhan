@@ -1,3 +1,4 @@
+
 import { Course, ProgressData, QuestionType, Exam } from "./types";
 
 /* ======================================================
@@ -20,6 +21,7 @@ export const MOCK_COURSES: Readonly<Course[]> = Object.freeze([
   {
     id: "c1",
     title: "Giải tích 12: Đạo hàm & Khảo sát hàm số",
+    grade: "12", // Added missing grade property
     instructor: "Thầy Huỳnh Văn Nhẫn",
     description:
       "Nắm vững phương pháp giải nhanh trắc nghiệm 3 phần chuẩn cấu trúc Bộ GD 2025.",
@@ -58,6 +60,7 @@ $$y' = 3ax^2 + 2bx + c = 0$$
   {
     id: "c2",
     title: "Hình học 11: Quan hệ vuông góc",
+    grade: "11", // Added missing grade property
     instructor: "Lumina AI Tutor",
     description:
       "Sử dụng AI để trực quan hóa các mặt phẳng vuông góc và khoảng cách trong không gian.",
@@ -88,7 +91,10 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
   {
     id: "e1",
     title: "Đề ôn tập Chương 1 - Giải tích 12",
+    description: "Hệ thống câu hỏi ôn tập chương 1 Giải tích lớp 12 chuẩn cấu trúc mới.",
+    teacherId: "teacher-nhan",
     createdAt: new Date("2024-05-25").toISOString(),
+    updatedAt: new Date("2024-05-25").toISOString(), // Added missing updatedAt property
     questionCount: 3,
     duration: 90,
     totalPoints: 1.75,
@@ -99,7 +105,7 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
     questions: [
       {
         id: "q1",
-        type: QuestionType.MULTIPLE_CHOICE,
+        type: QuestionType.MCQ, // Fixed: MULTIPLE_CHOICE does not exist on QuestionType
         section: 1,
         text: "Tìm đạo hàm của hàm số $y = \\ln(x^2 + 1)$:",
         options: [
