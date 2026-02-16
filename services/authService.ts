@@ -1,10 +1,10 @@
 import { User } from "../types";
 import { supabase } from "../supabase";
 
-const SESSION_KEY = "nhanlms_active_session_pro_v70";
+const SESSION_KEY = "nhanlms_active_session_pro_v71";
 
 /* =========================================================
-   UTIL
+   SESSION HELPERS
 ========================================================= */
 const saveSession = (user: User) => {
   localStorage.setItem(SESSION_KEY, JSON.stringify(user));
@@ -15,7 +15,7 @@ const clearSession = () => {
 };
 
 /* =========================================================
-   AUTH SERVICE – SUPABASE STABLE VERSION
+   AUTH SERVICE – CLEAN PRODUCTION VERSION
 ========================================================= */
 export const authService = {
   /* =========================================================
@@ -37,55 +37,25 @@ export const authService = {
   async login(email: string, password: string): Promise<User> {
     const normalizedEmail = email.toLowerCase().trim();
 
-    /* ===============================
-       1️⃣ ADMIN / TEACHER HARD-CODED
-    =============================== */
-    if (
-      normalizedEmail === "huynhvannhan@gmail.com" &&
-      password === "huynhvannhan2020"
-    ) {
-      const teacher: User = {
-        id: "teacher-nhan",
-        email: normalizedEmail,
-        fullName: "Thầy Huỳnh Văn Nhẫn",
-        role: "teacher",
-        isApproved: true,
-        avatar:
-          "https://api.dicebear.com/7.x/avataaars/svg?seed=Nhan",
-        createdAt: new Date().toISOString(),
-      };
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
 
-      saveSession(teacher);
-      return teacher;
+    if (error || !data?.user) {
+      throw new Error("Sai tài khoản hoặc mật khẩu.");
     }
 
-    /* ===============================
-       2️⃣ STUDENT LOGIN FROM SUPABASE
-    =============================== */
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", normalizedEmail)
-      .single();
+    const user = data.user as User;
 
-    if (error || !data) {
+    /* ===============================
+       CHECK APPROVAL (STUDENT)
+    =============================== */
+    if (user.role === "student" && !user.isApproved) {
       throw new Error(
-        "Tài khoản chưa tồn tại. Em hãy đăng ký để Thầy phê duyệt nhé!"
+        "Tài khoản đang chờ Thầy phê duyệt. Em vui lòng đợi nhé!"
       );
     }
-
-    // ⚠️ NOTE: password nên hash ở production thực tế
-    const isValidPassword =
-      password === (data as any).password ||
-      password === "123456";
-
-    if (!isValidPassword) {
-      throw new Error("Mật khẩu không chính xác.");
-    }
-
-    const user: User = {
-      ...data,
-    };
 
     saveSession(user);
     return user;
@@ -101,51 +71,34 @@ export const authService = {
   ): Promise<void> {
     const normalizedEmail = email.toLowerCase().trim();
 
-    /* ===============================
-       CHECK EXISTING
-    =============================== */
-    const { data: existing } = await supabase
-      .from("users")
-      .select("id")
-      .eq("email", normalizedEmail)
-      .maybeSingle();
-
-    if (existing) {
-      throw new Error(
-        "Email đã được sử dụng. Em hãy dùng email khác nhé!"
-      );
-    }
-
-    /* ===============================
-       INSERT NEW USER
-    =============================== */
-    const newUser: User = {
-      id: `st_${Date.now()}`,
+    const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
+      password: "123456",
       fullName,
-      role: "student",
-      isApproved: false,
-      classId: classInfo.id,
-      className: classInfo.name,
-      createdAt: new Date().toISOString(),
-      password: "123456", // default
-    };
+    });
 
-    const { error } = await supabase
-      .from("users")
-      .insert(newUser);
-
-    if (error) {
-      throw new Error(
-        "Không thể đăng ký lúc này. Vui lòng thử lại."
-      );
+    if (error || !data?.user) {
+      throw new Error("Email đã tồn tại hoặc đăng ký thất bại.");
     }
+
+    /* ===============================
+       UPDATE CLASS INFO
+    =============================== */
+    await supabase
+      .from("users")
+      .update({
+        classId: classInfo.id,
+        className: classInfo.name,
+        role: "student",
+        isApproved: false,
+      })
+      .eq("id", data.user.id);
   },
 
   /* =========================================================
-     APPROVE STUDENT (Teacher Only)
+     APPROVE STUDENT (Teacher)
   ========================================================= */
-  async approveStudent(userId: string) {
+  async approveStudent(userId: string): Promise<void> {
     const { error } = await supabase
       .from("users")
       .update({ isApproved: true })
@@ -157,9 +110,23 @@ export const authService = {
   },
 
   /* =========================================================
+     GET PENDING STUDENTS
+  ========================================================= */
+  async getPendingStudents(): Promise<User[]> {
+    const { data } = await supabase
+      .from("users")
+      .select();
+
+    return (data || []).filter(
+      (u: User) => u.role === "student" && !u.isApproved
+    );
+  },
+
+  /* =========================================================
      LOGOUT
   ========================================================= */
-  logout() {
+  async logout(): Promise<void> {
+    await supabase.auth.signOut();
     clearSession();
   },
 };
