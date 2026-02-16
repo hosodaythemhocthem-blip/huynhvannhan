@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { 
   Send, X, Sparkles, MessageCircle, Loader2, Paperclip, 
-  Trash2, Clipboard, RotateCcw, Maximize2, Minimize2 
+  Trash2, Clipboard, RotateCcw, Maximize2, Minimize2, Bot, User 
 } from "lucide-react";
 import { askGemini } from "../services/geminiService";
-import MathPreview from "./MathPreview"; // Đảm bảo file này tồn tại để hiện công thức đẹp
+import MathPreview from "./MathPreview";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
-import { saveChatMessage, fetchChatHistory, clearChatHistory, deleteChatMessage } from "../services/chatService";
+import { supabase } from "../supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Khắc phục lỗi Build cho Framer Motion trên Vercel
+const MotionDiv = motion.div as any;
 
 interface Message {
   id?: string;
@@ -20,7 +21,7 @@ interface Message {
 }
 
 interface Props {
-  user: { id: string; fullName: string }; // Đổi displayName thành fullName cho khớp types.ts
+  user: { id: string; fullName: string };
   context?: string;
 }
 
@@ -30,46 +31,75 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tự động cuộn xuống khi có tin nhắn mới
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
-
-  // Load lịch sử từ Supabase khi mở chat
+  // 1. Tải lịch sử chat vĩnh viễn từ Supabase
   useEffect(() => {
     if (isOpen) {
-      const loadHistory = async () => {
-        const history = await fetchChatHistory(user.id);
-        if (history.length > 0) {
-          setMessages(history);
-        } else {
-          setMessages([{
-            role: "ai",
-            text: `Chào Thầy/Em **${user.fullName}**! Tôi là Lumina AI v6.0. Hãy gửi đề toán (Word/PDF) hoặc dán (Ctrl+V) nội dung vào đây, tôi sẽ giải chi tiết với công thức LaTeX siêu đẹp. 🚀`
-          }]);
-        }
-      };
-      loadHistory();
+      loadChatHistory();
     }
-  }, [isOpen, user]);
+  }, [isOpen]);
+
+  const loadChatHistory = async () => {
+    const { data, error } = await (supabase.from('messages') as any)
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+    if (data) setMessages(data);
+  };
+
+  const scrollToBottom = useCallback(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(scrollToBottom, [messages, loading]);
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+
+    const userMsg: Message = { role: "user", text: input };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      // Gửi lên Gemini AI
+      const aiResponse = await askGemini(input, context);
+      const aiMsg: Message = { role: "ai", text: aiResponse };
+      
+      // Lưu vĩnh viễn vào Supabase
+      await (supabase.from('messages') as any).insert([
+        { user_id: user.id, role: 'user', text: input },
+        { user_id: user.id, role: 'ai', text: aiResponse }
+      ]);
+
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: "ai", text: "Xin lỗi Thầy Nhẫn, AI đang bận xử lý. Thầy thử lại nhé!" }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
       setInput(prev => prev + text);
-    } catch {
-      alert("Hãy sử dụng tổ hợp phím Ctrl + V");
+    } catch (err) {
+      console.error("Lỗi dán nội dung");
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (confirm("Thầy muốn xóa sạch lịch sử chat vĩnh viễn?")) {
+      await (supabase.from('messages') as any).delete().eq('user_id', user.id);
+      setMessages([]);
     }
   };
 
   const handleFileUpload = async (file: File) => {
     setLoading(true);
-    setIsTyping(true);
     try {
       let text = "";
       if (file.type === "application/pdf") {
@@ -78,164 +108,120 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          text += content.items.map((item: any) => item.str).join(" ") + "\n";
+          text += content.items.map((item: any) => item.str).join(" ") + " ";
         }
       } else {
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
         text = result.value;
       }
-
-      const userMsg = await saveChatMessage(user.id, "user", `📎 File: ${file.name}\n\n${text.substring(0, 500)}...`);
-      setMessages(prev => [...prev, userMsg]);
-
-      const aiReply = await askGemini(`Phân tích và giải chi tiết đề toán sau bằng LaTeX:\n${text}`);
-      const aiMsg = await saveChatMessage(user.id, "ai", aiReply);
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
-      console.error("Lỗi xử lý file:", error);
+      setInput(`Phân tích file này giúp tôi: ${text.substring(0, 2000)}...`);
+    } catch (err) {
+      alert("Không thể đọc file này!");
     } finally {
       setLoading(false);
-      setIsTyping(false);
-    }
-  };
-
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    const userText = input;
-    setInput("");
-    setIsTyping(true);
-
-    const userMsg = await saveChatMessage(user.id, "user", userText);
-    setMessages(prev => [...prev, userMsg]);
-
-    try {
-      const aiReply = await askGemini(userText);
-      const aiMsg = await saveChatMessage(user.id, "ai", aiReply);
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
-      console.error("AI Error:", error);
-    } finally {
-      setIsTyping(false);
-    }
-  };
-
-  const handleDelete = async (msgId: string) => {
-    if (confirm("Xóa tin nhắn này vĩnh viễn?")) {
-      const success = await deleteChatMessage(msgId);
-      if (success) setMessages(prev => prev.filter(m => m.id !== msgId));
     }
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] font-sans">
+    <div className="fixed bottom-8 right-8 z-[9999]">
       <AnimatePresence>
         {!isOpen ? (
           <motion.button
-            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => setIsOpen(true)}
-            className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-full shadow-2xl flex items-center justify-center text-white border-4 border-white"
+            className="w-16 h-16 bg-slate-900 text-white rounded-[1.5rem] shadow-2xl flex items-center justify-center border-2 border-indigo-500/20"
           >
-            <Sparkles size={28} />
+            <Sparkles size={28} className="text-indigo-400" />
           </motion.button>
         ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 100, scale: 0.8 }}
+          <MotionDiv
+            initial={{ opacity: 0, y: 100, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 100, scale: 0.8 }}
-            className={`${isExpanded ? 'w-[80vw] h-[85vh]' : 'w-[400px] h-[600px]'} bg-white rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden border border-slate-100`}
+            exit={{ opacity: 0, y: 100, scale: 0.9 }}
+            className={`bg-white rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.15)] border border-slate-100 flex flex-col overflow-hidden transition-all duration-500 ${isExpanded ? 'w-[80vw] h-[80vh]' : 'w-[400px] h-[600px]'}`}
           >
-            {/* Header VIP */}
-            <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
+            {/* Header Trợ Lý */}
+            <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-500 rounded-2xl flex items-center justify-center animate-pulse">
-                  <Sparkles size={20} />
+                <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+                  <Bot size={22} />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm tracking-tight uppercase">Lumina AI Elite</h3>
-                  <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-widest">v6.0 Powered by Gemini</p>
+                  <h3 className="font-black text-sm uppercase tracking-widest italic">Lumina AI v6.0</h3>
+                  <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-tight">Trợ lý của Thầy Nhẫn</p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                   {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                 </button>
-                <button onClick={async () => { if(confirm("Xóa sạch lịch sử?")) { await clearChatHistory(user.id); setMessages([]); }}} className="p-2 hover:bg-rose-500/20 rounded-xl text-rose-400">
+                <button onClick={handleClearChat} className="p-2 hover:bg-rose-500/20 text-rose-300 rounded-lg transition-colors">
                   <RotateCcw size={18} />
                 </button>
-                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-xl">
-                  <X size={18} />
+                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-400">
+                  <X size={22} />
                 </button>
               </div>
             </div>
 
-            {/* Chat Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-              {messages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group relative`}>
-                  <div className={`max-w-[85%] p-4 rounded-[2rem] shadow-sm ${
-                    msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-none' 
-                    : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-                  }`}>
-                    {msg.role === 'ai' ? <MathPreview content={msg.text} /> : <p className="text-sm leading-relaxed">{msg.text}</p>}
-                    {msg.id && (
-                      <button 
-                        onClick={() => handleDelete(msg.id!)}
-                        className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 p-1 bg-rose-500 text-white rounded-full shadow-lg transition-opacity"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
+            {/* Khung Chat */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 scrollbar-hide">
+              {messages.length === 0 && (
+                <div className="text-center py-20">
+                  <Sparkles className="mx-auto text-indigo-200 mb-4" size={48} />
+                  <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Hệ thống vĩnh viễn đã sẵn sàng</p>
+                  <p className="text-slate-800 font-black italic mt-2">Chào Thầy Nhẫn, hôm nay Thầy cần hỗ trợ gì?</p>
+                </div>
+              )}
+              
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+                  <div className={`max-w-[85%] p-5 rounded-[1.8rem] shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'}`}>
+                    <div className="flex items-center gap-2 mb-2 opacity-50 font-black text-[9px] uppercase tracking-widest">
+                      {msg.role === 'user' ? <User size={10}/> : <Bot size={10}/>} {msg.role === 'user' ? user.fullName : 'Lumina AI'}
+                    </div>
+                    <MathPreview content={msg.text} className="text-sm leading-relaxed font-bold" />
                   </div>
                 </div>
               ))}
-              {isTyping && (
+              {loading && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-slate-100 p-4 rounded-[2rem] rounded-tl-none shadow-sm flex gap-1">
-                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></span>
-                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                    <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                  <div className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-slate-100 flex gap-2 items-center">
+                    <Loader2 size={16} className="animate-spin text-indigo-600" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đang giải mã...</span>
                   </div>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Input Bar Pro */}
-            <div className="p-4 bg-white border-t border-slate-100 flex items-center gap-2">
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all"
-              >
-                <Paperclip size={20} />
-              </button>
-              <div className="flex-1 relative">
+            {/* Input Chat */}
+            <div className="p-6 bg-white border-t border-slate-100">
+              <div className="relative group">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Hỏi AI hoặc dán đề vào đây..."
-                  className="w-full bg-slate-100 border-none rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 min-h-[48px] max-h-32 resize-none"
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+                  placeholder="Dán đề hoặc hỏi AI tại đây..."
+                  className="w-full bg-slate-50 border-none rounded-[1.5rem] pl-6 pr-32 py-4 font-bold text-slate-700 text-sm focus:ring-4 focus:ring-indigo-100 transition-all min-h-[60px] max-h-32 resize-none"
                 />
-                <button 
-                  onClick={handlePaste}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
-                  title="Dán từ Clipboard"
-                >
-                  <Clipboard size={16} />
-                </button>
+                <div className="absolute right-3 bottom-3 flex gap-1">
+                  <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-300 hover:text-indigo-600 transition-all" title="Đính kèm file">
+                    <Paperclip size={18} />
+                  </button>
+                  <button onClick={handlePaste} className="p-3 text-slate-300 hover:text-indigo-600 transition-all" title="Dán (Ctrl+V)">
+                    <Clipboard size={18} />
+                  </button>
+                  <button onClick={handleSend} disabled={!input.trim() || loading} className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-slate-900 transition-all disabled:opacity-30">
+                    <Send size={18} />
+                  </button>
+                </div>
               </div>
-              <button 
-                onClick={handleSend}
-                disabled={!input.trim()}
-                className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-500 disabled:opacity-50 transition-all"
-              >
-                <Send size={20} />
-              </button>
               <input type="file" ref={fileInputRef} hidden accept=".pdf,.doc,.docx" onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])} />
             </div>
-          </motion.div>
+          </MotionDiv>
         )}
       </AnimatePresence>
     </div>
