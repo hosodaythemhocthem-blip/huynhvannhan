@@ -1,8 +1,9 @@
-import React from "react"
-import { User } from "../types"
+// pages/Dashboard.tsx
+import React from "react";
+import { User } from "../types";
 
 interface Props {
-  user: User
+  user: User;
 }
 
 const Dashboard: React.FC<Props> = ({ user }) => {
@@ -16,7 +17,7 @@ const Dashboard: React.FC<Props> = ({ user }) => {
         Vai trò: {user.role}
       </p>
     </div>
-  )
-}
+  );
+};
 
-export default Dashboard
+export default Dashboard;
