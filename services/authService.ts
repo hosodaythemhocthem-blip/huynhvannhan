@@ -36,9 +36,10 @@ export const authService = {
     fullName: string,
     classInfo: { id: string; name: string }
   ): Promise<void> {
+
     const { data, error } = await supabase.auth.signUp({
       email,
-      password: "12345678", // mật khẩu mặc định
+      password: "12345678",
     })
 
     if (error || !data.user) {
@@ -51,13 +52,13 @@ export const authService = {
       full_name: fullName,
       role: "student",
       status: "pending",
+      class_id: classInfo.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      class_id: classInfo.id,
     })
 
     if (profileError) {
-      throw new Error("Không thể tạo hồ sơ người dùng.")
+      throw new Error(profileError.message)
     }
   },
 
