@@ -1,5 +1,5 @@
 // components/AiExamGenerator.tsx
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
   Upload,
   Sparkles,
@@ -17,7 +17,7 @@ import { supabase } from "../supabase";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-interface Question {
+interface AIQuestion {
   text: string;
   options: string[];
   correctAnswer?: number;
@@ -25,17 +25,41 @@ interface Question {
 
 interface PreviewExam {
   title: string;
-  questions: Question[];
+  questions: AIQuestion[];
 }
 
-const AiExamGenerator: React.FC<{
+interface Props {
   userId: string;
-  onGenerate: any;
-}> = ({ userId, onGenerate }) => {
+  onGenerate?: (data: PreviewExam) => void;
+}
+
+const AiExamGenerator: React.FC<Props> = ({ userId, onGenerate }) => {
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewExam, setPreviewExam] = useState<PreviewExam | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /* ================= PDF EXTRACT ================= */
+  const extractPDFText = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((item: any) => item.str).join(" ") + "\n";
+    }
+
+    return text;
+  };
+
+  /* ================= DOCX EXTRACT ================= */
+  const extractDocxText = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return result.value;
+  };
 
   /* ================= GENERATE ================= */
   const handleGenerate = async (text: string) => {
@@ -54,7 +78,8 @@ const AiExamGenerator: React.FC<{
       } else {
         alert("AI chưa nhận diện được câu hỏi.");
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("AI đang bận. Thầy thử lại nhé.");
     } finally {
       setLoading(false);
@@ -76,39 +101,45 @@ const AiExamGenerator: React.FC<{
       let text = "";
 
       if (file.type === "application/pdf") {
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          text += content.items.map((item: any) => item.str).join(" ");
-        }
+        text = await extractPDFText(file);
       } else {
-        const buffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-        text = result.value;
+        text = await extractDocxText(file);
       }
 
       setTopic(text.slice(0, 8000));
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Không đọc được file.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= SAVE ================= */
+  /* ================= SAVE TO SUPABASE ================= */
   const saveToCloud = async () => {
-    if (!previewExam || loading) return;
+    if (!previewExam) return;
 
     setLoading(true);
 
     try {
+      const now = new Date().toISOString();
+
       const { error } = await supabase.from("exams").insert({
-        teacher_id: userId,
         title: previewExam.title,
+        description: "AI Generated Exam",
+        teacher_id: userId,
         questions: previewExam.questions,
+        duration: 45,
+        subject: "Toán",
+        grade: "Lớp 10",
+        is_locked: false,
+        is_published: false,
+        is_archived: false,
+        assigned_class_ids: [],
+        total_points: previewExam.questions.length,
+        question_count: previewExam.questions.length,
+        created_at: now,
+        updated_at: now,
       });
 
       if (error) throw error;
@@ -116,37 +147,40 @@ const AiExamGenerator: React.FC<{
       alert("Đã lưu đề vĩnh viễn!");
       setPreviewExam(null);
       setTopic("");
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Lỗi khi lưu đề.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= DELETE QUESTION ================= */
+  /* ================= DELETE ================= */
   const deleteQuestion = (index: number) => {
     if (!previewExam) return;
 
-    const updated = {
+    setPreviewExam({
       ...previewExam,
       questions: previewExam.questions.filter((_, i) => i !== index),
-    };
-
-    setPreviewExam(updated);
+    });
   };
 
   /* ================= PASTE ================= */
-  const handlePaste = async () => {
-    const text = await navigator.clipboard.readText();
-    setTopic((prev) => prev + text);
-  };
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setTopic((prev) => prev + text);
+    } catch {
+      alert("Không đọc được clipboard.");
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
       {/* INPUT BLOCK */}
       <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
         <h3 className="text-2xl font-black italic mb-6">
-          AI Exam Engine v7.0
+          AI Exam Engine v8.0
         </h3>
 
         <textarea
