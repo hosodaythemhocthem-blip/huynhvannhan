@@ -19,50 +19,66 @@ import AdminDashboard from "./pages/AdminDashboard"
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("dashboard")
+  const [loading, setLoading] = useState<boolean>(true)
+  const [activeTab, setActiveTab] = useState<string>("dashboard")
 
   /* ======================================================
      INIT AUTH
   ====================================================== */
   useEffect(() => {
+    let isMounted = true
+
     const initAuth = async () => {
       try {
         // đảm bảo teacher mặc định tồn tại
         await authService.ensureDefaultTeacher()
 
+        // 1️⃣ kiểm tra localStorage trước
         const stored = authService.getCurrentUser()
-
-        if (stored) {
+        if (stored && isMounted) {
           setUser(stored)
-        } else {
-          // kiểm tra session Supabase
-          const { data } = await supabase.auth.getSession()
+          return
+        }
 
-          if (data.session?.user) {
-            const { data: profile } = await supabase
-              .from("users")
-              .select("*")
-              .eq("id", data.session.user.id)
-              .single()
+        // 2️⃣ kiểm tra session Supabase
+        const { data, error } = await supabase.auth.getSession()
 
-            if (profile) {
-              localStorage.setItem(
-                "lms_user",
-                JSON.stringify(profile)
-              )
-              setUser(profile)
-            }
-          }
+        if (error) {
+          console.error("Get session error:", error.message)
+          return
+        }
+
+        const sessionUser = data.session?.user
+        if (!sessionUser) return
+
+        // 3️⃣ lấy profile từ table users
+        const { data: profile, error: profileError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", sessionUser.id)
+          .maybeSingle()
+
+        if (profileError) {
+          console.error("Profile fetch error:", profileError.message)
+          return
+        }
+
+        if (profile && isMounted) {
+          localStorage.setItem("lms_user", JSON.stringify(profile))
+          setUser(profile as User)
         }
       } catch (err) {
-        console.error(err)
+        console.error("Init auth error:", err)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
     initAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   /* ======================================================
@@ -74,10 +90,20 @@ const App: React.FC = () => {
 
   const handleLogout = useCallback(async () => {
     await authService.signOut()
+    localStorage.removeItem("lms_user")
     setUser(null)
   }, [])
 
-  if (loading) return null
+  /* ======================================================
+     LOADING SCREEN
+  ====================================================== */
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center text-gray-500">
+        Đang tải hệ thống...
+      </div>
+    )
+  }
 
   const isAdmin =
     user?.email === "huynhvannhan@gmail.com" &&
@@ -109,7 +135,7 @@ const App: React.FC = () => {
                       isAdmin ? (
                         <AdminDashboard />
                       ) : (
-                        <Navigate to="/" />
+                        <Navigate to="/" replace />
                       )
                     }
                   />
