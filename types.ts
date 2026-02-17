@@ -1,69 +1,44 @@
 /**
- * LMS V6 - STRICT MODE SAFE
- * Supabase Compatible + Mapping Ready
+ * LMS V7 ENTERPRISE CORE TYPES
+ * Strict Mode Safe – AI Ready – Supabase Compatible
+ * Tối ưu cho Thầy Huỳnh Văn Nhẫn
  */
 
 export type Role = "teacher" | "student" | "admin";
+export type UserStatus = "pending" | "approved" | "rejected" | "active";
 
 /* =====================================================
-   BASE ENTITY (APP MODEL - CAMEL CASE)
+   SYSTEM BASE ENTITY
 ===================================================== */
-
 export interface BaseEntity {
   id: string;
-
   createdAt: string;
   updatedAt: string;
-
   createdBy?: string;
   updatedBy?: string;
-
   isDeleted: boolean;
   version: number;
 }
 
 /* =====================================================
-   USER
+   USER SYSTEM
 ===================================================== */
-
 export interface User extends BaseEntity {
   email: string;
   fullName: string;
   role: Role;
-
   avatar?: string;
-
+  status: UserStatus;
   isApproved: boolean;
   isActive: boolean;
-
   classId?: string;
   className?: string;
-
   lastLoginAt?: string;
 }
 
 /* =====================================================
-   FILE STORAGE
+   QUESTION SYSTEM (Strict Safe)
 ===================================================== */
-
-export type FileType = "pdf" | "docx" | "image" | "text";
-
-export interface UploadedFile extends BaseEntity {
-  fileName: string;
-  fileUrl: string;
-  fileType: FileType;
-  fileSize?: number;
-
-  uploadedBy: string;
-
-  bucket?: string;
-  originalText?: string;
-}
-
-/* =====================================================
-   QUESTION
-===================================================== */
-
 export enum QuestionType {
   MCQ = "multiple-choice",
   TRUE_FALSE = "true-false",
@@ -72,11 +47,10 @@ export enum QuestionType {
   MATH = "math",
 }
 
-export interface BaseQuestion extends BaseEntity {
+export interface QuestionBase extends BaseEntity {
   type: QuestionType;
-  content: string;
+  content: string; // hỗ trợ LaTeX ($...$)
   points: number;
-
   explanation?: string;
   section?: number;
   image_url?: string;
@@ -84,36 +58,41 @@ export interface BaseQuestion extends BaseEntity {
   aiGenerated?: boolean;
 }
 
-export interface MCQQuestion extends BaseQuestion {
+/* ================= MCQ ================= */
+export interface MCQQuestion extends QuestionBase {
   type: QuestionType.MCQ;
   options: string[];
   correctAnswer: number;
 }
 
-export interface TrueFalseQuestion extends BaseQuestion {
+/* ================= TRUE FALSE ================= */
+export interface TrueFalseQuestion extends QuestionBase {
   type: QuestionType.TRUE_FALSE;
   options: ["True", "False"];
   correctAnswer: boolean;
 }
 
-export interface ShortAnswerQuestion extends BaseQuestion {
+/* ================= SHORT ANSWER ================= */
+export interface ShortAnswerQuestion extends QuestionBase {
   type: QuestionType.SHORT_ANSWER;
-  correctAnswer: string;
-}
-
-export interface EssayQuestion extends BaseQuestion {
-  type: QuestionType.ESSAY;
   correctAnswer?: string;
 }
 
-export interface MathQuestion extends BaseQuestion {
+/* ================= ESSAY ================= */
+export interface EssayQuestion extends QuestionBase {
+  type: QuestionType.ESSAY;
+  rubric?: string;
+}
+
+/* ================= MATH ================= */
+export interface MathQuestion extends QuestionBase {
   type: QuestionType.MATH;
   correctAnswer: string;
-
   latexSource?: string;
   renderMode?: "inline" | "block";
 }
 
+/* ================= FINAL UNION ================= */
 export type Question =
   | MCQQuestion
   | TrueFalseQuestion
@@ -122,123 +101,79 @@ export type Question =
   | MathQuestion;
 
 /* =====================================================
-   EXAM
+   EXAM SYSTEM
 ===================================================== */
-
 export interface Exam extends BaseEntity {
   title: string;
   description: string;
-
   teacherId: string;
   teacherName?: string;
-
   questions: Question[];
-
   duration: number;
   subject: string;
   grade: string;
-
   isLocked: boolean;
   isPublished: boolean;
   isArchived: boolean;
-
   assignedClassIds: string[];
-
-  file_url?: string;
-  file_type?: FileType;
-
   totalPoints: number;
   questionCount: number;
-
-  shuffleQuestions?: boolean;
-  shuffleOptions?: boolean;
-
-  aiGenerated?: boolean;
+  file_url?: string;
+  raw_content?: string;
 }
 
 /* =====================================================
-   SUBMISSION
+   CLASS SYSTEM
 ===================================================== */
-
-export interface ExamSubmission extends BaseEntity {
-  examId: string;
-  studentId: string;
-
-  answers: Record<
-    string,
-    string | number | boolean | string[]
-  >;
-
-  score?: number;
-  graded: boolean;
-
-  submittedAt: string;
-  gradedAt?: string;
-}
-
-/* =====================================================
-   COURSE
-===================================================== */
-
-export interface Course extends BaseEntity {
-  title: string;
-  description?: string;
-
-  teacherId: string;
-  grade: string;
-
-  lessonCount?: number;
-  fileCount?: number;
-
-  isArchived?: boolean;
-}
-
-/* =====================================================
-   CLASS
-===================================================== */
-
 export interface Class extends BaseEntity {
   name: string;
   teacherId: string;
-
   studentCount: number;
-
   studentIds: string[];
   pendingStudentIds: string[];
 }
 
 /* =====================================================
-   DATABASE MODELS (SNAKE CASE - SUPABASE)
+   DATABASE MODELS (Snake Case for Supabase)
 ===================================================== */
+
+export interface DBProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: Role;
+  status: UserStatus;
+  created_at: string;
+}
 
 export interface DBExam {
   id: string;
   title: string;
   description: string;
   teacher_id: string;
-  questions: any;
   duration: number;
   subject: string;
   grade: string;
   is_locked: boolean;
   is_published: boolean;
   is_archived: boolean;
-  assigned_class_ids: string[];
   total_points: number;
   question_count: number;
+  file_url?: string;
+  raw_content?: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface DBSubmission {
+export interface DBQuestion {
   id: string;
   exam_id: string;
-  student_id: string;
-  answers: any;
-  score?: number;
-  graded: boolean;
-  submitted_at: string;
-  graded_at?: string;
+  type: QuestionType;
+  content: string;
+  points: number;
+  order: number;
+  explanation?: string;
+  correct_answer?: string;
+  options?: string[];
   created_at: string;
-  updated_at: string;
 }
