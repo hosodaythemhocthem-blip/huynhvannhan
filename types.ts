@@ -1,6 +1,7 @@
 /* ======================================================
    BASE ENTITY
 ====================================================== */
+
 export interface BaseEntity {
   id: string
   created_at: string
@@ -8,9 +9,11 @@ export interface BaseEntity {
 }
 
 /* ======================================================
-   USER (profiles)
+   USER (TABLE: profiles)
 ====================================================== */
+
 export type UserRole = "admin" | "teacher" | "student"
+
 export type UserStatus = "pending" | "active" | "rejected"
 
 export interface User extends BaseEntity {
@@ -22,8 +25,18 @@ export interface User extends BaseEntity {
 }
 
 /* ======================================================
+   CLASS
+====================================================== */
+
+export interface Class extends BaseEntity {
+  name: string
+  teacher_id: string
+}
+
+/* ======================================================
    EXAM
 ====================================================== */
+
 export interface Exam extends BaseEntity {
   title: string
   teacher_id: string
@@ -32,8 +45,21 @@ export interface Exam extends BaseEntity {
   is_archived: boolean
   file_url: string | null
   raw_content: string | null
+}
 
-  // 🔥 thêm để tránh lỗi build
-  duration?: number
-  questions?: any[]
+/* ======================================================
+   QUESTION
+====================================================== */
+
+export type QuestionType = "mcq" | "true_false" | "short_answer"
+
+export interface Question extends BaseEntity {
+  exam_id: string
+  content: string
+  type: QuestionType
+  options: string[] | null
+  correct_answer: string | null
+  explanation: string | null
+  points: number
+  order_index: number
 }
