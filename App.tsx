@@ -1,55 +1,87 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react"
 import {
   HashRouter as Router,
   Routes,
   Route,
   Navigate,
-} from "react-router-dom";
+} from "react-router-dom"
 
-import { User } from "./types";
-import { authService } from "./services/authService";
-import { ToastProvider } from "./components/Toast";
+import { User } from "./types"
+import { authService } from "./services/authService"
+import { supabase } from "./supabase"
+import { ToastProvider } from "./components/Toast"
 
-import Layout from "./components/Layout";
-import LoginScreen from "./pages/LoginScreen";
-import TeacherPortal from "./pages/TeacherPortal";
-import StudentDashboard from "./pages/StudentDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
+import Layout from "./components/Layout"
+import LoginScreen from "./pages/LoginScreen"
+import TeacherPortal from "./pages/TeacherPortal"
+import StudentDashboard from "./pages/StudentDashboard"
+import AdminDashboard from "./pages/AdminDashboard"
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("dashboard")
 
+  /* ======================================================
+     INIT AUTH
+  ====================================================== */
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const savedUser = await authService.getCurrentUser();
-        if (savedUser) setUser(savedUser);
+        // đảm bảo teacher mặc định tồn tại
+        await authService.ensureDefaultTeacher()
+
+        const stored = authService.getCurrentUser()
+
+        if (stored) {
+          setUser(stored)
+        } else {
+          // kiểm tra session Supabase
+          const { data } = await supabase.auth.getSession()
+
+          if (data.session?.user) {
+            const { data: profile } = await supabase
+              .from("users")
+              .select("*")
+              .eq("id", data.session.user.id)
+              .single()
+
+            if (profile) {
+              localStorage.setItem(
+                "lms_user",
+                JSON.stringify(profile)
+              )
+              setUser(profile)
+            }
+          }
+        }
       } catch (err) {
-        console.error(err);
+        console.error(err)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    initAuth();
-  }, []);
+    initAuth()
+  }, [])
 
+  /* ======================================================
+     LOGIN / LOGOUT
+  ====================================================== */
   const handleLogin = useCallback((u: User) => {
-    setUser(u);
-  }, []);
+    setUser(u)
+  }, [])
 
   const handleLogout = useCallback(async () => {
-    await authService.logout();
-    setUser(null);
-  }, []);
+    await authService.signOut()
+    setUser(null)
+  }, [])
 
-  if (loading) return null;
+  if (loading) return null
 
   const isAdmin =
     user?.email === "huynhvannhan@gmail.com" &&
-    user.role === "teacher";
+    user.role === "teacher"
 
   return (
     <ToastProvider>
@@ -110,7 +142,7 @@ const App: React.FC = () => {
         )}
       </Router>
     </ToastProvider>
-  );
-};
+  )
+}
 
-export default App;
+export default App
