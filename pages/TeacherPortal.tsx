@@ -1,27 +1,36 @@
 import React, { useEffect, useState } from "react"
 import { User, Exam } from "../types"
-import { dataService } from "../services/dataServices"
-import { examService } from "../services/exam.service"
+import { supabase } from "../supabase"
+import { Loader2, Trash2, Plus } from "lucide-react"
 
 interface Props {
   user: User
-  activeTab: string
 }
 
 const TeacherPortal: React.FC<Props> = ({ user }) => {
   const [exams, setExams] = useState<Exam[]>([])
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     loadExams()
   }, [])
 
   const loadExams = async () => {
-    const data = await dataService.getExamsByTeacher(user.id)
-    setExams(data)
+    setLoading(true)
+
+    const { data } = await supabase
+      .from("exams")
+      .select("*")
+      .eq("teacher_id", user.id)
+
+    setExams(data || [])
+    setLoading(false)
   }
 
   const createExam = async () => {
-    const exam = await examService.createExam({
+    const now = new Date().toISOString()
+
+    await supabase.from("exams").insert({
       title: "Đề mới",
       teacher_id: user.id,
       description: null,
@@ -29,9 +38,18 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
       is_archived: false,
       file_url: null,
       raw_content: null,
+      total_points: 0,
+      version: 1,
+      created_at: now,
+      updated_at: now,
     })
 
-    if (exam) loadExams()
+    loadExams()
+  }
+
+  const deleteExam = async (id: string) => {
+    await supabase.from("exams").delete().eq("id", id)
+    loadExams()
   }
 
   return (
@@ -42,18 +60,32 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
 
       <button
         onClick={createExam}
-        className="mb-6 px-4 py-2 bg-indigo-600 rounded-lg"
+        className="mb-6 px-4 py-2 bg-indigo-600 rounded-lg flex items-center gap-2"
       >
-        Tạo đề
+        <Plus size={16} /> Tạo đề
       </button>
+
+      {loading && <Loader2 className="animate-spin" />}
 
       <div className="space-y-4">
         {exams.map((e) => (
-          <div key={e.id} className="bg-white/5 p-4 rounded-xl">
-            <div className="font-bold">{e.title}</div>
-            <div className="text-sm text-slate-400">
-              {e.description || "Không có mô tả"}
+          <div
+            key={e.id}
+            className="bg-white/5 p-4 rounded-xl flex justify-between"
+          >
+            <div>
+              <div className="font-bold">{e.title}</div>
+              <div className="text-sm text-slate-400">
+                {e.description || "Không có mô tả"}
+              </div>
             </div>
+
+            <button
+              onClick={() => deleteExam(e.id)}
+              className="text-rose-400"
+            >
+              <Trash2 size={16} />
+            </button>
           </div>
         ))}
       </div>
