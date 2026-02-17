@@ -13,10 +13,10 @@
 
   "scripts": {
     "dev": "vite",
-    "build": "npm run type-check && vite build --emptyOutDir",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist node_modules .vite",
+    "clean": "rimraf dist node_modules .vite",
     "reinstall": "npm run clean && npm install"
   },
 
@@ -48,8 +48,14 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
+    "rimraf": "^5.0.5",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
-  }
+  },
+
+  "browserslist": [
+    "defaults",
+    "not IE 11"
+  ]
 }
