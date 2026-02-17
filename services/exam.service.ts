@@ -2,6 +2,9 @@ import { supabase } from "../supabase";
 import { Exam } from "../types";
 
 export const ExamService = {
+  /* =========================================
+     GET ALL EXAMS
+  ========================================= */
   async getAllExams(): Promise<Exam[]> {
     const { data, error } = await supabase
       .from("exams")
@@ -13,9 +16,12 @@ export const ExamService = {
       return [];
     }
 
-    return data as Exam[];
+    return (data || []) as Exam[];
   },
 
+  /* =========================================
+     SAVE EXAM (UPSERT)
+  ========================================= */
   async saveExam(exam: Partial<Exam>): Promise<Exam | null> {
     const payload = {
       ...exam,
@@ -36,15 +42,9 @@ export const ExamService = {
     return data as Exam;
   },
 
-  async deleteExam(id: string): Promise<boolean> {
-    const { error } = await supabase
-      .from("exams")
-      .delete()
-      .eq("id", id);
-
-    return !error;
-  },
-
+  /* =========================================
+     GET BY ID
+  ========================================= */
   async getById(id: string): Promise<Exam | null> {
     const { data, error } = await supabase
       .from("exams")
@@ -54,5 +54,17 @@ export const ExamService = {
 
     if (error) return null;
     return data as Exam;
+  },
+
+  /* =========================================
+     DELETE (SOFT DELETE)
+  ========================================= */
+  async deleteExam(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("exams")
+      .update({ is_deleted: true })
+      .eq("id", id);
+
+    return !error;
   },
 };
