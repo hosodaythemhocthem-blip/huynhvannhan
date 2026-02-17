@@ -1,8 +1,12 @@
 import { supabase } from "../supabase";
-import { Exam, Question, QuestionType } from "../types";
+import {
+  Exam,
+  Question,
+  QuestionType,
+} from "../types";
 
 /* =========================================================
-   UTILITIES
+   SYSTEM UTILITIES
 ========================================================= */
 
 const generateId = (prefix: string = "id") =>
@@ -10,47 +14,75 @@ const generateId = (prefix: string = "id") =>
 
 const now = () => new Date().toISOString();
 
+const containsMath = (text: string): boolean =>
+  /(\$|\\\(|\\\[)/.test(text);
+
 /* =========================================================
-   SAFE QUESTION NORMALIZER (STRICT PRODUCTION SAFE)
+   QUESTION NORMALIZER (STRICT SAFE)
 ========================================================= */
 
 const normalizeQuestion = (q: any, index: number): Question => {
+  const content: string = q.content ?? q.text ?? "";
+
+  const detectedType =
+    q.type === QuestionType.MCQ && containsMath(content)
+      ? QuestionType.MATH
+      : q.type ?? QuestionType.MCQ;
+
   const base = {
-    id: q.id || generateId("q"),
-    content: q.content ?? q.text ?? "",
+    id: q.id ?? generateId("q"),
+    type: detectedType,
+    content,
     points:
       typeof q.points === "number" && !isNaN(q.points)
         ? q.points
         : 1,
-    explanation: q.explanation ?? "",
+    explanation: q.explanation ?? undefined,
     section: q.section ?? 1,
-    order: typeof q.order === "number" ? q.order : index,
-    image_url: q.image_url ?? null,
-    isDeleted: q.isDeleted ?? false,
+    order:
+      typeof q.order === "number"
+        ? q.order
+        : index,
+    image_url:
+      typeof q.image_url === "string"
+        ? q.image_url
+        : undefined,
+    isDeleted: false,
     version: q.version ?? 1,
     createdAt: q.createdAt ?? now(),
     updatedAt: now(),
+    aiGenerated: q.aiGenerated ?? false,
   };
 
-  switch (q.type) {
+  switch (detectedType) {
     case QuestionType.MCQ:
-    case "MCQ":
-    case "multiple-choice":
       return {
         ...base,
         type: QuestionType.MCQ,
-        options:
-          Array.isArray(q.options) && q.options.length > 0
-            ? q.options
-            : ["", "", "", ""],
+        options: Array.isArray(q.options)
+          ? q.options
+          : ["", "", "", ""],
         correctAnswer:
           typeof q.correctAnswer === "number"
             ? q.correctAnswer
             : 0,
       };
 
+    case QuestionType.MATH:
+      return {
+        ...base,
+        type: QuestionType.MATH,
+        correctAnswer:
+          typeof q.correctAnswer === "string"
+            ? q.correctAnswer
+            : "",
+        latexSource:
+          q.latexSource ?? content,
+        renderMode:
+          q.renderMode ?? "block",
+      };
+
     case QuestionType.TRUE_FALSE:
-    case "true-false":
       return {
         ...base,
         type: QuestionType.TRUE_FALSE,
@@ -58,30 +90,27 @@ const normalizeQuestion = (q: any, index: number): Question => {
         correctAnswer:
           typeof q.correctAnswer === "boolean"
             ? q.correctAnswer
-            : false,
+            : true,
       };
 
     case QuestionType.SHORT_ANSWER:
       return {
         ...base,
         type: QuestionType.SHORT_ANSWER,
-        correctAnswer: q.correctAnswer ?? "",
+        correctAnswer:
+          typeof q.correctAnswer === "string"
+            ? q.correctAnswer
+            : "",
       };
 
     case QuestionType.ESSAY:
       return {
         ...base,
         type: QuestionType.ESSAY,
-        correctAnswer: q.correctAnswer ?? "",
-      };
-
-    case QuestionType.MATH:
-      return {
-        ...base,
-        type: QuestionType.MATH,
-        correctAnswer: q.correctAnswer ?? "",
-        latexSource: q.latexSource ?? "",
-        renderMode: q.renderMode ?? "block",
+        rubric:
+          typeof q.rubric === "string"
+            ? q.rubric
+            : undefined,
       };
 
     default:
@@ -95,173 +124,190 @@ const normalizeQuestion = (q: any, index: number): Question => {
 };
 
 /* =========================================================
-   CALCULATE META
+   META CALCULATOR
 ========================================================= */
 
 const calculateMeta = (questions: Question[]) => {
-  const active = questions.filter((q) => !q.isDeleted);
-
-  const totalPoints = active.reduce(
-    (sum, q) => sum + (q.points || 0),
-    0
+  const active = questions.filter(
+    (q) => !q.isDeleted
   );
 
   return {
-    totalPoints,
+    totalPoints: active.reduce(
+      (sum, q) => sum + q.points,
+      0
+    ),
     questionCount: active.length,
   };
 };
 
 /* =========================================================
-   EXAM SERVICE
+   EXAM SERVICE ENTERPRISE
 ========================================================= */
 
 export const ExamService = {
-  /* =========================================================
-     UPSERT EXAM (INSERT OR UPDATE SAFE)
-  ========================================================= */
-  async saveExam(exam: Exam): Promise<boolean> {
+  /* =========================================
+     SAVE EXAM (UPSERT SAFE)
+  ========================================= */
+  async saveExam(
+    exam: Partial<Exam>
+  ): Promise<Exam | null> {
     try {
       if (!exam.title?.trim())
-        throw new Error("Tiêu đề đề thi không được để trống.");
+        throw new Error(
+          "Tiêu đề không được để trống"
+        );
 
-      const normalizedQuestions = (exam.questions || []).map(
-        (q, i) => normalizeQuestion(q, i)
-      );
+      const normalizedQuestions =
+        (exam.questions ?? []).map(
+          (q, i) => normalizeQuestion(q, i)
+        );
 
-      const meta = calculateMeta(normalizedQuestions);
+      const meta =
+        calculateMeta(normalizedQuestions);
 
-      const normalizedExam: Exam = {
-        ...exam,
-        id: exam.id || generateId("exam"),
-        questions: normalizedQuestions,
-        totalPoints: meta.totalPoints,
-        questionCount: meta.questionCount,
-        updatedAt: now(),
-        createdAt: exam.createdAt || now(),
-        version: exam.version ? exam.version + 1 : 1,
-        isDeleted: exam.isDeleted ?? false,
+      const examId =
+        exam.id ?? generateId("exam");
+
+      const dbPayload = {
+        id: examId,
+        title: exam.title,
+        description:
+          exam.description ?? "",
+        teacher_id: exam.teacherId,
+        duration:
+          exam.duration ?? 45,
+        subject:
+          exam.subject ?? "Toán",
+        grade:
+          exam.grade ?? "10",
+        is_locked:
+          exam.isLocked ?? false,
+        is_published:
+          exam.isPublished ?? false,
+        is_archived:
+          exam.isArchived ?? false,
+        total_points:
+          meta.totalPoints,
+        question_count:
+          meta.questionCount,
+        questions:
+          normalizedQuestions,
+        file_url:
+          exam.file_url ?? null,
+        raw_content:
+          exam.raw_content ?? null,
+        created_at:
+          exam.createdAt ?? now(),
+        updated_at: now(),
       };
 
-      const { error } = await supabase
-        .from("exams")
-        .upsert(normalizedExam, {
-          onConflict: "id",
-        });
+      const { data, error } =
+        await supabase
+          .from("exams")
+          .upsert(dbPayload)
+          .select()
+          .single();
 
-      if (error) {
-        console.error("❌ Lỗi lưu đề:", error.message);
-        return false;
-      }
+      if (error) throw error;
 
-      return true;
+      return {
+        ...data,
+        teacherId: data.teacher_id,
+        totalPoints:
+          data.total_points,
+        questionCount:
+          data.question_count,
+      } as Exam;
     } catch (err) {
-      console.error("❌ Lỗi hệ thống:", err);
-      return false;
+      console.error(
+        "❌ saveExam error:",
+        err
+      );
+      return null;
     }
   },
 
-  /* =========================================================
-     SOFT DELETE EXAM
-  ========================================================= */
-  async deleteExam(examId: string): Promise<boolean> {
-    try {
-      const { error } = await supabase
+  /* =========================================
+     GET EXAM BY ID
+  ========================================= */
+  async getExamById(
+    id: string
+  ): Promise<Exam | null> {
+    const { data, error } =
+      await supabase
+        .from("exams")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+    if (error || !data)
+      return null;
+
+    return {
+      ...data,
+      teacherId: data.teacher_id,
+      totalPoints:
+        data.total_points,
+      questionCount:
+        data.question_count,
+    } as Exam;
+  },
+
+  /* =========================================
+     SOFT DELETE
+  ========================================= */
+  async deleteExam(
+    examId: string
+  ): Promise<boolean> {
+    const { error } =
+      await supabase
         .from("exams")
         .update({
-          isDeleted: true,
-          updatedAt: now(),
+          is_archived: true,
+          updated_at: now(),
         })
         .eq("id", examId);
 
-      if (error) {
-        console.error("❌ Lỗi xóa đề:", error.message);
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      console.error("❌ Lỗi hệ thống:", err);
-      return false;
-    }
+    return !error;
   },
 
-  /* =========================================================
-     GET ALL EXAMS (FILTER SOFT DELETE)
-  ========================================================= */
-  async getAllExams(): Promise<Exam[]> {
+  /* =========================================
+     UPLOAD FILE (WORD/PDF)
+  ========================================= */
+  async uploadExamFile(
+    file: File
+  ): Promise<string | null> {
     try {
-      const { data, error } = await supabase
-        .from("exams")
-        .select("*")
-        .eq("isDeleted", false)
-        .order("createdAt", { ascending: false });
+      const ext =
+        file.name.split(".").pop();
 
-      if (error) {
-        console.error("❌ Lỗi lấy đề:", error.message);
-        return [];
-      }
+      const fileName =
+        `${crypto.randomUUID()}.${ext}`;
 
-      return (data as Exam[]) || [];
-    } catch (err) {
-      console.error("❌ Lỗi hệ thống:", err);
-      return [];
-    }
-  },
+      const filePath =
+        `exams/${fileName}`;
 
-  /* =========================================================
-     SOFT DELETE QUESTION
-  ========================================================= */
-  softDeleteQuestion(exam: Exam, questionId: string): Exam {
-    const updated = exam.questions.map((q) =>
-      q.id === questionId
-        ? { ...q, isDeleted: true, updatedAt: now() }
-        : q
-    );
+      const { error } =
+        await supabase.storage
+          .from("documents")
+          .upload(filePath, file, {
+            upsert: true,
+          });
 
-    return {
-      ...exam,
-      questions: updated,
-      ...calculateMeta(updated),
-    };
-  },
+      if (error) throw error;
 
-  /* =========================================================
-     IMPORT SAFE FORMAT
-  ========================================================= */
-  formatQuestionsForUI(rawQs: any[]): Question[] {
-    if (!Array.isArray(rawQs)) return [];
-    return rawQs.map((q, i) => normalizeQuestion(q, i));
-  },
-
-  /* =========================================================
-     UPLOAD FILE (WORD / PDF / IMAGE)
-  ========================================================= */
-  async uploadExamFile(file: File): Promise<string | null> {
-    try {
-      const filePath = `exam_files/${generateId(
-        "file"
-      )}_${file.name}`;
-
-      const { error } = await supabase.storage
-        .from("exam-files")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (error) {
-        console.error("❌ Lỗi upload:", error.message);
-        return null;
-      }
-
-      const { data } = supabase.storage
-        .from("exam-files")
-        .getPublicUrl(filePath);
+      const { data } =
+        supabase.storage
+          .from("documents")
+          .getPublicUrl(filePath);
 
       return data.publicUrl;
     } catch (err) {
-      console.error("❌ Upload thất bại:", err);
+      console.error(
+        "❌ uploadExamFile error:",
+        err
+      );
       return null;
     }
   },
