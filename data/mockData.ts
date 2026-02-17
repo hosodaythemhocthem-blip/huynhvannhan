@@ -22,7 +22,7 @@ export const MOCK_USERS: User[] = [
     email: "huynhvannhan@gmail.com",
     full_name: "Thầy Huỳnh Văn Nhẫn",
     role: "teacher",
-    status: "active",
+    status: "approved", // ✅ FIX
     class_id: null,
   },
   {
@@ -30,7 +30,7 @@ export const MOCK_USERS: User[] = [
     email: "hocsinh1@gmail.com",
     full_name: "Nguyễn Văn Đạt",
     role: "student",
-    status: "active",
+    status: "approved", // ✅ FIX
     class_id: "class-12a1",
   },
   {
@@ -44,7 +44,7 @@ export const MOCK_USERS: User[] = [
 ]
 
 /* ======================================================
-   📝 MOCK EXAMS (Tách questions riêng theo chuẩn DB)
+   📝 MOCK EXAMS
 ====================================================== */
 
 export const MOCK_EXAMS: Exam[] = [
@@ -57,6 +57,8 @@ export const MOCK_EXAMS: Exam[] = [
     is_archived: false,
     file_url: null,
     raw_content: null,
+    total_points: 30, // ✅ FIX
+    version: 1,       // ✅ FIX
   },
 ]
 
@@ -73,6 +75,10 @@ export const MOCK_QUESTIONS: Question[] = [
       "Tính đạo hàm của hàm số $f(x) = \\ln(x^2 + 1)$ tại $x = 1$",
     options: ["$1$", "$\\frac{1}{2}$", "$2$", "$0$"],
     correct_answer: "0",
+    points: 10,  // ✅ FIX
+    order: 1,    // ✅ FIX
+    explanation: null,
+    section: null,
   },
   {
     ...baseEntity("q-2"),
@@ -82,6 +88,10 @@ export const MOCK_QUESTIONS: Question[] = [
       "Tìm nguyên hàm của $g(x) = e^{2x} + \\sin(x)$",
     correct_answer:
       "$\\frac{1}{2}e^{2x} - \\cos(x) + C$",
+    points: 10,  // ✅ FIX
+    order: 2,    // ✅ FIX
+    explanation: null,
+    section: null,
   },
   {
     ...baseEntity("q-3"),
@@ -96,6 +106,10 @@ export const MOCK_QUESTIONS: Question[] = [
       "$J = 0$",
     ],
     correct_answer: "0",
+    points: 10,  // ✅ FIX
+    order: 3,    // ✅ FIX
+    explanation: null,
+    section: null,
   },
 ]
 
@@ -108,6 +122,8 @@ export const MOCK_CLASSES: Class[] = [
     ...baseEntity("class-12a1"),
     name: "Lớp 12A1 - Chuyên Toán",
     teacher_id: "teacher-nhan",
+    description: "Lớp chuyên toán năm học 2025",
+    is_active: true, // ✅ FIX
   },
 ]
 
