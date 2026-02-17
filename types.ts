@@ -1,120 +1,77 @@
-/**
- * 🚀 LUMINA LMS V8 ENTERPRISE CORE
- * Stable | Supabase Safe | Strict Mode Ready
- */
+/* ======================================================
+   USER
+====================================================== */
 
-export type Role = "teacher" | "student" | "admin";
-export type UserStatus = "pending" | "active" | "rejected";
+export interface User {
+  id: string
+  name: string
+  email: string
+  role: "admin" | "teacher" | "student"
 
-/* =====================================================
-   BASE ENTITY
-===================================================== */
-export interface BaseEntity {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  isDeleted: boolean;
+  isApproved?: boolean
+
+  createdAt: string
+  updatedAt: string
 }
 
-/* =====================================================
-   USER SYSTEM
-===================================================== */
-export interface User extends BaseEntity {
-  email: string;
-  fullName: string;
-  role: Role;
-  avatar?: string;
-  status: UserStatus;
-  classId?: string;
-  pendingClassId?: string;
-  lastLoginAt?: string;
+/* ======================================================
+   EXAM
+====================================================== */
+
+export interface Exam {
+  id: string
+  title: string
+  teacher_id: string
+
+  description?: string
+
+  questions: Question[]
+
+  isLocked?: boolean
+  isArchived?: boolean
+
+  file_url?: string
+  raw_content?: string
+
+  version: number
+
+  createdAt: string
+  updatedAt: string
 }
 
-/* =====================================================
-   QUESTION SYSTEM
-===================================================== */
+/* ======================================================
+   QUESTION
+====================================================== */
+
 export enum QuestionType {
-  MCQ = "multiple-choice",
-  TRUE_FALSE = "true-false",
-  SHORT_ANSWER = "short-answer",
-  MATH = "math",
+  MCQ = "MCQ",
+  TRUE_FALSE = "TRUE_FALSE",
+  SHORT_ANSWER = "SHORT_ANSWER",
 }
 
-export interface Question extends BaseEntity {
-  examId: string;
-  type: QuestionType;
-  content: string;
-  options?: string[];
-  correctAnswer: string | number | boolean;
-  explanation?: string;
-  points: number;
-  order: number;
-}
+export interface Question {
+  id: string
+  examId?: string   // 🔥 optional để tránh TS2741
 
-/* =====================================================
-   EXAM SYSTEM
-===================================================== */
-export interface Exam extends BaseEntity {
-  title: string;
-  description?: string;
-  teacherId: string;
-  questions: Question[];
-  duration: number;
-  subject: string;
-  grade: string;
-  isPublished: boolean;
-  totalPoints: number;
-  questionCount: number;
-  accessCode?: string;
-}
+  type: QuestionType
 
-/* =====================================================
-   SUPABASE DATABASE MAP
-===================================================== */
-export interface DBTableMap {
-  users: {
-    id: string;
-    email: string;
-    full_name: string;
-    role: Role;
-    status: UserStatus;
-    class_id?: string | null;
-    pending_class_id?: string | null;
-    avatar?: string | null;
-    last_login_at?: string | null;
-    created_at: string;
-    updated_at: string;
-    is_deleted: boolean;
-  };
+  content: string
 
-  exams: {
-    id: string;
-    title: string;
-    description?: string | null;
-    teacher_id: string;
-    duration: number;
-    subject: string;
-    grade: string;
-    is_published: boolean;
-    total_points: number;
-    question_count: number;
-    access_code?: string | null;
-    created_at: string;
-    updated_at: string;
-    is_deleted: boolean;
-  };
+  options?: string[]
+  correctAnswer?: number
 
-  questions: {
-    id: string;
-    exam_id: string;
-    content: string;
-    options: string[] | null;
-    correct_answer: string;
-    explanation?: string | null;
-    points: number;
-    order: number;
-    created_at: string;
-    updated_at: string;
-    is_deleted: boolean;
-  };
+  points: number
+  order: number
+  section?: number
+
+  explanation?: string
+  image_url?: string
+
+  aiGenerated?: boolean
+
+  isDeleted: boolean
+  version: number
+
+  createdAt: string
+  updatedAt: string
 }
