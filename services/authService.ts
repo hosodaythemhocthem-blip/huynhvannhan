@@ -1,7 +1,7 @@
-import { User } from "../types";
+import { User, UserStatus, Role } from "../types";
 import { supabase } from "../supabase";
 
-const SESSION_KEY = "nhanlms_active_session_v6";
+const SESSION_KEY = "lumina_lms_session_v7";
 
 /* =========================================================
    UTILITIES
@@ -22,71 +22,87 @@ const getLocalSession = (): User | null => {
   return raw ? (JSON.parse(raw) as User) : null;
 };
 
+const mapDbUserToModel = (dbUser: any): User => ({
+  id: dbUser.id,
+  email: dbUser.email,
+  fullName: dbUser.fullName,
+  role: dbUser.role as Role,
+  avatar: dbUser.avatar ?? undefined,
+  status: dbUser.status as UserStatus,
+  classId: dbUser.classId ?? undefined,
+  pendingClassId: dbUser.pendingClassId ?? undefined,
+  lastLoginAt: dbUser.lastLoginAt ?? undefined,
+  isDeleted: dbUser.isDeleted ?? false,
+  createdAt: dbUser.createdAt,
+  updatedAt: dbUser.updatedAt,
+});
+
 /* =========================================================
-   ENSURE DEFAULT TEACHER EXISTS
+   AUTO PROVISION TEACHER NHẪN
 ========================================================= */
 
-const ensureDefaultTeacher = async () => {
-  const { data } = await supabase
+const ensureTeacherNhanExists = async () => {
+  const teacherEmail = "huynhvannhan@gmail.com";
+
+  const { data: existing } = await supabase
     .from("users")
     .select("*")
-    .eq("email", "huynhvannhan@gmail.com")
-    .single();
+    .eq("email", teacherEmail)
+    .maybeSingle();
 
-  if (data) return;
+  if (!existing) {
+    console.log("🚀 Auto Provision: Creating Teacher Nhẫn profile");
 
-  await supabase.from("users").insert([
-    {
-      id: "teacher-nhan",
-      email: "huynhvannhan@gmail.com",
-      fullName: "Thầy Huỳnh Văn Nhẫn",
-      role: "teacher",
-      isApproved: true,
-      isActive: true,
-      createdAt: now(),
-      updatedAt: now(),
-    },
-  ]);
+    await supabase.from("users").insert([
+      {
+        id: crypto.randomUUID(),
+        email: teacherEmail,
+        fullName: "Thầy Huỳnh Văn Nhẫn",
+        role: "teacher",
+        status: "active",
+        isDeleted: false,
+        createdAt: now(),
+        updatedAt: now(),
+      },
+    ]);
+  }
 };
 
 /* =========================================================
-   AUTH SERVICE – PRODUCTION READY
+   AUTH SERVICE – V7 PRO MAX
 ========================================================= */
 
 export const authService = {
-  /* =========================================================
-     GET CURRENT USER
-  ========================================================= */
+  /* ----------------------------------------------------- */
   async getCurrentUser(): Promise<User | null> {
     try {
-      await ensureDefaultTeacher();
-
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
 
-      if (!authUser) return getLocalSession();
+      if (!authUser) {
+        return getLocalSession();
+      }
 
       const { data: dbUser } = await supabase
         .from("users")
         .select("*")
-        .eq("id", authUser.id)
-        .single();
+        .eq("email", authUser.email)
+        .maybeSingle();
 
       if (!dbUser) return null;
 
-      saveSession(dbUser);
-      return dbUser as User;
+      const user = mapDbUserToModel(dbUser);
+      saveSession(user);
+      return user;
     } catch {
       return getLocalSession();
     }
   },
 
-  /* =========================================================
-     LOGIN
-  ========================================================= */
+  /* ----------------------------------------------------- */
   async login(email: string, password: string): Promise<User> {
-    await ensureDefaultTeacher();
+    await ensureTeacherNhanExists();
 
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -96,39 +112,51 @@ export const authService = {
     });
 
     if (error || !data?.user) {
-      throw new Error("Sai tài khoản hoặc mật khẩu.");
+      throw new Error("Thông tin đăng nhập không chính xác.");
     }
 
     const { data: dbUser } = await supabase
       .from("users")
       .select("*")
-      .eq("id", data.user.id)
-      .single();
+      .eq("email", normalizedEmail)
+      .maybeSingle();
 
     if (!dbUser) {
-      throw new Error("Không tìm thấy dữ liệu người dùng.");
+      throw new Error("Tài khoản chưa được khởi tạo trên hệ thống.");
     }
 
-    if (dbUser.role === "student" && !dbUser.isApproved) {
-      throw new Error("Tài khoản đang chờ Thầy phê duyệt.");
+    const user = mapDbUserToModel(dbUser);
+
+    /* ===== CHECK STATUS ===== */
+    if (user.role === "student" && user.status === "pending") {
+      await supabase.auth.signOut();
+      throw new Error("Tài khoản đang chờ giáo viên phê duyệt.");
     }
 
-    if (dbUser.isActive === false) {
-      throw new Error("Tài khoản đã bị khóa.");
+    if (user.status === "rejected") {
+      await supabase.auth.signOut();
+      throw new Error("Yêu cầu tham gia lớp đã bị từ chối.");
     }
 
-    saveSession(dbUser);
-    return dbUser as User;
+    /* ===== UPDATE LAST LOGIN ===== */
+    await supabase
+      .from("users")
+      .update({
+        lastLoginAt: now(),
+        updatedAt: now(),
+      })
+      .eq("email", normalizedEmail);
+
+    saveSession(user);
+    return user;
   },
 
-  /* =========================================================
-     REGISTER STUDENT
-  ========================================================= */
+  /* ----------------------------------------------------- */
   async registerStudent(
     email: string,
     password: string,
     fullName: string,
-    classInfo: { id: string; name: string }
+    classId: string
   ): Promise<void> {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -138,92 +166,66 @@ export const authService = {
     });
 
     if (error || !data?.user) {
-      throw new Error("Email đã tồn tại hoặc đăng ký thất bại.");
+      throw new Error("Email đã được sử dụng hoặc lỗi hệ thống.");
     }
-
-    const userId = data.user.id;
 
     const { error: insertError } = await supabase.from("users").insert([
       {
-        id: userId,
+        id: data.user.id,
         email: normalizedEmail,
         fullName,
         role: "student",
-        classId: classInfo.id,
-        className: classInfo.name,
-        isApproved: false,
-        isActive: true,
+        status: "pending",
+        classId: null,
+        pendingClassId: classId,
+        isDeleted: false,
         createdAt: now(),
         updatedAt: now(),
       },
     ]);
 
     if (insertError) {
-      throw new Error("Không thể tạo hồ sơ học sinh.");
+      throw new Error("Lỗi khi tạo hồ sơ học sinh.");
     }
   },
 
-  /* =========================================================
-     APPROVE STUDENT
-  ========================================================= */
+  /* ----------------------------------------------------- */
   async approveStudent(userId: string): Promise<void> {
+    const { data: student } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!student) throw new Error("Không tìm thấy học sinh.");
+
     const { error } = await supabase
       .from("users")
       .update({
-        isApproved: true,
+        status: "active",
+        classId: student.pendingClassId,
+        pendingClassId: null,
         updatedAt: now(),
       })
       .eq("id", userId);
 
-    if (error) {
-      throw new Error("Không thể phê duyệt học sinh.");
-    }
+    if (error) throw new Error("Phê duyệt thất bại.");
   },
 
-  /* =========================================================
-     GET STUDENTS
-  ========================================================= */
-  async getPendingStudents(): Promise<User[]> {
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .eq("role", "student")
-      .eq("isApproved", false);
-
-    return (data as User[]) || [];
-  },
-
-  async getApprovedStudents(): Promise<User[]> {
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .eq("role", "student")
-      .eq("isApproved", true);
-
-    return (data as User[]) || [];
-  },
-
-  /* =========================================================
-     DELETE STUDENT (SOFT DELETE)
-  ========================================================= */
-  async deleteStudent(userId: string): Promise<void> {
+  /* ----------------------------------------------------- */
+  async rejectStudent(userId: string): Promise<void> {
     const { error } = await supabase
       .from("users")
       .update({
-        isDeleted: true,
-        isActive: false,
+        status: "rejected",
         updatedAt: now(),
       })
       .eq("id", userId);
 
-    if (error) {
-      throw new Error("Không thể xóa học sinh.");
-    }
+    if (error) throw new Error("Từ chối thất bại.");
   },
 
-  /* =========================================================
-     LOGOUT
-  ========================================================= */
+  /* ----------------------------------------------------- */
   async logout(): Promise<void> {
     await supabase.auth.signOut();
     clearSession();
