@@ -15,10 +15,10 @@ export interface BaseEntity {
 export type UserRole = "admin" | "teacher" | "student"
 
 export type UserStatus =
-  | "pending"     // học sinh chờ duyệt
-  | "approved"    // đã được duyệt
-  | "rejected"    // bị từ chối
-  | "suspended"   // bị khóa
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended"
 
 export interface User extends BaseEntity {
   email: string
@@ -50,17 +50,17 @@ export type QuestionType =
 
 export interface Question extends BaseEntity {
   exam_id: string
-  content: string              // hỗ trợ LaTeX
+  content: string
   type: QuestionType
 
   options?: string[] | null
   correct_answer?: string | null
 
-  points: number               // điểm câu
-  order: number                // thứ tự hiển thị
+  points: number
+  order: number
 
-  explanation?: string | null  // lời giải AI
-  section?: string | null      // phần I, II, III
+  explanation?: string | null
+  section?: string | null
 }
 
 /* ======================================================
@@ -75,11 +75,11 @@ export interface Exam extends BaseEntity {
   is_locked: boolean
   is_archived: boolean
 
-  file_url: string | null       // file word/pdf gốc
-  raw_content: string | null    // nội dung đã parse
+  file_url: string | null
+  raw_content: string | null
 
   total_points: number
-  version: number               // phục vụ autosave
+  version: number
 }
 
 /* ======================================================
@@ -90,14 +90,14 @@ export interface ExamSubmission extends BaseEntity {
   exam_id: string
   student_id: string
 
-  answers: Record<string, string>  // question_id -> answer
+  answers: Record<string, string>
   score: number | null
 
   is_submitted: boolean
 }
 
 /* ======================================================
-   AI LOG (phân tích học lực sau này)
+   AI LOG
 ====================================================== */
 
 export interface AiLog extends BaseEntity {
