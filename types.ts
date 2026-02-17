@@ -1,12 +1,12 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V6
- * Supabase Optimized + File Import + AI + Math Render + Version Safe
+ * LMS V6 - STRICT MODE SAFE
+ * Supabase Compatible + Mapping Ready
  */
 
 export type Role = "teacher" | "student" | "admin";
 
 /* =====================================================
-   COMMON BASE MODEL (SUPABASE SAFE)
+   BASE ENTITY (APP MODEL - CAMEL CASE)
 ===================================================== */
 
 export interface BaseEntity {
@@ -18,8 +18,8 @@ export interface BaseEntity {
   createdBy?: string;
   updatedBy?: string;
 
-  isDeleted: boolean; // bắt buộc để filter thống nhất
-  version: number; // bắt buộc cho optimistic locking
+  isDeleted: boolean;
+  version: number;
 }
 
 /* =====================================================
@@ -57,11 +57,11 @@ export interface UploadedFile extends BaseEntity {
   uploadedBy: string;
 
   bucket?: string;
-  originalText?: string; // parsed raw text
+  originalText?: string;
 }
 
 /* =====================================================
-   QUESTION TYPES
+   QUESTION
 ===================================================== */
 
 export enum QuestionType {
@@ -72,29 +72,17 @@ export enum QuestionType {
   MATH = "math",
 }
 
-/* =====================================================
-   BASE QUESTION
-===================================================== */
-
 export interface BaseQuestion extends BaseEntity {
   type: QuestionType;
-
-  content: string; // render bằng KaTeX
+  content: string;
   points: number;
 
   explanation?: string;
   section?: number;
-
   image_url?: string;
-
   order: number;
-
   aiGenerated?: boolean;
 }
-
-/* =====================================================
-   SPECIFIC QUESTION TYPES
-===================================================== */
 
 export interface MCQQuestion extends BaseQuestion {
   type: QuestionType.MCQ;
@@ -125,10 +113,6 @@ export interface MathQuestion extends BaseQuestion {
   latexSource?: string;
   renderMode?: "inline" | "block";
 }
-
-/* =====================================================
-   UNION QUESTION
-===================================================== */
 
 export type Question =
   | MCQQuestion
@@ -163,8 +147,8 @@ export interface Exam extends BaseEntity {
   file_url?: string;
   file_type?: FileType;
 
-  totalPoints: number; // luôn auto-calc
-  questionCount: number; // luôn auto-calc
+  totalPoints: number;
+  questionCount: number;
 
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
@@ -173,7 +157,7 @@ export interface Exam extends BaseEntity {
 }
 
 /* =====================================================
-   EXAM SUBMISSION
+   SUBMISSION
 ===================================================== */
 
 export interface ExamSubmission extends BaseEntity {
@@ -215,11 +199,46 @@ export interface Course extends BaseEntity {
 
 export interface Class extends BaseEntity {
   name: string;
-
   teacherId: string;
 
   studentCount: number;
 
   studentIds: string[];
   pendingStudentIds: string[];
+}
+
+/* =====================================================
+   DATABASE MODELS (SNAKE CASE - SUPABASE)
+===================================================== */
+
+export interface DBExam {
+  id: string;
+  title: string;
+  description: string;
+  teacher_id: string;
+  questions: any;
+  duration: number;
+  subject: string;
+  grade: string;
+  is_locked: boolean;
+  is_published: boolean;
+  is_archived: boolean;
+  assigned_class_ids: string[];
+  total_points: number;
+  question_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DBSubmission {
+  id: string;
+  exam_id: string;
+  student_id: string;
+  answers: any;
+  score?: number;
+  graded: boolean;
+  submitted_at: string;
+  graded_at?: string;
+  created_at: string;
+  updated_at: string;
 }
