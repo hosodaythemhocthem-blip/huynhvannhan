@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react"
+import React, { useState, useRef } from "react"
 import {
   Upload,
   Sparkles,
@@ -38,7 +38,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
   const fileRef = useRef<HTMLInputElement>(null)
 
   /* ================= PDF ================= */
-  const extractPDFText = async (file: File) => {
+  const extractPDFText = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer()
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
 
@@ -46,14 +46,16 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i)
       const content = await page.getTextContent()
-      text += content.items.map((item: any) => item.str).join(" ") + "\n"
+      text += content.items
+        .map((item: any) => item.str)
+        .join(" ") + "\n"
     }
 
     return text
   }
 
   /* ================= DOCX ================= */
-  const extractDocxText = async (file: File) => {
+  const extractDocxText = async (file: File): Promise<string> => {
     const buffer = await file.arrayBuffer()
     const result = await mammoth.extractRawText({ arrayBuffer: buffer })
     return result.value
@@ -71,47 +73,23 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
       setPreviewExam(data)
     } catch (err) {
       console.error(err)
-      alert("AI lỗi rồi thầy ơi 😅")
+      alert("AI lỗi rồi 😅")
     } finally {
       setLoading(false)
     }
   }
 
-  /* ================= FILE IMPORT ================= */
-  const handleFileUpload = async (file: File) => {
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File tối đa 5MB")
-      return
-    }
-
-    setLoading(true)
-    try {
-      let text = ""
-
-      if (file.type === "application/pdf") {
-        text = await extractPDFText(file)
-      } else {
-        text = await extractDocxText(file)
-      }
-
-      setTopic(text)
-    } catch {
-      alert("Không đọc được file")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  /* ================= SAVE RELATIONAL ================= */
+  /* ================= SAVE ================= */
   const saveToCloud = async () => {
     if (!previewExam) return
-
     setLoading(true)
+
     try {
       const now = new Date().toISOString()
 
-      const { data: examData, error: examError } = await supabase
+      const totalPoints = previewExam.questions.length * 10
+
+      const { data: examData, error } = await supabase
         .from("exams")
         .insert({
           title: previewExam.title,
@@ -121,26 +99,32 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
           is_archived: false,
           file_url: null,
           raw_content: topic,
+          total_points: totalPoints,
+          version: 1,
           created_at: now,
           updated_at: now,
         })
         .select()
         .single()
 
-      if (examError) throw examError
+      if (error) throw error
 
-      const questionsPayload = previewExam.questions.map((q) => ({
-        exam_id: examData.id,
-        content: q.text,
-        type: q.options ? "multiple_choice" : "essay",
-        options: q.options ?? null,
-        correct_answer:
-          q.correctAnswer !== undefined
-            ? String(q.correctAnswer)
-            : null,
-        created_at: now,
-        updated_at: now,
-      }))
+      const questionsPayload = previewExam.questions.map(
+        (q, index) => ({
+          exam_id: examData.id,
+          content: q.text,
+          type: q.options ? "multiple_choice" : "essay",
+          options: q.options ?? null,
+          correct_answer:
+            q.correctAnswer !== undefined
+              ? String(q.correctAnswer)
+              : null,
+          points: 10,
+          order: index + 1,
+          created_at: now,
+          updated_at: now,
+        })
+      )
 
       const { error: qError } = await supabase
         .from("questions")
@@ -148,7 +132,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
 
       if (qError) throw qError
 
-      alert("🎉 Lưu thành công vĩnh viễn!")
+      alert("🎉 Lưu thành công!")
       setPreviewExam(null)
       setTopic("")
     } catch (err) {
@@ -159,38 +143,11 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     }
   }
 
-  /* ================= DELETE QUESTION ================= */
-  const deleteQuestion = (index: number) => {
-    if (!previewExam) return
-    setPreviewExam({
-      ...previewExam,
-      questions: previewExam.questions.filter((_, i) => i !== index),
-    })
-  }
-
-  /* ================= PASTE ================= */
-  const handlePaste = async (index?: number) => {
-    try {
-      const text = await navigator.clipboard.readText()
-
-      if (index === undefined) {
-        setTopic((prev) => prev + text)
-      } else if (previewExam) {
-        const updated = [...previewExam.questions]
-        updated[index].text += text
-        setPreviewExam({ ...previewExam, questions: updated })
-      }
-    } catch {
-      alert("Không đọc được clipboard")
-    }
-  }
-
   return (
     <div className="space-y-8">
-      {/* INPUT */}
       <div className="bg-white p-8 rounded-3xl shadow-xl">
         <h3 className="text-2xl font-black mb-6">
-          AI Exam Engine v9.0 🚀
+          AI Exam Engine 🚀
         </h3>
 
         <textarea
@@ -202,20 +159,6 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
 
         <div className="flex gap-3 mt-4 justify-end">
           <button
-            onClick={() => fileRef.current?.click()}
-            className="p-3 hover:bg-slate-100 rounded-lg"
-          >
-            <Upload size={18} />
-          </button>
-
-          <button
-            onClick={() => handlePaste()}
-            className="p-3 hover:bg-indigo-50 rounded-lg"
-          >
-            <ClipboardPaste size={18} />
-          </button>
-
-          <button
             onClick={handleGenerate}
             disabled={loading}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl flex items-center gap-2"
@@ -224,19 +167,8 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
             GENERATE
           </button>
         </div>
-
-        <input
-          hidden
-          type="file"
-          ref={fileRef}
-          accept=".pdf,.doc,.docx"
-          onChange={(e) =>
-            e.target.files && handleFileUpload(e.target.files[0])
-          }
-        />
       </div>
 
-      {/* PREVIEW */}
       {previewExam && (
         <div className="bg-white p-8 rounded-3xl shadow-2xl">
           <div className="flex justify-between mb-6">
@@ -253,36 +185,9 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
           </div>
 
           {previewExam.questions.map((q, i) => (
-            <div
-              key={i}
-              className="p-6 bg-slate-50 rounded-xl mb-6 relative"
-            >
-              <button
-                onClick={() => deleteQuestion(i)}
-                className="absolute top-3 right-3 text-rose-500"
-              >
-                <X size={16} />
-              </button>
-
-              <div className="flex justify-between mb-2">
-                <strong>Câu {i + 1}</strong>
-                <button
-                  onClick={() => handlePaste(i)}
-                  className="text-indigo-600 text-sm flex gap-1"
-                >
-                  <ClipboardPaste size={14} />
-                  Paste
-                </button>
-              </div>
-
+            <div key={i} className="mb-6">
+              <strong>Câu {i + 1}</strong>
               <MathPreview content={q.text} />
-
-              {q.options?.map((opt, idx) => (
-                <div key={idx} className="ml-4 mt-2">
-                  {String.fromCharCode(65 + idx)}.{" "}
-                  <MathPreview content={opt} />
-                </div>
-              ))}
             </div>
           ))}
         </div>
