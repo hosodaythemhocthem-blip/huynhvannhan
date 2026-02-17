@@ -1,34 +1,46 @@
-import React, { useEffect, useState } from "react"
-import { User, Exam } from "../types"
-import { supabase } from "../supabase"
-import { Loader2, Trash2, Plus } from "lucide-react"
+// pages/TeacherPortal.tsx
+import React, { useEffect, useState } from "react";
+import { User, Exam } from "../types";
+import { supabase } from "../supabase";
+import {
+  Loader2,
+  Trash2,
+  Plus,
+} from "lucide-react";
 
 interface Props {
-  user: User
+  user: User;
 }
 
-const TeacherPortal: React.FC<Props> = ({ user }) => {
-  const [exams, setExams] = useState<Exam[]>([])
-  const [loading, setLoading] = useState(false)
+const TeacherPortal: React.FC<Props> = ({
+  user,
+}) => {
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [loading, setLoading] =
+    useState(false);
 
   useEffect(() => {
-    loadExams()
-  }, [])
+    loadExams();
+  }, []);
 
   const loadExams = async () => {
-    setLoading(true)
+    setLoading(true);
 
     const { data } = await supabase
       .from("exams")
       .select("*")
-      .eq("teacher_id", user.id)
+      .eq("teacher_id", user.id);
 
-    setExams(data || [])
-    setLoading(false)
-  }
+    if (data) {
+      setExams(data as Exam[]);
+    }
+
+    setLoading(false);
+  };
 
   const createExam = async () => {
-    const now = new Date().toISOString()
+    const now =
+      new Date().toISOString();
 
     await supabase.from("exams").insert({
       title: "Đề mới",
@@ -42,15 +54,21 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
       version: 1,
       created_at: now,
       updated_at: now,
-    })
+    });
 
-    loadExams()
-  }
+    loadExams();
+  };
 
-  const deleteExam = async (id: string) => {
-    await supabase.from("exams").delete().eq("id", id)
-    loadExams()
-  }
+  const deleteExam = async (
+    id: string
+  ) => {
+    await supabase
+      .from("exams")
+      .delete()
+      .eq("id", id);
+
+    loadExams();
+  };
 
   return (
     <div className="p-8 text-white">
@@ -62,26 +80,34 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         onClick={createExam}
         className="mb-6 px-4 py-2 bg-indigo-600 rounded-lg flex items-center gap-2"
       >
-        <Plus size={16} /> Tạo đề
+        <Plus size={16} />
+        Tạo đề
       </button>
 
-      {loading && <Loader2 className="animate-spin" />}
+      {loading && (
+        <Loader2 className="animate-spin mb-4" />
+      )}
 
       <div className="space-y-4">
         {exams.map((e) => (
           <div
             key={e.id}
-            className="bg-white/5 p-4 rounded-xl flex justify-between"
+            className="bg-white/5 p-4 rounded-xl flex justify-between items-center"
           >
             <div>
-              <div className="font-bold">{e.title}</div>
+              <div className="font-bold">
+                {e.title}
+              </div>
               <div className="text-sm text-slate-400">
-                {e.description || "Không có mô tả"}
+                {e.description ||
+                  "Không có mô tả"}
               </div>
             </div>
 
             <button
-              onClick={() => deleteExam(e.id)}
+              onClick={() =>
+                deleteExam(e.id)
+              }
               className="text-rose-400"
             >
               <Trash2 size={16} />
@@ -90,7 +116,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         ))}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default TeacherPortal
+export default TeacherPortal;
