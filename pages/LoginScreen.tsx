@@ -27,43 +27,32 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [classes, setClasses] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
-  /* ================= LOAD CLASSES ================= */
   useEffect(() => {
     const loadClasses = async () => {
       const { data } = await supabase.from("classes").select()
       setClasses(data || [])
     }
-    loadClasses()
 
-    // đảm bảo teacher mặc định tồn tại
-    authService.ensureDefaultTeacher()
+    loadClasses()
   }, [])
 
-  /* ================= HANDLE AUTH ================= */
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
 
     try {
       if (isLogin) {
         const user = await authService.signIn(
           email.trim(),
-          password
+          password.trim()
         )
 
-        if (!user) throw new Error("Sai email hoặc mật khẩu.")
-
-        if (user.role === "student" && user.status !== "approved") {
-          throw new Error(
-            "Tài khoản đang chờ giáo viên duyệt."
-          )
+        if (!user) {
+          throw new Error("Sai email hoặc mật khẩu.")
         }
 
-        showToast(
-          `Chào mừng ${user.full_name}!`,
-          "success"
-        )
-
+        showToast(`Chào mừng ${user.full_name}!`, "success")
         onLogin(user)
       } else {
         if (!fullName.trim())
@@ -74,7 +63,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
         const success = await authService.signUpStudent(
           email.trim(),
-          password,
+          password.trim(),
           fullName.trim()
         )
 
@@ -89,6 +78,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         setIsLogin(true)
         setFullName("")
         setSelectedClassId("")
+        setEmail("")
+        setPassword("")
       }
     } catch (err: any) {
       showToast(err.message || "Có lỗi xảy ra.", "error")
