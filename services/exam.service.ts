@@ -1,70 +1,59 @@
-import { supabase } from "../supabase";
-import { Exam } from "../types";
+import { supabase } from "../supabase"
+import { Exam } from "../types"
 
-export const ExamService = {
-  /* =========================================
-     GET ALL EXAMS
-  ========================================= */
-  async getAllExams(): Promise<Exam[]> {
+export const examService = {
+  /* ======================================================
+     CREATE EXAM
+  ====================================================== */
+  async createExam(payload: Partial<Exam>): Promise<Exam | null> {
     const { data, error } = await supabase
       .from("exams")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Get exams error:", error);
-      return [];
-    }
-
-    return (data || []) as Exam[];
-  },
-
-  /* =========================================
-     SAVE EXAM (UPSERT)
-  ========================================= */
-  async saveExam(exam: Partial<Exam>): Promise<Exam | null> {
-    const payload = {
-      ...exam,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from("exams")
-      .upsert(payload)
+      .insert({
+        ...payload,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .select()
-      .single();
+      .single()
 
-    if (error) {
-      console.error("Save exam error:", error);
-      return null;
-    }
-
-    return data as Exam;
+    if (error) return null
+    return data as Exam
   },
 
-  /* =========================================
+  /* ======================================================
+     UPDATE EXAM
+  ====================================================== */
+  async updateExam(id: string, updates: Partial<Exam>): Promise<boolean> {
+    const { error } = await supabase
+      .from("exams")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    return !error
+  },
+
+  /* ======================================================
+     DELETE EXAM
+  ====================================================== */
+  async deleteExam(id: string): Promise<boolean> {
+    const { error } = await supabase.from("exams").delete().eq("id", id)
+    return !error
+  },
+
+  /* ======================================================
      GET BY ID
-  ========================================= */
+  ====================================================== */
   async getById(id: string): Promise<Exam | null> {
     const { data, error } = await supabase
       .from("exams")
       .select("*")
       .eq("id", id)
-      .single();
+      .single()
 
-    if (error) return null;
-    return data as Exam;
+    if (error) return null
+    return data as Exam
   },
-
-  /* =========================================
-     DELETE (SOFT DELETE)
-  ========================================= */
-  async deleteExam(id: string): Promise<boolean> {
-    const { error } = await supabase
-      .from("exams")
-      .update({ is_deleted: true })
-      .eq("id", id);
-
-    return !error;
-  },
-};
+}
