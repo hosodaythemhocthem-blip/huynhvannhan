@@ -1,69 +1,63 @@
-
-import { supabase } from '../supabase';
+import { supabase } from "../supabase";
 
 export interface ChatMessage {
   id: string;
   user_id: string;
-  role: 'user' | 'ai';
+  role: "user" | "ai";
   text: string;
   created_at: string;
 }
 
-/**
- * Khởi tạo hội thoại (có thể mở rộng để check session)
- */
-export const initConversation = async () => {
-  return true;
-};
+export const chatService = {
+  async fetchChatHistory(userId: string): Promise<ChatMessage[]> {
+    const { data, error } = await supabase
+      .from("chats")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
 
-/**
- * Lấy lịch sử chat của người dùng từ Supabase
- */
-export const fetchChatHistory = async (userId: string): Promise<ChatMessage[]> => {
-  const { data, error } = await supabase.from('chats').select();
-  if (error) return [];
-  
-  return (data as ChatMessage[])
-    .filter(m => m.user_id === userId)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-};
+    if (error) return [];
+    return (data as ChatMessage[]) ?? [];
+  },
 
-/**
- * Lưu tin nhắn mới vào Supabase
- */
-export const saveChatMessage = async (userId: string, role: 'user' | 'ai', text: string): Promise<ChatMessage | null> => {
-  const newMessage: ChatMessage = {
-    id: Math.random().toString(36).substr(2, 9),
-    user_id: userId,
-    role,
-    text,
-    created_at: new Date().toISOString()
-  };
-  
-  const { error } = await supabase.from('chats').insert(newMessage);
-  if (error) {
-    console.error("Lỗi lưu tin nhắn:", error);
-    return null;
-  }
-  return newMessage;
-};
+  async saveMessage(
+    userId: string,
+    role: "user" | "ai",
+    text: string
+  ): Promise<ChatMessage | null> {
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      role,
+      text,
+      created_at: new Date().toISOString(),
+    };
 
-/**
- * Xóa một tin nhắn cụ thể
- */
-export const deleteChatMessage = async (id: string) => {
-  return await supabase.from('chats').delete(id);
-};
+    const { error } = await supabase.from("chats").insert(message);
 
-/**
- * Xóa toàn bộ lịch sử chat của người dùng
- */
-export const clearChatHistory = async (userId: string) => {
-  const { data } = await supabase.from('chats').select();
-  const messagesToDelete = (data as ChatMessage[]).filter(m => m.user_id === userId);
-  
-  for (const msg of messagesToDelete) {
-    await supabase.from('chats').delete(msg.id);
-  }
-  return { error: null };
+    if (error) {
+      console.error("Save chat error:", error);
+      return null;
+    }
+
+    return message;
+  },
+
+  async deleteMessage(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("chats")
+      .delete()
+      .eq("id", id);
+
+    return !error;
+  },
+
+  async clearHistory(userId: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("chats")
+      .delete()
+      .eq("user_id", userId);
+
+    return !error;
+  },
 };
