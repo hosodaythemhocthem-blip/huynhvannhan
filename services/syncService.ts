@@ -1,70 +1,62 @@
-import { supabase } from "../supabase";
-import { User } from "../types";
+import { supabase } from "../supabase"
+import { User } from "../types"
 
 export const SyncService = {
-  generateSyncId: (email: string): string => {
-    return `sync_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+  generateSyncId(email: string): string {
+    return `sync_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`
   },
 
   async getPendingStudents(): Promise<User[]> {
-    try {
-      const { data, error } = await (supabase.from('users') as any)
-        .eq('role', 'student')
-        .select();
-      if (error) throw error;
-      return (data as User[] || []).filter(u => !u.isApproved);
-    } catch (err) {
-      console.error("Lỗi lấy danh sách học sinh chờ duyệt:", err);
-      return [];
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "student")
+      .eq("status", "pending")
+
+    if (error) {
+      console.error(error)
+      return []
     }
+
+    return data as User[]
   },
 
   async approveStudent(userId: string): Promise<boolean> {
-    try {
-      const { error } = await (supabase.from('users') as any)
-        .update(userId, { isApproved: true, updated_at: new Date().toISOString() });
-      if (error) throw error;
-      return true;
-    } catch (err) {
-      console.error("Lỗi phê duyệt học sinh:", err);
-      return false;
-    }
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        status: "active",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+
+    return !error
   },
 
   async pushAppState(syncId: string, payload: any): Promise<boolean> {
-    try {
-      const { error } = await (supabase.from('app_sync') as any).insert({
+    const { error } = await supabase
+      .from("app_sync")
+      .upsert({
         id: syncId,
-        payload: payload,
-        updated_at: new Date().toISOString()
-      });
-      if (error) {
-        const { error: updateError } = await (supabase.from('app_sync') as any)
-          .update(syncId, { payload: payload, updated_at: new Date().toISOString() });
-        if (updateError) throw updateError;
-      }
-      return true;
-    } catch (err) {
-      console.error("Lỗi đồng bộ dữ liệu lên Cloud:", err);
-      return false;
-    }
+        payload,
+        updated_at: new Date().toISOString(),
+      })
+
+    return !error
   },
 
   async pullAppState(syncId: string): Promise<any | null> {
-    try {
-      const { data, error } = await (supabase.from('app_sync') as any)
-        .eq('id', syncId)
-        .select();
-      if (error) throw error;
-      if (data && data.length > 0) return data[0].payload;
-      return null;
-    } catch (err) {
-      console.error("Lỗi lấy dữ liệu từ Cloud:", err);
-      return null;
-    }
+    const { data, error } = await supabase
+      .from("app_sync")
+      .select("*")
+      .eq("id", syncId)
+      .single()
+
+    if (error || !data) return null
+    return data.payload
   },
 
   async deleteSyncData(syncId: string): Promise<void> {
-    await (supabase.from('app_sync') as any).delete(syncId);
-  }
-};
+    await supabase.from("app_sync").delete().eq("id", syncId)
+  },
+}
