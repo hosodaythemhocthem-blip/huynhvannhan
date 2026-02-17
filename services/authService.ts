@@ -1,10 +1,6 @@
 import { supabase } from "../supabase"
 import { User } from "../types"
 
-/* ======================================================
-   AUTH SERVICE - LMS PRO MAX VERSION
-====================================================== */
-
 export const authService = {
   /* ================= SIGN IN ================= */
   async signIn(email: string, password: string): Promise<User | null> {
@@ -14,8 +10,7 @@ export const authService = {
     })
 
     if (error || !data.user) {
-      console.error("Login error:", error?.message)
-      return null
+      throw new Error("Sai email hoặc mật khẩu.")
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -25,20 +20,10 @@ export const authService = {
       .single()
 
     if (profileError || !profile) {
-      console.error("Profile error:", profileError?.message)
-      return null
-    }
-
-    if (profile.status === "pending") {
-      throw new Error("Tài khoản đang chờ giáo viên duyệt.")
-    }
-
-    if (profile.status === "suspended") {
-      throw new Error("Tài khoản đã bị khóa.")
+      throw new Error("Không tìm thấy hồ sơ người dùng.")
     }
 
     localStorage.setItem("lms_user", JSON.stringify(profile))
-
     return profile as User
   },
 
@@ -58,8 +43,7 @@ export const authService = {
     })
 
     if (error || !data.user) {
-      console.error(error?.message)
-      return false
+      throw new Error("Email đã tồn tại hoặc không hợp lệ.")
     }
 
     const now = new Date().toISOString()
@@ -75,8 +59,7 @@ export const authService = {
     })
 
     if (insertError) {
-      console.error(insertError.message)
-      return false
+      throw new Error("Lỗi tạo hồ sơ người dùng.")
     }
 
     return true
@@ -88,19 +71,20 @@ export const authService = {
 
     const { data: existing } = await supabase
       .from("users")
-      .select("id")
+      .select("*")
       .eq("email", email)
       .maybeSingle()
 
     if (existing) return
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.admin.createUser({
       email,
       password: "huynhvannhan2020",
+      email_confirm: true,
     })
 
     if (error || !data.user) {
-      console.error("Create teacher auth error:", error?.message)
+      console.error("Create teacher failed:", error?.message)
       return
     }
 
@@ -117,19 +101,6 @@ export const authService = {
     })
   },
 
-  /* ================= APPROVE STUDENT ================= */
-  async approveStudent(userId: string): Promise<boolean> {
-    const { error } = await supabase
-      .from("users")
-      .update({
-        status: "approved",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-
-    return !error
-  },
-
   /* ================= SIGN OUT ================= */
   async signOut(): Promise<void> {
     await supabase.auth.signOut()
@@ -137,8 +108,16 @@ export const authService = {
   },
 
   /* ================= GET CURRENT USER ================= */
-  getCurrentUser(): User | null {
-    const stored = localStorage.getItem("lms_user")
-    return stored ? JSON.parse(stored) : null
+  async getCurrentUser(): Promise<User | null> {
+    const { data } = await supabase.auth.getUser()
+    if (!data.user) return null
+
+    const { data: profile } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", data.user.id)
+      .single()
+
+    return profile ?? null
   },
 }
