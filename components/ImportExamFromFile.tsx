@@ -1,9 +1,11 @@
+// components/ImportExamFromFile.tsx
+
 import React, { useState } from "react";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker?url";
+import workerSrc from "pdfjs-dist/build/pdf.worker.min?url";
 
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc;
 
 interface Props {
   onImport: (content: string) => void;
@@ -19,14 +21,14 @@ const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
       setFileName(file.name);
 
       if (file.name.endsWith(".docx")) {
-        const arrayBuffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer });
+        const buffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
         onImport(result.value.trim());
       }
 
       if (file.name.endsWith(".pdf")) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
         let text = "";
 
@@ -44,7 +46,7 @@ const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
       }
     } catch (error) {
       console.error("Import error:", error);
-      alert("Lỗi khi đọc file. Vui lòng thử lại.");
+      alert("Không thể đọc file.");
     } finally {
       setLoading(false);
     }
@@ -55,17 +57,12 @@ const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
       <input
         type="file"
         accept=".docx,.pdf"
-        onChange={(e) => {
-          if (e.target.files?.[0]) {
-            handleFile(e.target.files[0]);
-          }
-        }}
-        className="w-full"
+        onChange={(e) => e.target.files && handleFile(e.target.files[0])}
       />
 
       {fileName && (
-        <div className="text-sm text-gray-500 flex justify-between items-center">
-          <span>Đã tải: {fileName}</span>
+        <div className="text-sm text-gray-500 flex justify-between">
+          <span>{fileName}</span>
           <button
             onClick={() => {
               setFileName(null);
@@ -78,9 +75,7 @@ const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
         </div>
       )}
 
-      {loading && (
-        <p className="text-blue-500 text-sm">Đang xử lý file...</p>
-      )}
+      {loading && <p className="text-blue-500 text-sm">Đang xử lý...</p>}
     </div>
   );
 };
