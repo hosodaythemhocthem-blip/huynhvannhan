@@ -1,4 +1,4 @@
-import React from "react"
+import React from "react";
 
 const ComponentGallery: React.FC = () => {
   return (
@@ -11,7 +11,7 @@ const ComponentGallery: React.FC = () => {
         Khu vực thử nghiệm component.
       </p>
     </div>
-  )
-}
+  );
+};
 
-export default ComponentGallery
+export default ComponentGallery;
