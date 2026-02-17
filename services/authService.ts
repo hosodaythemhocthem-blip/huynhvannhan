@@ -34,9 +34,8 @@ export const authService = {
   async register(
     email: string,
     fullName: string,
-    classInfo: { id: string; name: string }
+    classId: string
   ): Promise<void> {
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password: "12345678",
@@ -52,13 +51,13 @@ export const authService = {
       full_name: fullName,
       role: "student",
       status: "pending",
-      class_id: classInfo.id,
+      class_id: classId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
 
     if (profileError) {
-      throw new Error(profileError.message)
+      throw new Error("Không thể tạo hồ sơ người dùng.")
     }
   },
 
@@ -72,13 +71,13 @@ export const authService = {
 
     if (!user) return null
 
-    const { data: profile } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single()
 
-    return profile as User
+    return data as User
   },
 
   /* ======================================================
