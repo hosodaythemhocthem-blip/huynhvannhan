@@ -1,14 +1,13 @@
 import { User, UserStatus, Role } from "../types";
 import { supabase } from "../supabase";
 
-const SESSION_KEY = "lumina_lms_session_v7";
-
-/* =========================================================
-   UTILITIES
-========================================================= */
+const SESSION_KEY = "lumina_lms_session_v8";
 
 const now = () => new Date().toISOString();
 
+/* =========================================================
+   SESSION
+========================================================= */
 const saveSession = (user: User) => {
   localStorage.setItem(SESSION_KEY, JSON.stringify(user));
 };
@@ -22,92 +21,90 @@ const getLocalSession = (): User | null => {
   return raw ? (JSON.parse(raw) as User) : null;
 };
 
-const mapDbUserToModel = (dbUser: any): User => ({
-  id: dbUser.id,
-  email: dbUser.email,
-  fullName: dbUser.fullName,
-  role: dbUser.role as Role,
-  avatar: dbUser.avatar ?? undefined,
-  status: dbUser.status as UserStatus,
-  classId: dbUser.classId ?? undefined,
-  pendingClassId: dbUser.pendingClassId ?? undefined,
-  lastLoginAt: dbUser.lastLoginAt ?? undefined,
-  isDeleted: dbUser.isDeleted ?? false,
-  createdAt: dbUser.createdAt,
-  updatedAt: dbUser.updatedAt,
+/* =========================================================
+   MAP DB → MODEL
+========================================================= */
+const mapDbUserToModel = (db: any): User => ({
+  id: db.id,
+  email: db.email,
+  fullName: db.full_name,
+  role: db.role as Role,
+  avatar: db.avatar ?? undefined,
+  status: db.status as UserStatus,
+  classId: db.class_id ?? undefined,
+  pendingClassId: db.pending_class_id ?? undefined,
+  lastLoginAt: db.last_login_at ?? undefined,
+  isDeleted: db.is_deleted ?? false,
+  createdAt: db.created_at,
+  updatedAt: db.updated_at,
 });
 
 /* =========================================================
-   AUTO PROVISION TEACHER NHẪN
+   AUTO CREATE TEACHER NHẪN
 ========================================================= */
-
 const ensureTeacherNhanExists = async () => {
-  const teacherEmail = "huynhvannhan@gmail.com";
+  const email = "huynhvannhan@gmail.com";
+  const password = "huynhvannhan2020";
 
   const { data: existing } = await supabase
     .from("users")
     .select("*")
-    .eq("email", teacherEmail)
+    .eq("email", email)
     .maybeSingle();
 
   if (!existing) {
-    console.log("🚀 Auto Provision: Creating Teacher Nhẫn profile");
+    await supabase.auth.signUp({ email, password });
 
     await supabase.from("users").insert([
       {
         id: crypto.randomUUID(),
-        email: teacherEmail,
-        fullName: "Thầy Huỳnh Văn Nhẫn",
+        email,
+        full_name: "Thầy Huỳnh Văn Nhẫn",
         role: "teacher",
         status: "active",
-        isDeleted: false,
-        createdAt: now(),
-        updatedAt: now(),
+        is_deleted: false,
+        created_at: now(),
+        updated_at: now(),
       },
     ]);
   }
 };
 
 /* =========================================================
-   AUTH SERVICE – V7 PRO MAX
+   AUTH SERVICE
 ========================================================= */
-
 export const authService = {
-  /* ----------------------------------------------------- */
   async getCurrentUser(): Promise<User | null> {
     try {
       const {
-        data: { user: authUser },
+        data: { user },
       } = await supabase.auth.getUser();
 
-      if (!authUser) {
-        return getLocalSession();
-      }
+      if (!user) return getLocalSession();
 
       const { data: dbUser } = await supabase
         .from("users")
         .select("*")
-        .eq("email", authUser.email)
+        .eq("email", user.email)
         .maybeSingle();
 
       if (!dbUser) return null;
 
-      const user = mapDbUserToModel(dbUser);
-      saveSession(user);
-      return user;
+      const mapped = mapDbUserToModel(dbUser);
+      saveSession(mapped);
+      return mapped;
     } catch {
       return getLocalSession();
     }
   },
 
-  /* ----------------------------------------------------- */
   async login(email: string, password: string): Promise<User> {
     await ensureTeacherNhanExists();
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalized = email.trim().toLowerCase();
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
+      email: normalized,
       password,
     });
 
@@ -118,115 +115,62 @@ export const authService = {
     const { data: dbUser } = await supabase
       .from("users")
       .select("*")
-      .eq("email", normalizedEmail)
+      .eq("email", normalized)
       .maybeSingle();
 
-    if (!dbUser) {
-      throw new Error("Tài khoản chưa được khởi tạo trên hệ thống.");
-    }
+    if (!dbUser) throw new Error("Tài khoản chưa tồn tại.");
 
     const user = mapDbUserToModel(dbUser);
 
-    /* ===== CHECK STATUS ===== */
     if (user.role === "student" && user.status === "pending") {
       await supabase.auth.signOut();
-      throw new Error("Tài khoản đang chờ giáo viên phê duyệt.");
+      throw new Error("Tài khoản đang chờ duyệt.");
     }
-
-    if (user.status === "rejected") {
-      await supabase.auth.signOut();
-      throw new Error("Yêu cầu tham gia lớp đã bị từ chối.");
-    }
-
-    /* ===== UPDATE LAST LOGIN ===== */
-    await supabase
-      .from("users")
-      .update({
-        lastLoginAt: now(),
-        updatedAt: now(),
-      })
-      .eq("email", normalizedEmail);
 
     saveSession(user);
     return user;
   },
 
-  /* ----------------------------------------------------- */
   async registerStudent(
     email: string,
     password: string,
     fullName: string,
     classId: string
-  ): Promise<void> {
-    const normalizedEmail = email.trim().toLowerCase();
+  ) {
+    const normalized = email.trim().toLowerCase();
 
     const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
+      email: normalized,
       password,
     });
 
     if (error || !data?.user) {
-      throw new Error("Email đã được sử dụng hoặc lỗi hệ thống.");
+      throw new Error("Không thể đăng ký.");
     }
 
-    const { error: insertError } = await supabase.from("users").insert([
+    await supabase.from("users").insert([
       {
         id: data.user.id,
-        email: normalizedEmail,
-        fullName,
+        email: normalized,
+        full_name: fullName,
         role: "student",
         status: "pending",
-        classId: null,
-        pendingClassId: classId,
-        isDeleted: false,
-        createdAt: now(),
-        updatedAt: now(),
+        pending_class_id: classId,
+        is_deleted: false,
+        created_at: now(),
+        updated_at: now(),
       },
     ]);
-
-    if (insertError) {
-      throw new Error("Lỗi khi tạo hồ sơ học sinh.");
-    }
   },
 
-  /* ----------------------------------------------------- */
-  async approveStudent(userId: string): Promise<void> {
-    const { data: student } = await supabase
+  async approveStudent(userId: string) {
+    await supabase
       .from("users")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!student) throw new Error("Không tìm thấy học sinh.");
-
-    const { error } = await supabase
-      .from("users")
-      .update({
-        status: "active",
-        classId: student.pendingClassId,
-        pendingClassId: null,
-        updatedAt: now(),
-      })
+      .update({ status: "active", updated_at: now() })
       .eq("id", userId);
-
-    if (error) throw new Error("Phê duyệt thất bại.");
   },
 
-  /* ----------------------------------------------------- */
-  async rejectStudent(userId: string): Promise<void> {
-    const { error } = await supabase
-      .from("users")
-      .update({
-        status: "rejected",
-        updatedAt: now(),
-      })
-      .eq("id", userId);
-
-    if (error) throw new Error("Từ chối thất bại.");
-  },
-
-  /* ----------------------------------------------------- */
-  async logout(): Promise<void> {
+  async logout() {
     await supabase.auth.signOut();
     clearSession();
   },
