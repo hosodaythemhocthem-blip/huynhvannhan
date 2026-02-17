@@ -1,103 +1,104 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react"
 import {
   GraduationCap,
-  Mail,
-  Lock,
-  User as UserIcon,
-  Loader2,
-  ArrowRight,
-  ShieldCheck,
-  Zap,
   UserPlus,
-  School,
-} from "lucide-react";
-import { User } from "../types";
-import { authService } from "../services/authService";
-import { supabase } from "../supabase";
-import { useToast } from "../components/Toast";
-import { motion, AnimatePresence } from "framer-motion";
+  Loader2,
+} from "lucide-react"
+import { User } from "../types"
+import { authService } from "../services/authService"
+import { supabase } from "../supabase"
+import { useToast } from "../components/Toast"
+import { motion, AnimatePresence } from "framer-motion"
 
-const MotionDiv = motion.div as any;
+const MotionDiv = motion.div as any
 
 interface Props {
-  onLogin: (user: User) => void;
+  onLogin: (user: User) => void
 }
 
 const LoginScreen: React.FC<Props> = ({ onLogin }) => {
-  const { showToast } = useToast();
+  const { showToast } = useToast()
 
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [selectedClassId, setSelectedClassId] = useState("");
-  const [classes, setClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [fullName, setFullName] = useState("")
+  const [selectedClassId, setSelectedClassId] = useState("")
+  const [classes, setClasses] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
 
-  /* ======================================================
-     LOAD CLASSES
-  ====================================================== */
+  /* ================= LOAD CLASSES ================= */
   useEffect(() => {
     const loadClasses = async () => {
-      const { data } = await supabase.from("classes").select();
-      setClasses(data || []);
-    };
-    loadClasses();
-  }, []);
+      const { data } = await supabase.from("classes").select()
+      setClasses(data || [])
+    }
+    loadClasses()
 
-  /* ======================================================
-     HANDLE AUTH
-  ====================================================== */
+    // đảm bảo teacher mặc định tồn tại
+    authService.ensureDefaultTeacher()
+  }, [])
+
+  /* ================= HANDLE AUTH ================= */
   const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
 
     try {
       if (isLogin) {
-        const user = await authService.login(email.trim(), password);
-        onLogin(user);
+        const user = await authService.signIn(
+          email.trim(),
+          password
+        )
+
+        if (!user) throw new Error("Sai email hoặc mật khẩu.")
+
+        if (user.role === "student" && user.status !== "approved") {
+          throw new Error(
+            "Tài khoản đang chờ giáo viên duyệt."
+          )
+        }
 
         showToast(
-          `Chào mừng ${user.full_name} quay trở lại!`,
+          `Chào mừng ${user.full_name}!`,
           "success"
-        );
+        )
+
+        onLogin(user)
       } else {
         if (!fullName.trim())
-          throw new Error("Vui lòng nhập họ và tên.");
+          throw new Error("Vui lòng nhập họ tên.")
 
         if (!selectedClassId)
-          throw new Error("Vui lòng chọn lớp.");
+          throw new Error("Vui lòng chọn lớp.")
 
-        const cls = classes.find(
-          (c) => String(c.id) === String(selectedClassId)
-        );
-
-        if (!cls) throw new Error("Lớp không hợp lệ.");
-
-        await authService.register(
+        const success = await authService.signUpStudent(
           email.trim(),
-          fullName.trim(),
-          { id: cls.id, name: cls.name }
-        );
+          password,
+          fullName.trim()
+        )
+
+        if (!success)
+          throw new Error("Đăng ký thất bại.")
 
         showToast(
-          "Đăng ký thành công! Chờ giáo viên duyệt nhé.",
+          "Đăng ký thành công! Chờ giáo viên duyệt.",
           "success"
-        );
+        )
 
-        setIsLogin(true);
-        setFullName("");
-        setSelectedClassId("");
+        setIsLogin(true)
+        setFullName("")
+        setSelectedClassId("")
       }
     } catch (err: any) {
-      showToast(err.message || "Có lỗi xảy ra.", "error");
+      showToast(err.message || "Có lỗi xảy ra.", "error")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">
       <AnimatePresence mode="wait">
         <MotionDiv
           key={isLogin ? "login" : "register"}
@@ -116,7 +117,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
               )}
             </div>
 
-            <h1 className="text-3xl font-black text-white mb-2">
+            <h1 className="text-3xl font-black text-white">
               NhanLMS Elite
             </h1>
           </div>
@@ -136,7 +137,9 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                 <select
                   required
                   value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
+                  onChange={(e) =>
+                    setSelectedClassId(e.target.value)
+                  }
                   className="w-full px-5 py-3 bg-[#0f172a] border border-white/10 rounded-xl text-white"
                 >
                   <option value="">-- Chọn lớp --</option>
@@ -169,13 +172,15 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
             <button
               disabled={loading}
-              className="w-full bg-indigo-600 py-3 rounded-xl font-bold text-white"
+              className="w-full bg-indigo-600 py-3 rounded-xl font-bold text-white flex justify-center"
             >
-              {loading
-                ? "Đang xử lý..."
-                : isLogin
-                ? "ĐĂNG NHẬP"
-                : "ĐĂNG KÝ"}
+              {loading ? (
+                <Loader2 className="animate-spin" />
+              ) : isLogin ? (
+                "ĐĂNG NHẬP"
+              ) : (
+                "ĐĂNG KÝ"
+              )}
             </button>
           </form>
 
@@ -192,7 +197,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         </MotionDiv>
       </AnimatePresence>
     </div>
-  );
-};
+  )
+}
 
-export default LoginScreen;
+export default LoginScreen
