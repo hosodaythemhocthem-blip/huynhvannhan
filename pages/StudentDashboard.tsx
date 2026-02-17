@@ -3,8 +3,6 @@ import { User } from "../types"
 
 interface Props {
   user: User
-  activeTab: string
-  onStartExam: (exam: any) => void
 }
 
 const StudentDashboard: React.FC<Props> = ({ user }) => {
@@ -14,9 +12,15 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
         Học sinh: {user.full_name}
       </h1>
 
-      <p className="mt-4 text-slate-400">
-        Trạng thái: {user.status}
-      </p>
+      <div className="mt-6 bg-white/5 p-6 rounded-xl">
+        <p className="text-slate-400">
+          Trạng thái tài khoản:
+        </p>
+
+        <p className="mt-2 font-bold text-indigo-400">
+          {user.status}
+        </p>
+      </div>
     </div>
   )
 }
