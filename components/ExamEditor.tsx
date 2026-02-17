@@ -10,49 +10,52 @@ interface Props {
 }
 
 const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
-  const [title, setTitle] = useState(exam?.title || "");
+  const [title, setTitle] = useState(exam?.title ?? "");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [saving, setSaving] = useState(false);
 
+  /* ================= INIT FROM RAW ================= */
   useEffect(() => {
-    if (exam?.raw_content) {
-      const parsed: Question[] = exam.raw_content
-        .split(/\n+/)
-        .filter(Boolean)
-        .map((line, index) => ({
-          id: crypto.randomUUID(),
-          exam_id: exam.id,
-          content: line,
-          type: "essay",
-          points: 1,
-          order: index + 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
+    if (!exam?.raw_content) return;
 
-      setQuestions(parsed);
-    }
+    const parsed: Question[] = exam.raw_content
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line, index) => ({
+        id: crypto.randomUUID(),
+        exam_id: exam.id,
+        content: line,
+        type: "essay",
+        points: 1,
+        order: index + 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+
+    setQuestions(parsed);
   }, [exam]);
 
+  /* ================= CRUD ================= */
+
   const addQuestion = () => {
-    setQuestions((prev) => [
+    setQuestions(prev => [
       ...prev,
       {
         id: crypto.randomUUID(),
-        exam_id: exam?.id || "",
+        exam_id: exam?.id ?? "",
         content: "",
         type: "essay",
         points: 1,
         order: prev.length + 1,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      },
+      }
     ]);
   };
 
   const updateQuestion = (id: string, content: string) => {
-    setQuestions((prev) =>
-      prev.map((q) =>
+    setQuestions(prev =>
+      prev.map(q =>
         q.id === id
           ? { ...q, content, updated_at: new Date().toISOString() }
           : q
@@ -61,8 +64,8 @@ const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
   };
 
   const deleteQuestion = (id: string) => {
-    if (!confirm("Bạn chắc chắn muốn xóa câu hỏi này?")) return;
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    if (!confirm("Xóa câu hỏi này?")) return;
+    setQuestions(prev => prev.filter(q => q.id !== id));
   };
 
   const handleImport = (text: string) => {
@@ -71,7 +74,7 @@ const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
       .filter(Boolean)
       .map((line, index) => ({
         id: crypto.randomUUID(),
-        exam_id: exam?.id || "",
+        exam_id: exam?.id ?? "",
         content: line,
         type: "essay",
         points: 1,
@@ -83,21 +86,28 @@ const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
     setQuestions(parsed);
   };
 
+  /* ================= SAVE ================= */
+
   const handleSave = useCallback(async () => {
+    if (!title.trim()) {
+      alert("Vui lòng nhập tiêu đề đề thi");
+      return;
+    }
+
     try {
       setSaving(true);
 
       await examService.saveExam({
-        id: exam?.id || crypto.randomUUID(),
+        id: exam?.id ?? crypto.randomUUID(),
         title,
         teacher_id: teacherId,
         description: null,
         is_locked: false,
         is_archived: false,
         file_url: null,
-        raw_content: questions.map((q) => q.content).join("\n"),
+        raw_content: questions.map(q => q.content).join("\n"),
         total_points: questions.reduce((sum, q) => sum + q.points, 0),
-        version: 1,
+        version: exam?.version ?? 1,
       });
 
       alert("Đã lưu thành công!");
@@ -109,15 +119,7 @@ const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
     }
   }, [title, questions, teacherId, exam]);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (title || questions.length > 0) {
-        handleSave();
-      }
-    }, 3000);
-
-    return () => clearTimeout(timeout);
-  }, [title, questions, handleSave]);
+  /* ================= UI ================= */
 
   return (
     <div className="space-y-6">
@@ -130,7 +132,7 @@ const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
         className="border p-3 w-full rounded-lg"
       />
 
-      {questions.map((q) => (
+      {questions.map(q => (
         <div key={q.id} className="border p-4 rounded-xl bg-gray-50 space-y-3">
           <textarea
             value={q.content}
