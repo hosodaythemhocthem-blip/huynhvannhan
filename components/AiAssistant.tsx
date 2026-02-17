@@ -1,151 +1,75 @@
-// components/AiAssistant.tsx
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-} from "react";
+// components/AiExamGenerator.tsx
+import React, { useState, useRef } from "react";
 import {
-  Send,
-  X,
+  Upload,
   Sparkles,
   Loader2,
-  Paperclip,
-  Clipboard,
-  RotateCcw,
-  Maximize2,
-  Minimize2,
-  Bot,
+  Save,
   Trash2,
+  ClipboardPaste,
+  X,
 } from "lucide-react";
-import { askGemini } from "../services/geminiService";
-import MathPreview from "./MathPreview";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
+import MathPreview from "./MathPreview";
+import { geminiService } from "../services/geminiService";
 import { supabase } from "../supabase";
-import { motion, AnimatePresence } from "framer-motion";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-interface Message {
-  id: string;
-  user_id: string;
-  role: "user" | "ai";
+interface Question {
   text: string;
-  created_at: string;
+  options: string[];
+  correctAnswer?: number;
 }
 
-interface Props {
-  user: { id: string; fullName: string };
-  context?: string;
+interface PreviewExam {
+  title: string;
+  questions: Question[];
 }
 
-const MotionDiv = motion.div;
-
-const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+const AiExamGenerator: React.FC<{
+  userId: string;
+  onGenerate: any;
+}> = ({ userId, onGenerate }) => {
+  const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
+  const [previewExam, setPreviewExam] = useState<PreviewExam | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  /* ================= GENERATE ================= */
+  const handleGenerate = async (text: string) => {
+    if (!text.trim() || loading) return;
 
-  /* ================= LOAD HISTORY ================= */
-  const loadChatHistory = async () => {
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: true });
-
-    if (!error && data) setMessages(data as Message[]);
-  };
-
-  useEffect(() => {
-    if (isOpen) loadChatHistory();
-  }, [isOpen]);
-
-  const scrollToBottom = useCallback(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(scrollToBottom, [messages, loading]);
-
-  /* ================= SEND ================= */
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-
-    const cleanInput = input.trim().slice(0, 6000);
-    setInput("");
     setLoading(true);
 
     try {
-      const { data: userMsg } = await supabase
-        .from("messages")
-        .insert({
-          user_id: user.id,
-          role: "user",
-          text: cleanInput,
-        })
-        .select()
-        .single();
+      const data = await geminiService.parseExamWithAI(
+        text.trim().slice(0, 8000)
+      );
 
-      if (userMsg) setMessages((prev) => [...prev, userMsg as Message]);
-
-      const aiResponse = await askGemini(cleanInput, context);
-
-      const { data: aiMsg } = await supabase
-        .from("messages")
-        .insert({
-          user_id: user.id,
-          role: "ai",
-          text: aiResponse,
-        })
-        .select()
-        .single();
-
-      if (aiMsg) setMessages((prev) => [...prev, aiMsg as Message]);
+      if (data?.questions?.length) {
+        setPreviewExam(data);
+        onGenerate?.(data);
+      } else {
+        alert("AI chưa nhận diện được câu hỏi.");
+      }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          user_id: user.id,
-          role: "ai",
-          text: "⚠ Lumina AI đang quá tải. Thầy thử lại nhé.",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      alert("AI đang bận. Thầy thử lại nhé.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ================= DELETE SINGLE ================= */
-  const deleteMessage = async (id: string) => {
-    await supabase.from("messages").delete().eq("id", id);
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  };
-
-  /* ================= CLEAR ALL ================= */
-  const handleClearChat = async () => {
-    if (!confirm("Xóa toàn bộ lịch sử?")) return;
-
-    await supabase.from("messages").delete().eq("user_id", user.id);
-    setMessages([]);
-  };
-
-  /* ================= PASTE ================= */
-  const handlePaste = async () => {
-    const text = await navigator.clipboard.readText();
-    setInput((prev) => prev + text);
-  };
-
   /* ================= FILE IMPORT ================= */
   const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File quá lớn (tối đa 5MB)");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -166,7 +90,7 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
         text = result.value;
       }
 
-      setInput(`Phân tích đề sau:\n\n${text.slice(0, 5000)}`);
+      setTopic(text.slice(0, 8000));
     } catch {
       alert("Không đọc được file.");
     } finally {
@@ -174,129 +98,165 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
     }
   };
 
+  /* ================= SAVE ================= */
+  const saveToCloud = async () => {
+    if (!previewExam || loading) return;
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.from("exams").insert({
+        teacher_id: userId,
+        title: previewExam.title,
+        questions: previewExam.questions,
+      });
+
+      if (error) throw error;
+
+      alert("Đã lưu đề vĩnh viễn!");
+      setPreviewExam(null);
+      setTopic("");
+    } catch {
+      alert("Lỗi khi lưu đề.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ================= DELETE QUESTION ================= */
+  const deleteQuestion = (index: number) => {
+    if (!previewExam) return;
+
+    const updated = {
+      ...previewExam,
+      questions: previewExam.questions.filter((_, i) => i !== index),
+    };
+
+    setPreviewExam(updated);
+  };
+
+  /* ================= PASTE ================= */
+  const handlePaste = async () => {
+    const text = await navigator.clipboard.readText();
+    setTopic((prev) => prev + text);
+  };
+
   return (
-    <div className="fixed bottom-8 right-8 z-[9999]">
-      <AnimatePresence>
-        {!isOpen ? (
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setIsOpen(true)}
-            className="w-16 h-16 bg-slate-900 text-white rounded-3xl shadow-2xl flex items-center justify-center"
+    <div className="space-y-6">
+      {/* INPUT BLOCK */}
+      <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100">
+        <h3 className="text-2xl font-black italic mb-6">
+          AI Exam Engine v7.0
+        </h3>
+
+        <textarea
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          className="w-full p-6 bg-slate-50 rounded-2xl min-h-[150px] outline-none shadow-inner"
+          placeholder="Dán nội dung đề thô tại đây..."
+        />
+
+        <div className="flex gap-3 mt-4 justify-end">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="p-4 text-slate-600 hover:bg-slate-100 rounded-xl"
           >
-            <Sparkles size={28} className="text-indigo-400" />
-          </motion.button>
-        ) : (
-          <MotionDiv
-            initial={{ opacity: 0, y: 80 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 80 }}
-            className={`bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-500 ${
-              isExpanded ? "w-[80vw] h-[80vh]" : "w-[420px] h-[650px]"
-            }`}
+            <Upload size={20} />
+          </button>
+
+          <button
+            onClick={handlePaste}
+            className="p-4 text-indigo-600 hover:bg-indigo-50 rounded-xl"
           >
-            {/* HEADER */}
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <div className="flex gap-2 items-center">
-                <Bot size={18} />
-                <span className="font-bold">Lumina AI</span>
-              </div>
+            <ClipboardPaste size={20} />
+          </button>
 
-              <div className="flex gap-3">
-                <button onClick={() => setIsExpanded(!isExpanded)}>
-                  {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                </button>
-                <button onClick={handleClearChat}>
-                  <RotateCcw size={18} />
-                </button>
-                <button onClick={() => setIsOpen(false)}>
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
+          <button
+            onClick={() => setTopic("")}
+            className="p-4 text-rose-500 hover:bg-rose-50 rounded-xl"
+          >
+            <Trash2 size={20} />
+          </button>
 
-            {/* BODY */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${
-                    msg.role === "user"
-                      ? "justify-end"
-                      : "justify-start"
-                  }`}
-                >
-                  <div className="relative max-w-[85%] p-4 rounded-2xl shadow bg-white border">
-                    <button
-                      onClick={() => deleteMessage(msg.id)}
-                      className="absolute top-2 right-2 opacity-40 hover:opacity-100"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+          <button
+            onClick={() => handleGenerate(topic)}
+            disabled={loading}
+            className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black flex items-center gap-2"
+          >
+            {loading ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Sparkles />
+            )}
+            TRÍCH XUẤT ĐỀ
+          </button>
+        </div>
 
-                    <MathPreview content={msg.text} />
-                  </div>
-                </div>
-              ))}
+        <input
+          type="file"
+          hidden
+          ref={fileRef}
+          accept=".pdf,.doc,.docx"
+          onChange={(e) =>
+            e.target.files && handleFileUpload(e.target.files[0])
+          }
+        />
+      </div>
 
-              {loading && (
-                <div className="flex items-center gap-2 text-slate-500">
-                  <Loader2 size={16} className="animate-spin" />
-                  Đang xử lý...
-                </div>
-              )}
+      {/* PREVIEW */}
+      {previewExam && (
+        <div className="bg-white p-8 rounded-[3rem] shadow-2xl border-t-4 border-indigo-600">
+          <div className="flex justify-between mb-8">
+            <h4 className="text-xl font-black uppercase italic text-indigo-900">
+              {previewExam.title}
+            </h4>
 
-              <div ref={chatEndRef} />
-            </div>
+            <button
+              onClick={saveToCloud}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2"
+            >
+              <Save size={18} /> LƯU CLOUD
+            </button>
+          </div>
 
-            {/* INPUT */}
-            <div className="p-4 border-t bg-white">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  (e.preventDefault(), handleSend())
-                }
-                className="w-full border rounded-xl p-3 resize-none"
-                placeholder="Nhập nội dung..."
-              />
-
-              <div className="flex justify-between mt-3">
-                <div className="flex gap-3">
-                  <button onClick={() => fileInputRef.current?.click()}>
-                    <Paperclip size={18} />
-                  </button>
-                  <button onClick={handlePaste}>
-                    <Clipboard size={18} />
-                  </button>
-                </div>
-
+          <div className="space-y-6">
+            {previewExam.questions.map((q, i) => (
+              <div
+                key={i}
+                className="p-6 bg-slate-50 rounded-2xl relative group"
+              >
                 <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || loading}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-xl"
+                  onClick={() => deleteQuestion(i)}
+                  className="absolute top-4 right-4 text-rose-500 opacity-40 hover:opacity-100"
                 >
-                  <Send size={16} />
+                  <X size={16} />
                 </button>
-              </div>
 
-              <input
-                type="file"
-                hidden
-                ref={fileInputRef}
-                accept=".pdf,.doc,.docx"
-                onChange={(e) =>
-                  e.target.files && handleFileUpload(e.target.files[0])
-                }
-              />
-            </div>
-          </MotionDiv>
-        )}
-      </AnimatePresence>
+                <MathPreview
+                  content={`${i + 1}. ${q.text}`}
+                  className="font-bold text-slate-800 mb-4"
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  {q.options?.map((opt, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-white rounded-lg border text-sm"
+                    >
+                      <span className="font-black text-indigo-600 mr-2">
+                        {String.fromCharCode(65 + idx)}.
+                      </span>
+                      <MathPreview content={opt} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default AiAssistant;
+export default AiExamGenerator;
