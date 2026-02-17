@@ -1,18 +1,24 @@
 /**
  * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V5
- * Backward Compatible + Supabase Ready + AI Ready
+ * Supabase Safe + File Import Ready + AI Ready + Math Render Optimized
  */
 
 export type Role = "teacher" | "student" | "admin";
 
 /* =====================================================
-   COMMON BASE MODEL
+   COMMON BASE MODEL (SUPABASE SAFE)
 ===================================================== */
 
 export interface BaseEntity {
   id: string;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+
+  createdBy?: string;
+  updatedBy?: string;
+
+  isDeleted?: boolean; // soft delete toàn hệ thống
+  version?: number; // optimistic locking
 }
 
 /* =====================================================
@@ -25,13 +31,14 @@ export interface User extends BaseEntity {
   role: Role;
 
   avatar?: string;
+
   isApproved?: boolean;
+  isActive?: boolean;
 
   classId?: string;
   className?: string;
 
   lastLoginAt?: string;
-  isActive?: boolean;
 }
 
 /* =====================================================
@@ -45,7 +52,11 @@ export interface UploadedFile extends BaseEntity {
   fileUrl: string;
   fileType: FileType;
   fileSize?: number;
+
   uploadedBy: string;
+
+  bucket?: string; // supabase storage bucket
+  originalText?: string; // raw text parsed from word/pdf
 }
 
 /* =====================================================
@@ -67,28 +78,21 @@ export enum QuestionType {
 export interface BaseQuestion extends BaseEntity {
   type: QuestionType;
 
-  /**
-   * Chuẩn mới dùng content
-   * Nhưng vẫn hỗ trợ text legacy
-   */
-  content: string;
-
-  /**
-   * Legacy support
-   */
-  text?: string;
-
+  content: string; // sẽ render bằng MathPreview (KaTeX)
   points: number;
 
   explanation?: string;
   section?: number;
+
   image_url?: string;
-  order?: number;
-  isDeleted?: boolean;
+
+  order: number;
+
+  aiGenerated?: boolean;
 }
 
 /* =====================================================
-   QUESTION TYPES
+   SPECIFIC QUESTION TYPES
 ===================================================== */
 
 export interface MCQQuestion extends BaseQuestion {
@@ -116,8 +120,14 @@ export interface EssayQuestion extends BaseQuestion {
 export interface MathQuestion extends BaseQuestion {
   type: QuestionType.MATH;
   correctAnswer: string;
+
   latexSource?: string;
+  renderMode?: "inline" | "block";
 }
+
+/* =====================================================
+   UNION QUESTION
+===================================================== */
 
 export type Question =
   | MCQQuestion
@@ -144,18 +154,16 @@ export interface Exam extends BaseEntity {
   grade: string;
 
   isLocked: boolean;
-  isPublished?: boolean;
-  isArchived?: boolean;
+  isPublished: boolean;
+  isArchived: boolean;
 
   assignedClassIds?: string[];
 
   file_url?: string;
   file_type?: FileType;
 
-  totalPoints?: number;
-  questionCount?: number;
-
-  version?: number;
+  totalPoints: number;
+  questionCount: number;
 
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
@@ -171,7 +179,7 @@ export interface ExamSubmission extends BaseEntity {
   examId: string;
   studentId: string;
 
-  answers: Record<string, any>;
+  answers: Record<string, string | number | boolean>;
 
   score?: number;
   graded?: boolean;
@@ -203,6 +211,7 @@ export interface Course extends BaseEntity {
 
 export interface Class extends BaseEntity {
   name: string;
+
   teacherId: string;
 
   studentCount?: number;
