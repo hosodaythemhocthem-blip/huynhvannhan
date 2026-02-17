@@ -2,149 +2,131 @@ import {
   User,
   Exam,
   QuestionType,
-  Course,
-  Class
+  Class,
 } from "../types";
 
 /* ======================================================
-   👤 USERS
+   🧠 UTILITIES
+====================================================== */
+
+const now = () => new Date().toISOString();
+
+const baseEntity = (id: string) => ({
+  id,
+  createdAt: now(),
+  updatedAt: now(),
+  isDeleted: false,
+});
+
+/* ======================================================
+   👤 HỆ THỐNG NGƯỜI DÙNG
 ====================================================== */
 
 export const MOCK_USERS: User[] = [
   {
-    id: "teacher-nhan",
+    ...baseEntity("teacher-nhan"),
     email: "huynhvannhan@gmail.com",
     fullName: "Thầy Huỳnh Văn Nhẫn",
     role: "teacher",
     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Nhan",
-    isApproved: true,
-    createdAt: new Date().toISOString(),
+    status: "active",
   },
   {
-    id: "student-01",
+    ...baseEntity("student-01"),
     email: "hocsinh1@gmail.com",
     fullName: "Nguyễn Văn Đạt",
     role: "student",
-    isApproved: true,
-    createdAt: new Date().toISOString(),
+    status: "active",
+    classId: "class-12a1",
   },
   {
-    id: "student-02",
+    ...baseEntity("student-02"),
     email: "hocsinh2@gmail.com",
     fullName: "Lê Thị Hồng",
     role: "student",
-    isApproved: false,
-    createdAt: new Date().toISOString(),
+    status: "pending",
+    pendingClassId: "class-12a1",
   },
 ];
 
 /* ======================================================
-   📝 EXAMS
+   📝 HỆ THỐNG ĐỀ THI MẪU (LATEX READY)
 ====================================================== */
 
 export const MOCK_EXAMS: Exam[] = [
   {
-    id: "exam-vinh-vien-01",
-    title:
-      "Chuyên đề: Đạo hàm và Ứng dụng tích phân $\\int_a^b f(x)dx$",
+    ...baseEntity("exam-vinh-vien-01"),
+
+    title: "Chuyên đề: Đạo hàm & Tích phân $I = \\int_a^b f(x)dx$",
     description:
-      "Bộ đề ôn luyện chuyên sâu tích hợp công thức LaTeX siêu đẹp.",
+      "Bộ đề ôn luyện chuyên sâu tích hợp công thức LaTeX chuẩn quốc tế.",
+
     teacherId: "teacher-nhan",
-    teacherName: "Thầy Huỳnh Văn Nhẫn",
-
     duration: 90,
-    subject: "Toán",
+    subject: "Toán học",
     grade: "12",
-
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-
-    isLocked: false,
     isPublished: true,
-    shuffleQuestions: false,
-    shuffleOptions: false,
 
-    totalPoints: 3,
+    totalPoints: 10,
     questionCount: 3,
 
     questions: [
       {
-        id: "q-math-1",
+        ...baseEntity("q-1"),
+        examId: "exam-vinh-vien-01",
         type: QuestionType.MCQ,
         content:
-          "Tính đạo hàm của $f(x)=\\sqrt{x^2+2x+5}$ tại $x=1$?",
-        options: [
-          "$\\frac{1}{2\\sqrt{8}}$",
-          "$\\frac{1}{2}$",
-          "$\\frac{3}{2\\sqrt{8}}$",
-          "$2\\sqrt{8}$",
-        ],
-        correctAnswer: 2,
-        points: 1,
+          "Tính đạo hàm của hàm số $f(x) = \\ln(x^2 + 1)$ tại điểm $x = 1$.",
+        options: ["$1$", "$\\frac{1}{2}$", "$2$", "$0$"],
+        correctAnswer: 0,
+        points: 3,
+        order: 1,
+        ai_suggested: false,
+        meta: {
+          source: "manual",
+        },
       },
       {
-        id: "q-math-2",
+        ...baseEntity("q-2"),
+        examId: "exam-vinh-vien-01",
+        type: QuestionType.MATH,
+        content:
+          "Tìm nguyên hàm của hàm số $g(x) = e^{2x} + \\sin(x)$.",
+        correctAnswer:
+          "$\\frac{1}{2}e^{2x} - \\cos(x) + C$",
+        points: 4,
+        order: 2,
+        ai_suggested: false,
+        meta: {
+          source: "manual",
+        },
+      },
+      {
+        ...baseEntity("q-3"),
+        examId: "exam-vinh-vien-01",
         type: QuestionType.MCQ,
         content:
-          "Cho $I = \\int_0^{\\pi} \\sin^2(x)dx$. Giá trị của $I$ là?",
+          "Cho tích phân $J = \\int_0^1 x e^x dx$. Khẳng định nào sau đây đúng?",
         options: [
-          "$\\frac{\\pi}{2}$",
-          "$\\pi$",
-          "$\\frac{\\pi}{4}$",
-          "$2\\pi$",
+          "$J = 1$",
+          "$J = e - 1$",
+          "$J = e$",
+          "$J = 0$",
         ],
         correctAnswer: 0,
-        points: 1,
-      },
-      {
-        id: "q-math-3",
-        type: QuestionType.MCQ,
-        content:
-          "Giải phương trình:\n$$2\\cos^2(x)+3\\sin(x)-3=0$$",
-        options: [
-          "$x=\\frac{\\pi}{2}+k2\\pi$",
-          "$x=\\frac{\\pi}{6}+k2\\pi$",
-          "$x=\\frac{5\\pi}{6}+k2\\pi$",
-          "Cả A,B,C",
-        ],
-        correctAnswer: 3,
-        points: 1,
+        points: 3,
+        order: 3,
+        ai_suggested: false,
+        meta: {
+          source: "manual",
+        },
       },
     ],
   },
 ];
 
 /* ======================================================
-   📘 COURSES
-====================================================== */
-
-export const MOCK_COURSES: Course[] = [
-  {
-    id: "course-12-pro",
-    title: "Luyện thi THPT Quốc Gia: Toán 12 Pro",
-    description:
-      "Học chuyên sâu $f(x)$, $\\log_a x$, $\\vec{u}\\cdot\\vec{v}$",
-    teacherId: "teacher-nhan",
-    grade: "12",
-    lessonCount: 45,
-    fileCount: 12,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "course-11-core",
-    title: "Toán 11: Hình học không gian",
-    description:
-      "Quan hệ vuông góc $\\perp$ và song song $\\parallel$",
-    teacherId: "teacher-nhan",
-    grade: "11",
-    lessonCount: 30,
-    fileCount: 8,
-    createdAt: new Date().toISOString(),
-  },
-];
-
-/* ======================================================
-   📊 STUDY PROGRESS
+   📊 DỮ LIỆU BIỂU ĐỒ
 ====================================================== */
 
 export const STUDY_PROGRESS = [
@@ -158,22 +140,17 @@ export const STUDY_PROGRESS = [
 ];
 
 /* ======================================================
-   🎲 CLASSES
+   🎓 HỆ THỐNG LỚP HỌC
 ====================================================== */
 
 export const MOCK_CLASSES: Class[] = [
   {
-    id: "class-12a1",
+    ...baseEntity("class-12a1"),
     name: "Lớp 12A1 - Chuyên Toán",
     teacherId: "teacher-nhan",
+    inviteCode: "TOAN12A1",
     studentCount: 45,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "class-11b2",
-    name: "Lớp 11B2 - Nâng cao",
-    teacherId: "teacher-nhan",
-    studentCount: 38,
-    createdAt: new Date().toISOString(),
+    activeStudentIds: ["student-01"],
+    pendingStudentIds: ["student-02"],
   },
 ];
