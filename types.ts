@@ -1,5 +1,5 @@
 /* ======================================================
-   BASE ENTITY (MAP SUPABASE)
+   BASE ENTITY
 ====================================================== */
 
 export interface BaseEntity {
@@ -24,22 +24,7 @@ export interface User extends BaseEntity {
 }
 
 /* ======================================================
-   QUESTION (TABLE: questions)
-====================================================== */
-
-export interface Question extends BaseEntity {
-  exam_id: string
-  content: string
-  options: string[] | null
-  correct_answer: number | null
-  points: number
-  order_index: number
-  explanation: string | null
-  image_url: string | null
-}
-
-/* ======================================================
-   EXAM (TABLE: exams)
+   EXAM
 ====================================================== */
 
 export interface Exam extends BaseEntity {
