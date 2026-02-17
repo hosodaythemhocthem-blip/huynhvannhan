@@ -1,11 +1,10 @@
 /**
- * 🚀 LUMINA LMS V7 PRO MAX
- * Designed for Thầy Huỳnh Văn Nhẫn
- * Strict Mode Safe | AI Optimized | Supabase Sync | Word/PDF Ready
+ * 🚀 LUMINA LMS V8 ENTERPRISE CORE
+ * Stable | Supabase Safe | Strict Mode Ready
  */
 
 export type Role = "teacher" | "student" | "admin";
-export type UserStatus = "pending" | "approved" | "rejected" | "active";
+export type UserStatus = "pending" | "active" | "rejected";
 
 /* =====================================================
    BASE ENTITY
@@ -32,7 +31,7 @@ export interface User extends BaseEntity {
 }
 
 /* =====================================================
-   QUESTION SYSTEM (AI + MATH READY)
+   QUESTION SYSTEM
 ===================================================== */
 export enum QuestionType {
   MCQ = "multiple-choice",
@@ -41,43 +40,15 @@ export enum QuestionType {
   MATH = "math",
 }
 
-export interface QuestionMeta {
-  aiConfidence?: number;
-  source?: "manual" | "ai" | "imported";
-  importedFrom?: "pdf" | "docx" | "clipboard";
-}
-
 export interface Question extends BaseEntity {
   examId: string;
   type: QuestionType;
-
-  /**
-   * 🔥 Core content field (LaTeX supported)
-   * Example: "Tính $\\int_0^1 x^2 dx$"
-   */
   content: string;
-
-  /**
-   * ⚠ Backward compatibility
-   * Nếu hệ thống cũ còn dùng text
-   */
-  legacyText?: string;
-
   options?: string[];
-
   correctAnswer: string | number | boolean;
-
   explanation?: string;
-
   points: number;
-
   order: number;
-
-  image_url?: string;
-
-  ai_suggested?: boolean;
-
-  meta?: QuestionMeta;
 }
 
 /* =====================================================
@@ -98,63 +69,39 @@ export interface Exam extends BaseEntity {
 }
 
 /* =====================================================
-   DRAFT EXAM (AUTO SAVE SUPPORT)
-===================================================== */
-export interface DraftExam {
-  tempId: string;
-  teacherId: string;
-  rawText?: string;
-  parsedExam?: Partial<Exam>;
-  lastEditedAt: string;
-}
-
-/* =====================================================
-   CLASS SYSTEM
-===================================================== */
-export interface Class extends BaseEntity {
-  name: string;
-  teacherId: string;
-  inviteCode: string;
-  studentCount: number;
-  activeStudentIds: string[];
-  pendingStudentIds: string[];
-}
-
-/* =====================================================
-   QUIZ RESULT
-===================================================== */
-export interface QuizResult extends BaseEntity {
-  examId: string;
-  studentId: string;
-  studentName: string;
-  answers: Record<string, any>;
-  score: number;
-  timeSpent: number;
-  completedAt: string;
-}
-
-/* =====================================================
    SUPABASE DATABASE MAP
 ===================================================== */
 export interface DBTableMap {
-  profiles: {
+  users: {
     id: string;
     email: string;
     full_name: string;
     role: Role;
     status: UserStatus;
-    class_id?: string;
+    class_id?: string | null;
+    pending_class_id?: string | null;
+    avatar?: string | null;
+    last_login_at?: string | null;
     created_at: string;
+    updated_at: string;
+    is_deleted: boolean;
   };
 
   exams: {
     id: string;
     title: string;
+    description?: string | null;
     teacher_id: string;
     duration: number;
     subject: string;
+    grade: string;
     is_published: boolean;
+    total_points: number;
+    question_count: number;
+    access_code?: string | null;
     created_at: string;
+    updated_at: string;
+    is_deleted: boolean;
   };
 
   questions: {
@@ -163,7 +110,11 @@ export interface DBTableMap {
     content: string;
     options: string[] | null;
     correct_answer: string;
+    explanation?: string | null;
     points: number;
     order: number;
+    created_at: string;
+    updated_at: string;
+    is_deleted: boolean;
   };
 }
