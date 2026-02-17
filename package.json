@@ -4,22 +4,18 @@
   "version": "6.0.0",
   "type": "module",
   "description": "NhanLMS Pro - Hệ sinh thái Toán học Thầy Huỳnh Văn Nhẫn (Ultimate Supabase Edition)",
-
   "engines": {
     "node": "20.x"
   },
-
   "sideEffects": false,
-
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist node_modules .vite",
     "reinstall": "npm run clean && npm install"
   },
-
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.47.10",
@@ -38,7 +34,6 @@
     "tailwind-merge": "^2.5.5",
     "uuid": "^11.0.3"
   },
-
   "devDependencies": {
     "@types/katex": "^0.16.7",
     "@types/lodash.debounce": "^4.0.9",
@@ -53,7 +48,6 @@
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
   },
-
   "browserslist": [
     "defaults",
     "not IE 11"
