@@ -1,73 +1,53 @@
 /* ======================================================
-   BASE ENTITY
+   BASE ENTITY (MAP SUPABASE)
 ====================================================== */
 
 export interface BaseEntity {
   id: string
-  createdAt: string
-  updatedAt: string
-  isDeleted: boolean
-  version: number
+  created_at: string
+  updated_at: string
 }
 
 /* ======================================================
-   USER
+   USER (TABLE: profiles)
 ====================================================== */
 
 export type UserRole = "admin" | "teacher" | "student"
 
+export type UserStatus = "pending" | "active" | "rejected"
+
 export interface User extends BaseEntity {
   email: string
-  fullName: string
+  full_name: string
   role: UserRole
-
-  isApproved: boolean
-  isActive: boolean
+  status: UserStatus
 }
 
 /* ======================================================
-   QUESTION
+   QUESTION (TABLE: questions)
 ====================================================== */
 
-export enum QuestionType {
-  MCQ = "MCQ",
-  TRUE_FALSE = "TRUE_FALSE",
-  SHORT_ANSWER = "SHORT_ANSWER",
-}
-
 export interface Question extends BaseEntity {
-  examId?: string
-
-  type: QuestionType
+  exam_id: string
   content: string
-
-  options?: string[]
-  correctAnswer?: number
-
+  options: string[] | null
+  correct_answer: number | null
   points: number
-  order: number
-
-  explanation?: string
-  imageUrl?: string
-
-  aiGenerated?: boolean
+  order_index: number
+  explanation: string | null
+  image_url: string | null
 }
 
 /* ======================================================
-   EXAM
+   EXAM (TABLE: exams)
 ====================================================== */
 
 export interface Exam extends BaseEntity {
   title: string
-  teacherId: string
-
-  description?: string
-
-  questions: Question[]
-
-  isLocked: boolean
-  isArchived: boolean
-
-  fileUrl?: string
-  rawContent?: string
+  teacher_id: string
+  description: string | null
+  is_locked: boolean
+  is_archived: boolean
+  file_url: string | null
+  raw_content: string | null
 }
