@@ -1,45 +1,82 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Lấy API Key từ môi trường (Vercel/Vite)
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const genAI = new GoogleGenAI(API_KEY);
+
+if (!API_KEY) {
+  console.warn("⚠️ VITE_GEMINI_API_KEY chưa được cấu hình.");
+}
+
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+
+/* =========================================================
+   INTERNAL UTILITIES
+========================================================= */
+
+const safeExtractJSON = (text: string) => {
+  try {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1) throw new Error("Invalid JSON format");
+
+    return JSON.parse(text.substring(start, end + 1));
+  } catch (err) {
+    throw new Error("AI trả về dữ liệu không hợp lệ.");
+  }
+};
+
+const withRetry = async <T>(fn: () => Promise<T>, retries = 2): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries <= 0) throw err;
+    return withRetry(fn, retries - 1);
+  }
+};
+
+/* =========================================================
+   GEMINI SERVICE – LUMINA AI V8
+========================================================= */
 
 export const geminiService = {
-  /**
-   * TRỢ LÝ LUMINA - GIẢI ĐÁP TOÁN HỌC SIÊU CẤP
-   */
+  /* =======================================================
+     🤖 AI TUTOR – GIẢI TOÁN & GIẢNG DẠY
+  ======================================================== */
   async askGemini(prompt: string, context: string = ""): Promise<string> {
-    if (!API_KEY) return "⚠️ Thầy Nhẫn ơi, hệ thống chưa có API Key Gemini!";
+    if (!genAI) {
+      return "⚠️ Hệ thống chưa cấu hình Gemini API Key.";
+    }
 
-    try {
+    return withRetry(async () => {
       const model = genAI.getGenerativeModel({
         model: "gemini-1.5-flash",
-        systemInstruction: `Bạn là Lumina AI, trợ lý riêng của Thầy Huỳnh Văn Nhẫn.
-        Nhiệm vụ: Giải toán, lý, hóa.
-        YÊU CẦU BẮT BUỘC:
-        1. Sử dụng LaTeX cho MỌI công thức. Ví dụ: $x^2$ hoặc $$\\frac{a}{b}$$.
-        2. Nếu có hình ảnh hoặc ngữ cảnh học liệu: ${context}, hãy bám sát.
-        3. Trả lời chuyên nghiệp, rõ ràng, dễ hiểu.`
+        systemInstruction: `
+Bạn là Lumina AI – trợ lý cao cấp của Thầy Huỳnh Văn Nhẫn.
+
+QUY TẮC:
+1. Tất cả công thức phải dùng LaTeX: $...$ hoặc $$...$$
+2. Giải thích rõ từng bước
+3. Nếu có context: ${context}
+4. Giọng văn chuyên nghiệp, truyền cảm hứng
+        `,
       });
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
       return response.text();
-    } catch (error) {
-      console.error("Lỗi AI:", error);
-      return "⚠️ Lumina gặp sự cố nhỏ, Thầy thử lại sau giây lát nhé!";
-    }
+    });
   },
 
-  /**
-   * CÔNG CỤ BÓC TÁCH ĐỀ THI WORD/PDF (PRO VERSION)
-   */
+  /* =======================================================
+     📄 PARSE WORD / PDF → JSON EXAM
+  ======================================================== */
   async parseExamWithAI(rawText: string): Promise<any> {
-    if (!API_KEY) throw new Error("Missing API Key");
+    if (!genAI) {
+      throw new Error("⚠️ Chưa cấu hình Gemini API Key.");
+    }
 
-    try {
+    return withRetry(async () => {
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-pro", // Dùng bản Pro để bóc tách chính xác nhất
+        model: "gemini-1.5-pro",
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0.1,
@@ -47,33 +84,43 @@ export const geminiService = {
       });
 
       const prompt = `
-        Hãy bóc tách văn bản đề thi sau thành JSON chuẩn cho hệ thống LMS Thầy Nhẫn.
-        VĂN BẢN: """ ${rawText} """
+Bạn là chuyên gia số hóa đề thi.
 
-        QUY TẮC ĐỊNH DẠNG JSON:
-        {
-          "title": "Tên đề thi tự suy luận",
-          "duration": 90,
-          "questions": [
-            {
-              "content": "Nội dung câu hỏi (Dùng LaTeX $...$ cho công thức)",
-              "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
-              "correctAnswer": 0, (0=A, 1=B, 2=C, 3=D)
-              "explanation": "Lời giải chi tiết bằng LaTeX (AI tự giải nếu đề không có)",
-              "points": 0.25
-            }
-          ]
-        }
-        LƯU Ý: Tuyệt đối không để trống 'explanation'.`;
+Hãy chuyển văn bản sau thành JSON chuẩn LMS:
+
+""" ${rawText} """
+
+YÊU CẦU:
+- title
+- duration
+- questions[]
+- Mọi công thức phải bọc $LaTeX$
+- correctAnswer từ 0-3
+- explanation chi tiết
+- type = "multiple-choice"
+
+MẪU:
+{
+  "title": "Tên đề",
+  "duration": 90,
+  "questions": [
+    {
+      "content": "Câu hỏi có $LaTeX$",
+      "options": ["A", "B", "C", "D"],
+      "correctAnswer": 0,
+      "explanation": "Lời giải có $LaTeX$",
+      "points": 0.25,
+      "type": "multiple-choice"
+    }
+  ]
+}
+`;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
-      return JSON.parse(response.text());
-    } catch (error) {
-      console.error("AI Parsing Error:", error);
-      throw new Error("AI không thể đọc hiểu file này, Thầy kiểm tra lại định dạng nhé.");
-    }
-  }
-};
+      const text = response.text();
 
-export const askGemini = geminiService.askGemini;
+      return safeExtractJSON(text);
+    });
+  },
+};
