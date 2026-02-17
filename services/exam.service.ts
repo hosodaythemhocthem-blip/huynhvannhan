@@ -1,59 +1,50 @@
-import { supabase } from "../supabase"
-import { Exam } from "../types"
+import { supabase } from "../supabase";
+import { Exam } from "../types";
 
 export const examService = {
-  /* ======================================================
-     CREATE EXAM
-  ====================================================== */
-  async createExam(payload: Partial<Exam>): Promise<Exam | null> {
+  async saveExam(exam: Partial<Exam>): Promise<Exam | null> {
     const { data, error } = await supabase
       .from("exams")
-      .insert({
-        ...payload,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .upsert([exam])
       .select()
-      .single()
+      .single();
 
-    if (error) return null
-    return data as Exam
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    return data as Exam;
   },
 
-  /* ======================================================
-     UPDATE EXAM
-  ====================================================== */
-  async updateExam(id: string, updates: Partial<Exam>): Promise<boolean> {
-    const { error } = await supabase
-      .from("exams")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-
-    return !error
-  },
-
-  /* ======================================================
-     DELETE EXAM
-  ====================================================== */
-  async deleteExam(id: string): Promise<boolean> {
-    const { error } = await supabase.from("exams").delete().eq("id", id)
-    return !error
-  },
-
-  /* ======================================================
-     GET BY ID
-  ====================================================== */
   async getById(id: string): Promise<Exam | null> {
     const { data, error } = await supabase
       .from("exams")
       .select("*")
       .eq("id", id)
-      .single()
+      .single();
 
-    if (error) return null
-    return data as Exam
+    if (error) return null;
+
+    return data as Exam;
   },
-}
+
+  async getAllExams(): Promise<Exam[]> {
+    const { data, error } = await supabase
+      .from("exams")
+      .select("*");
+
+    if (error) return [];
+
+    return data as Exam[];
+  },
+
+  async deleteExam(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from("exams")
+      .delete()
+      .eq("id", id);
+
+    return !error;
+  },
+};
