@@ -4,25 +4,45 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
+
     <title>NhanLMS Elite v6.0 – Hệ Sinh Thái Toán Học</title>
 
-    <!-- Fonts -->
+    <!-- Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Fonts Optimized -->
     <link
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=JetBrains+Mono:wght@100..800&display=swap"
       rel="stylesheet"
     />
 
-    <!-- KaTeX CSS -->
+    <!-- KaTeX Preload -->
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      as="style"
+    />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
     />
 
-    <!-- Meta Security -->
+    <!-- Basic CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data:;
+      connect-src *;
+    "
+    />
+
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="theme-color" content="#020617" />
 
@@ -45,6 +65,7 @@
         width: 100%;
       }
 
+      /* Loader */
       .loader-container {
         position: fixed;
         inset: 0;
@@ -58,7 +79,12 @@
           var(--dark-bg) 100%
         );
         z-index: 9999;
-        transition: opacity 0.6s ease-out;
+        transition: opacity 0.6s ease, visibility 0.6s ease;
+      }
+
+      .loader-hidden {
+        opacity: 0;
+        visibility: hidden;
       }
 
       .ring-loader {
@@ -87,13 +113,17 @@
         justify-content: center;
         text-align: center;
       }
+
+      .error-visible {
+        display: flex !important;
+      }
     </style>
   </head>
 
   <body class="antialiased">
     <div id="root"></div>
 
-    <!-- Boot Loader -->
+    <!-- Loader -->
     <div class="loader-container" id="system-loader">
       <div class="ring-loader"></div>
       <div style="margin-top: 32px; text-align: center">
@@ -122,11 +152,11 @@
       </div>
     </div>
 
-    <!-- Fallback Error -->
+    <!-- Fallback -->
     <div id="fallback-error">
       <div
         style="
-          background: rgba(15, 23, 42, 0.8);
+          background: rgba(15, 23, 42, 0.9);
           padding: 48px;
           border-radius: 40px;
           border: 1px solid rgba(239, 68, 68, 0.2);
@@ -135,6 +165,9 @@
         <h2 style="color: #ef4444; font-weight: 800">
           LỖI HỆ THỐNG
         </h2>
+        <p style="margin-top: 12px; font-size: 14px; color: #94a3b8">
+          Có lỗi xảy ra khi khởi động ứng dụng.
+        </p>
         <button
           onclick="localStorage.clear(); location.reload();"
           style="
@@ -145,12 +178,31 @@
             border-radius: 16px;
             margin-top: 20px;
             cursor: pointer;
+            font-weight: 700;
           "
         >
           KHỞI ĐỘNG LẠI
         </button>
       </div>
     </div>
+
+    <!-- Loader Auto Hide Script -->
+    <script>
+      window.addEventListener("load", function () {
+        const loader = document.getElementById("system-loader");
+        if (loader) {
+          setTimeout(() => {
+            loader.classList.add("loader-hidden");
+          }, 600);
+        }
+      });
+
+      window.addEventListener("error", function () {
+        document
+          .getElementById("fallback-error")
+          ?.classList.add("error-visible");
+      });
+    </script>
 
     <!-- Vite Entry -->
     <script type="module" src="/main.tsx"></script>
