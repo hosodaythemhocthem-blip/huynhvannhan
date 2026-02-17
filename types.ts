@@ -1,12 +1,12 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V4
- * Tối ưu Supabase + Word/PDF + AI + Math Render
+ * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V5
+ * Backward Compatible + Supabase Ready + AI Ready
  */
 
 export type Role = "teacher" | "student" | "admin";
 
 /* =====================================================
-   COMMON BASE MODEL (SUPABASE SYNC SAFE)
+   COMMON BASE MODEL
 ===================================================== */
 
 export interface BaseEntity {
@@ -25,14 +25,12 @@ export interface User extends BaseEntity {
   role: Role;
 
   avatar?: string;
-
   isApproved?: boolean;
 
   classId?: string;
   className?: string;
 
   lastLoginAt?: string;
-
   isActive?: boolean;
 }
 
@@ -47,7 +45,6 @@ export interface UploadedFile extends BaseEntity {
   fileUrl: string;
   fileType: FileType;
   fileSize?: number;
-
   uploadedBy: string;
 }
 
@@ -64,27 +61,34 @@ export enum QuestionType {
 }
 
 /* =====================================================
-   QUESTION BASE
+   BASE QUESTION
 ===================================================== */
 
 export interface BaseQuestion extends BaseEntity {
   type: QuestionType;
 
-  content: string; // Render bằng MathPreview
+  /**
+   * Chuẩn mới dùng content
+   * Nhưng vẫn hỗ trợ text legacy
+   */
+  content: string;
+
+  /**
+   * Legacy support
+   */
+  text?: string;
+
   points: number;
 
   explanation?: string;
   section?: number;
-
   image_url?: string;
-
   order?: number;
-
   isDeleted?: boolean;
 }
 
 /* =====================================================
-   SPECIFIC QUESTION TYPES
+   QUESTION TYPES
 ===================================================== */
 
 export interface MCQQuestion extends BaseQuestion {
@@ -112,12 +116,8 @@ export interface EssayQuestion extends BaseQuestion {
 export interface MathQuestion extends BaseQuestion {
   type: QuestionType.MATH;
   correctAnswer: string;
-  latexSource?: string; // nguồn latex riêng nếu import từ file
+  latexSource?: string;
 }
-
-/* =====================================================
-   UNION QUESTION
-===================================================== */
 
 export type Question =
   | MCQQuestion
@@ -203,7 +203,6 @@ export interface Course extends BaseEntity {
 
 export interface Class extends BaseEntity {
   name: string;
-
   teacherId: string;
 
   studentCount?: number;
