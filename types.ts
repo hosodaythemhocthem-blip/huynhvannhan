@@ -1,6 +1,6 @@
 /**
- * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V5
- * Supabase Safe + File Import Ready + AI Ready + Math Render Optimized
+ * HỆ THỐNG KIỂU DỮ LIỆU CHUẨN - LMS PRODUCTION READY V6
+ * Supabase Optimized + File Import + AI + Math Render + Version Safe
  */
 
 export type Role = "teacher" | "student" | "admin";
@@ -11,14 +11,15 @@ export type Role = "teacher" | "student" | "admin";
 
 export interface BaseEntity {
   id: string;
+
   createdAt: string;
   updatedAt: string;
 
   createdBy?: string;
   updatedBy?: string;
 
-  isDeleted?: boolean; // soft delete toàn hệ thống
-  version?: number; // optimistic locking
+  isDeleted: boolean; // bắt buộc để filter thống nhất
+  version: number; // bắt buộc cho optimistic locking
 }
 
 /* =====================================================
@@ -32,8 +33,8 @@ export interface User extends BaseEntity {
 
   avatar?: string;
 
-  isApproved?: boolean;
-  isActive?: boolean;
+  isApproved: boolean;
+  isActive: boolean;
 
   classId?: string;
   className?: string;
@@ -55,8 +56,8 @@ export interface UploadedFile extends BaseEntity {
 
   uploadedBy: string;
 
-  bucket?: string; // supabase storage bucket
-  originalText?: string; // raw text parsed from word/pdf
+  bucket?: string;
+  originalText?: string; // parsed raw text
 }
 
 /* =====================================================
@@ -78,7 +79,7 @@ export enum QuestionType {
 export interface BaseQuestion extends BaseEntity {
   type: QuestionType;
 
-  content: string; // sẽ render bằng MathPreview (KaTeX)
+  content: string; // render bằng KaTeX
   points: number;
 
   explanation?: string;
@@ -157,13 +158,13 @@ export interface Exam extends BaseEntity {
   isPublished: boolean;
   isArchived: boolean;
 
-  assignedClassIds?: string[];
+  assignedClassIds: string[];
 
   file_url?: string;
   file_type?: FileType;
 
-  totalPoints: number;
-  questionCount: number;
+  totalPoints: number; // luôn auto-calc
+  questionCount: number; // luôn auto-calc
 
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
@@ -179,10 +180,13 @@ export interface ExamSubmission extends BaseEntity {
   examId: string;
   studentId: string;
 
-  answers: Record<string, string | number | boolean>;
+  answers: Record<
+    string,
+    string | number | boolean | string[]
+  >;
 
   score?: number;
-  graded?: boolean;
+  graded: boolean;
 
   submittedAt: string;
   gradedAt?: string;
@@ -214,8 +218,8 @@ export interface Class extends BaseEntity {
 
   teacherId: string;
 
-  studentCount?: number;
+  studentCount: number;
 
-  studentIds?: string[];
-  pendingStudentIds?: string[];
+  studentIds: string[];
+  pendingStudentIds: string[];
 }
