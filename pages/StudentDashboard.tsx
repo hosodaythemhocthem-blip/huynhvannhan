@@ -1,11 +1,14 @@
-import React from "react"
-import { User } from "../types"
+// pages/StudentDashboard.tsx
+import React from "react";
+import { User } from "../types";
 
 interface Props {
-  user: User
+  user: User;
 }
 
-const StudentDashboard: React.FC<Props> = ({ user }) => {
+const StudentDashboard: React.FC<Props> = ({
+  user,
+}) => {
   return (
     <div className="p-8 text-white">
       <h1 className="text-2xl font-bold">
@@ -22,7 +25,7 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
         </p>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default StudentDashboard
+export default StudentDashboard;
