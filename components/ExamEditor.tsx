@@ -1,418 +1,197 @@
 import React, {
-  useState,
   useEffect,
-  useCallback,
   useRef,
+  useState,
+  useCallback,
 } from "react";
-import {
-  Trash2,
-  ClipboardPaste,
-  Save,
-  Plus,
-  Loader2,
-  X,
-  Type,
-  Sigma,
-} from "lucide-react";
-import MathPreview from "./MathPreview";
-import { useToast } from "./Toast";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Exam,
-  Question,
-  QuestionType,
-} from "../types";
-import { ExamService } from "../services/exam.service";
-
-/* ======================================================
-   COMPONENT
-====================================================== */
+import { Save, PlusCircle, Trash2 } from "lucide-react";
+import { Exam, Question } from "../types";
 
 interface Props {
-  exam: Exam;
-  onSave?: (exam: Exam) => void;
-  onCancel?: () => void;
+  exam?: Exam;
+  onSave: (exam: Exam) => void;
+  onCancel: () => void;
 }
+
+const createEmptyQuestion = (): Question => ({
+  id: crypto.randomUUID(),
+  content: "",
+  type: "text",
+  points: 1,
+});
 
 const ExamEditor: React.FC<Props> = ({
   exam,
   onSave,
   onCancel,
 }) => {
-  const { showToast } = useToast();
+  const [title, setTitle] = useState(exam?.title || "");
+  const [description, setDescription] = useState(
+    exam?.description || ""
+  );
+  const [questions, setQuestions] = useState<Question[]>(
+    exam?.questions || [createEmptyQuestion()]
+  );
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [data, setData] = useState<Exam>({
-    ...exam,
-    questions: exam.questions ?? [],
-  });
+  // ✅ FIX: Không dùng NodeJS.Timeout
+  const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [saving, setSaving] =
-    useState(false);
-
-  const autosaveRef =
-    useRef<NodeJS.Timeout | null>(null);
-
-  /* ======================================================
-     SMART AUTOSAVE (DEBOUNCE 3s)
-  ====================================================== */
-  useEffect(() => {
+  // =============================
+  // AUTOSAVE (client only)
+  // =============================
+  const triggerAutosave = useCallback(() => {
     if (autosaveRef.current) {
       clearTimeout(autosaveRef.current);
     }
 
     autosaveRef.current = setTimeout(() => {
-      ExamService.saveExam(data);
-    }, 3000);
+      handleSave();
+    }, 1500);
+  }, [title, description, questions]);
 
+  useEffect(() => {
+    triggerAutosave();
     return () => {
-      if (autosaveRef.current)
+      if (autosaveRef.current) {
         clearTimeout(autosaveRef.current);
-    };
-  }, [data]);
-
-  /* ======================================================
-     UPDATE QUESTION SAFE
-  ====================================================== */
-  const updateQuestion = useCallback(
-    (
-      idx: number,
-      updates: Partial<Question>
-    ) => {
-      setData((prev) => {
-        const updated = [...prev.questions];
-
-        const newVersion =
-          (updated[idx].version ?? 1) + 1;
-
-        updated[idx] = {
-          ...updated[idx],
-          ...updates,
-          updatedAt:
-            new Date().toISOString(),
-          version: newVersion,
-        };
-
-        return {
-          ...prev,
-          questions: updated.map(
-            (q, i) => ({
-              ...q,
-              order: i,
-            })
-          ),
-        };
-      });
-    },
-    []
-  );
-
-  /* ======================================================
-     REMOVE QUESTION
-  ====================================================== */
-  const removeQuestion =
-    async (idx: number) => {
-      if (
-        !window.confirm(
-          "Xóa vĩnh viễn câu hỏi này?"
-        )
-      )
-        return;
-
-      const newQuestions =
-        data.questions
-          .filter((_, i) => i !== idx)
-          .map((q, i) => ({
-            ...q,
-            order: i,
-          }));
-
-      const updatedExam = {
-        ...data,
-        questions: newQuestions,
-      };
-
-      setData(updatedExam);
-
-      await ExamService.saveExam(
-        updatedExam
-      );
-
-      showToast(
-        "Đã xóa và đồng bộ!",
-        "info"
-      );
-    };
-
-  /* ======================================================
-     PASTE HANDLER
-  ====================================================== */
-  const handlePaste =
-    async (
-      idx: number,
-      field: "content" | number
-    ) => {
-      try {
-        const text =
-          await navigator.clipboard.readText();
-
-        if (!text) return;
-
-        if (field === "content") {
-          updateQuestion(idx, {
-            content: text,
-          });
-        } else {
-          const question =
-            data.questions[idx];
-
-          if (
-            question.type !==
-            QuestionType.MCQ
-          )
-            return;
-
-          const options = [
-            ...question.options,
-          ];
-
-          options[field] =
-            text.replace(
-              /^[A-D][.:]\s*/,
-              ""
-            );
-
-          updateQuestion(idx, {
-            options,
-          });
-        }
-
-        showToast(
-          "Đã dán thành công",
-          "success"
-        );
-      } catch {
-        showToast(
-          "Không truy cập được Clipboard",
-          "error"
-        );
       }
     };
+  }, [title, description, questions, triggerAutosave]);
 
-  /* ======================================================
-     ADD QUESTION
-  ====================================================== */
-  const addQuestion = () => {
-    const newQ: Question = {
-      id: `q_${crypto.randomUUID()}`,
-      type: QuestionType.MCQ,
-      content: "",
-      options: ["", "", "", ""],
-      correctAnswer: 0,
-      points: 1,
-      order: data.questions.length,
-      isDeleted: false,
-      version: 1,
-      createdAt:
-        new Date().toISOString(),
-      updatedAt:
-        new Date().toISOString(),
+  // =============================
+  // SAVE
+  // =============================
+  const handleSave = () => {
+    if (!title.trim()) return;
+
+    setIsSaving(true);
+
+    const updatedExam: Exam = {
+      id: exam?.id || crypto.randomUUID(),
+      title,
+      description,
+      questions,
+      createdAt: exam?.createdAt || new Date().toISOString(),
     };
 
-    setData((prev) => ({
-      ...prev,
-      questions: [
-        ...prev.questions,
-        newQ,
-      ],
-    }));
+    onSave(updatedExam);
+    setIsSaving(false);
   };
 
-  /* ======================================================
-     SAVE BUTTON
-  ====================================================== */
-  const handleSaveToCloud =
-    async () => {
-      setSaving(true);
+  // =============================
+  // QUESTION HANDLERS
+  // =============================
+  const updateQuestion = (id: string, value: string) => {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === id ? { ...q, content: value } : q
+      )
+    );
+  };
 
-      const result =
-        await ExamService.saveExam(
-          data
-        );
+  const addQuestion = () => {
+    setQuestions((prev) => [...prev, createEmptyQuestion()]);
+  };
 
-      if (result) {
-        showToast(
-          "Đã lưu vĩnh viễn!",
-          "success"
-        );
-        onSave?.(result);
-      } else {
-        showToast(
-          "Lỗi lưu dữ liệu",
-          "error"
-        );
-      }
+  const deleteQuestion = (id: string) => {
+    setQuestions((prev) =>
+      prev.length > 1 ? prev.filter((q) => q.id !== id) : prev
+    );
+  };
 
-      setSaving(false);
-    };
-
-  /* ======================================================
-     RENDER
-  ====================================================== */
-
+  // =============================
+  // UI
+  // =============================
   return (
-    <div className="max-w-5xl mx-auto pb-40 px-4 font-sans text-slate-900">
-      {/* HEADER */}
-      <div className="flex justify-between items-center mb-10 bg-white/80 backdrop-blur-md p-5 rounded-2xl shadow-lg sticky top-4 z-50">
-        <div className="flex items-center gap-4">
+    <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl p-8 space-y-8">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">
+          {exam ? "Chỉnh sửa đề" : "Tạo đề mới"}
+        </h2>
+
+        <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="p-2 hover:bg-slate-100 rounded-full"
+            className="px-4 py-2 rounded-xl border"
           >
-            <X size={22} />
+            Hủy
           </button>
 
-          <div>
-            <h2 className="text-xl font-extrabold text-indigo-600">
-              {data.title}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {data.questions.length} câu hỏi
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={handleSaveToCloud}
-          disabled={saving}
-          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2"
-        >
-          {saving ? (
-            <Loader2 className="animate-spin" />
-          ) : (
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl"
+          >
             <Save size={18} />
-          )}
-          LƯU
-        </button>
+            {isSaving ? "Đang lưu..." : "Lưu"}
+          </button>
+        </div>
+      </div>
+
+      {/* TITLE */}
+      <div className="space-y-2">
+        <label className="font-medium">Tiêu đề</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full p-3 border rounded-xl"
+          placeholder="Nhập tiêu đề đề thi..."
+        />
+      </div>
+
+      {/* DESCRIPTION */}
+      <div className="space-y-2">
+        <label className="font-medium">Mô tả</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full p-3 border rounded-xl"
+          placeholder="Mô tả đề thi..."
+        />
       </div>
 
       {/* QUESTIONS */}
-      <div className="space-y-10">
-        <AnimatePresence>
-          {data.questions.map(
-            (q, idx) => (
-              <motion.div
-                key={q.id}
-                initial={{
-                  opacity: 0,
-                  y: 10,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                }}
-                exit={{
-                  opacity: 0,
-                }}
-                className="bg-white p-8 rounded-3xl shadow border"
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold text-lg">Câu hỏi</h3>
+
+          <button
+            onClick={addQuestion}
+            className="flex items-center gap-2 text-indigo-600"
+          >
+            <PlusCircle size={18} />
+            Thêm câu hỏi
+          </button>
+        </div>
+
+        {questions.map((q, index) => (
+          <div
+            key={q.id}
+            className="p-4 border rounded-2xl bg-slate-50 space-y-3"
+          >
+            <div className="flex justify-between">
+              <span className="font-medium">
+                Câu {index + 1}
+              </span>
+
+              <button
+                onClick={() => deleteQuestion(q.id)}
+                className="text-red-500"
               >
-                {/* INDEX */}
-                <div className="flex justify-between mb-4">
-                  <div className="font-bold text-indigo-600">
-                    Câu {idx + 1}
-                  </div>
+                <Trash2 size={16} />
+              </button>
+            </div>
 
-                  <button
-                    onClick={() =>
-                      removeQuestion(idx)
-                    }
-                    className="text-red-500 hover:scale-110 transition"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-
-                {/* CONTENT */}
-                <textarea
-                  value={q.content}
-                  onChange={(e) =>
-                    updateQuestion(idx, {
-                      content:
-                        e.target.value,
-                    })
-                  }
-                  placeholder="Nhập câu hỏi..."
-                  className="w-full p-4 bg-slate-50 rounded-xl min-h-[120px]"
-                />
-
-                <button
-                  onClick={() =>
-                    handlePaste(
-                      idx,
-                      "content"
-                    )
-                  }
-                  className="mt-2 text-indigo-600 text-sm flex items-center gap-1"
-                >
-                  <ClipboardPaste size={14} />
-                  Dán nhanh
-                </button>
-
-                {/* MATH PREVIEW */}
-                {q.content && (
-                  <div className="mt-4 p-4 bg-slate-50 rounded-xl">
-                    <MathPreview
-                      content={q.content}
-                    />
-                  </div>
-                )}
-
-                {/* MCQ OPTIONS */}
-                {q.type ===
-                  QuestionType.MCQ &&
-                  "options" in q && (
-                    <div className="grid md:grid-cols-2 gap-4 mt-6">
-                      {q.options.map(
-                        (opt, oIdx) => (
-                          <input
-                            key={oIdx}
-                            value={opt}
-                            onChange={(e) => {
-                              const newOpts =
-                                [
-                                  ...q.options,
-                                ];
-                              newOpts[
-                                oIdx
-                              ] =
-                                e.target
-                                  .value;
-                              updateQuestion(
-                                idx,
-                                {
-                                  options:
-                                    newOpts,
-                                }
-                              );
-                            }}
-                            className="p-3 bg-slate-50 rounded-lg"
-                          />
-                        )
-                      )}
-                    </div>
-                  )}
-              </motion.div>
-            )
-          )}
-        </AnimatePresence>
-
-        {/* ADD */}
-        <button
-          onClick={addQuestion}
-          className="w-full py-10 border-dashed border-4 border-slate-200 rounded-3xl text-slate-400 hover:border-indigo-400 hover:text-indigo-500"
-        >
-          <Plus size={28} />
-          <div>Thêm câu hỏi</div>
-        </button>
+            <textarea
+              value={q.content}
+              onChange={(e) =>
+                updateQuestion(q.id, e.target.value)
+              }
+              className="w-full p-3 border rounded-xl"
+              placeholder="Nhập nội dung câu hỏi..."
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
