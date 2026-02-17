@@ -1,104 +1,105 @@
-import { supabase } from "../supabase"
-import { Exam, Question } from "../types"
+import { supabase } from "../supabase";
+import { Exam, Question } from "../types";
+
+const now = () => new Date().toISOString();
 
 export const examService = {
-  /* ======================================================
-     SAVE EXAM + QUESTIONS (TRANSACTION SAFE)
-  ====================================================== */
+  /* ================= SAVE EXAM ================= */
   async saveExam(
     exam: Partial<Exam> & { questions?: Partial<Question>[] }
   ): Promise<Exam | null> {
     try {
-      const now = new Date().toISOString()
-
-      /* ===== 1. UPSERT EXAM ===== */
-      const { data: examData, error: examError } = await supabase
+      const { data: examData, error } = await supabase
         .from("exams")
-        .upsert({
-          ...exam,
-          updated_at: now,
-          created_at: exam.created_at ?? now,
-        })
+        .upsert(
+          {
+            ...exam,
+            updated_at: now(),
+            created_at: exam.created_at ?? now(),
+            total_points: exam.total_points ?? 0,
+            version: exam.version ?? 1,
+          },
+          { onConflict: "id" }
+        )
         .select()
-        .single()
+        .single();
 
-      if (examError || !examData) {
-        console.error("Exam save error:", examError)
-        return null
+      if (error || !examData) {
+        console.error(error);
+        return null;
       }
 
-      /* ===== 2. HANDLE QUESTIONS ===== */
-      if (exam.questions && exam.questions.length > 0) {
+      /* Save Questions */
+      if (exam.questions?.length) {
         const payload = exam.questions.map((q, index) => ({
           ...q,
           exam_id: examData.id,
           order: index,
-          created_at: q.created_at ?? now,
-          updated_at: now,
-        }))
+          created_at: q.created_at ?? now(),
+          updated_at: now(),
+        }));
 
         const { error: qError } = await supabase
           .from("questions")
-          .upsert(payload)
+          .upsert(payload, { onConflict: "id" });
 
         if (qError) {
-          console.error("Question save error:", qError)
-          return null
+          console.error(qError);
+          return null;
         }
 
-        /* ===== 3. UPDATE TOTAL POINTS ===== */
         const totalPoints = payload.reduce(
-          (sum, q) => sum + (q.points || 0),
+          (sum, q) => sum + (q.points ?? 0),
           0
-        )
+        );
 
         await supabase
           .from("exams")
           .update({ total_points: totalPoints })
-          .eq("id", examData.id)
+          .eq("id", examData.id);
       }
 
-      return examData as Exam
+      return examData as Exam;
     } catch (err) {
-      console.error("Unexpected save error:", err)
-      return null
+      console.error(err);
+      return null;
     }
   },
 
-  /* ======================================================
-     GET FULL EXAM WITH QUESTIONS
-  ====================================================== */
-  async getById(id: string): Promise<(Exam & { questions: Question[] }) | null> {
+  /* ================= GET BY ID ================= */
+  async getById(
+    id: string
+  ): Promise<(Exam & { questions: Question[] }) | null> {
     const { data, error } = await supabase
       .from("exams")
-      .select(`
-        *,
-        questions (*)
-      `)
+      .select("*, questions(*)")
       .eq("id", id)
-      .single()
+      .single();
 
-    if (error) {
-      console.error(error)
-      return null
-    }
-
-    return data as any
+    if (error) return null;
+    return data as any;
   },
 
-  async getAllExams(): Promise<Exam[]> {
+  /* ================= GET ALL ================= */
+  async getAll(): Promise<Exam[]> {
     const { data, error } = await supabase
       .from("exams")
       .select("*")
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false });
 
-    if (error) return []
-    return data as Exam[]
+    if (error) return [];
+    return (data as Exam[]) ?? [];
   },
 
-  async deleteExam(id: string): Promise<boolean> {
-    await supabase.from("questions").delete().eq("exam_id", id)
-    const { error } = await supabase.from("exams").delete().eq("id", id)
-    return !error
+  /* ================= DELETE ================= */
+  async delete(id: string): Promise<boolean> {
+    await supabase.from("questions").delete().eq("exam_id", id);
+
+    const { error } = await supabase
+      .from("exams")
+      .delete()
+      .eq("id", id);
+
+    return !error;
   },
-}
+};
