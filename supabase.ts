@@ -1,125 +1,127 @@
 /**
- * LOCAL SUPABASE ENGINE - LMS PRO MAX v3
- * Fully Type Safe – Persistent – Stable – AI Ready
+ * LMS PRO MAX V4
+ * Strict Mode Safe – Auto Migration – Versioned – Soft Delete
  */
 
-import { User } from "./types";
+import { User, BaseEntity } from "./types";
 
-/* =======================================================
-   STORAGE KEY
-======================================================= */
+/* =====================================================
+   CONFIG
+===================================================== */
 
-const STORAGE_KEY = "nhanlms_permanent_final_v90_pro";
+const STORAGE_KEY = "nhanlms_pro_max_v4";
+const DB_VERSION = 4;
 
-/* =======================================================
+/* =====================================================
    TYPES
-======================================================= */
-
-export interface Message {
-  id: string;
-  user_id: string;
-  role: "user" | "ai";
-  text: string;
-  file_name?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-interface LocalFile {
-  id: string;
-  path: string;
-  content: string;
-  file_type?: string;
-  size?: number;
-  uploadedAt: string;
-}
+===================================================== */
 
 interface LocalDB {
-  users: UserWithPassword[];
+  __version: number;
+
+  users: any[];
   exams: any[];
   submissions: any[];
   classes: any[];
-  messages: Message[];
-  chats: any[];
   courses: any[];
-  lessons: any[];
-  game_history: any[];
-  app_sync: any[];
-  files: LocalFile[];
+  files: any[];
+
   session: { userId: string | null };
 }
 
-interface UserWithPassword extends User {
-  password: string;
-  lastLoginAt?: string;
-}
-
-/* =======================================================
+/* =====================================================
    HELPERS
-======================================================= */
+===================================================== */
+
+const now = () => new Date().toISOString();
 
 const generateId = (prefix: string) =>
   `${prefix}_${crypto.randomUUID()}`;
 
-const now = () => new Date().toISOString();
+const injectBase = <T extends object>(
+  data: T,
+  userId?: string
+): T & BaseEntity => ({
+  id: (data as any).id ?? generateId("id"),
+  createdAt: now(),
+  updatedAt: now(),
+  createdBy: userId,
+  updatedBy: userId,
+  isDeleted: false,
+  version: 1,
+  ...data,
+});
 
-/* =======================================================
-   INITIAL DATABASE
-======================================================= */
+/* =====================================================
+   INITIAL DB
+===================================================== */
 
-const getInitialDb = (): LocalDB => ({
+const createInitialDb = (): LocalDB => ({
+  __version: DB_VERSION,
+
   users: [
-    {
-      id: "teacher-nhan",
-      email: "huynhvannhan@gmail.com",
-      fullName: "Thầy Huỳnh Văn Nhẫn",
-      role: "teacher",
-      isApproved: true,
-      password: "huynhvannhan2020",
-      createdAt: now(),
-      updatedAt: now(),
-    },
+    injectBase<User & { password: string }>(
+      {
+        id: "teacher-nhan",
+        email: "huynhvannhan@gmail.com",
+        fullName: "Thầy Huỳnh Văn Nhẫn",
+        role: "teacher",
+        isApproved: true,
+        isActive: true,
+        password: "huynhvannhan2020",
+      },
+      "system"
+    ),
   ],
+
   exams: [],
   submissions: [],
-  classes: [
-    {
-      id: "c1",
-      name: "12A1 Chuyên Toán",
-      teacherId: "teacher-nhan",
-      createdAt: now(),
-    },
-  ],
-  messages: [],
-  chats: [],
+  classes: [],
   courses: [],
-  lessons: [],
-  game_history: [],
-  app_sync: [],
   files: [],
+
   session: { userId: null },
 });
 
-/* =======================================================
+/* =====================================================
    CORE DB
-======================================================= */
+===================================================== */
 
 const getDb = (): LocalDB => {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    const init = getInitialDb();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
-    return init;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const init = createInitialDb();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
+      return init;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed.__version || parsed.__version !== DB_VERSION) {
+      const migrated = {
+        ...createInitialDb(),
+        ...parsed,
+        __version: DB_VERSION,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+
+    return parsed;
+  } catch {
+    const fresh = createInitialDb();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    return fresh;
   }
-  return JSON.parse(raw);
 };
 
 const saveDb = (db: LocalDB) =>
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 
-/* =======================================================
-   AUTH SYSTEM
-======================================================= */
+/* =====================================================
+   AUTH
+===================================================== */
 
 const auth = {
   async signInWithPassword({
@@ -133,24 +135,24 @@ const auth = {
 
     const user = db.users.find(
       (u) =>
-        u.email.toLowerCase() === email.toLowerCase() &&
-        u.password === password
+        u.email.toLowerCase() === email.trim().toLowerCase() &&
+        u.password === password &&
+        !u.isDeleted
     );
 
-    if (!user) {
-      return {
-        data: null,
-        error: { message: "Sai tài khoản hoặc mật khẩu" },
-      };
-    }
+    if (!user)
+      return { data: null, error: { message: "Sai tài khoản." } };
 
-    db.session.userId = user.id;
+    if (!user.isActive)
+      return { data: null, error: { message: "Tài khoản bị khóa." } };
+
     user.lastLoginAt = now();
+    db.session.userId = user.id;
     saveDb(db);
 
-    const { password: _, ...safeUser } = user;
+    const { password: _, ...safe } = user;
 
-    return { data: { user: safeUser }, error: null };
+    return { data: { user: safe }, error: null };
   },
 
   async signUp({
@@ -164,27 +166,28 @@ const auth = {
   }) {
     const db = getDb();
 
-    if (db.users.some((u) => u.email === email)) {
-      return { data: null, error: { message: "Email đã tồn tại" } };
-    }
+    if (
+      db.users.some(
+        (u) => u.email.toLowerCase() === email.toLowerCase()
+      )
+    )
+      return { data: null, error: { message: "Email đã tồn tại." } };
 
-    const newUser: UserWithPassword = {
-      id: generateId("user"),
+    const newUser = injectBase({
       email,
       fullName,
       role: "student",
       isApproved: false,
+      isActive: true,
       password,
-      createdAt: now(),
-      updatedAt: now(),
-    };
+    });
 
     db.users.push(newUser);
     saveDb(db);
 
-    const { password: _, ...safeUser } = newUser;
+    const { password: _, ...safe } = newUser;
 
-    return { data: { user: safeUser }, error: null };
+    return { data: { user: safe }, error: null };
   },
 
   async signOut() {
@@ -196,104 +199,79 @@ const auth = {
 
   async getUser() {
     const db = getDb();
-    const user = db.users.find((u) => u.id === db.session.userId);
-
+    const user = db.users.find(
+      (u) => u.id === db.session.userId && !u.isDeleted
+    );
     if (!user) return { data: { user: null }, error: null };
 
-    const { password: _, ...safeUser } = user;
-    return { data: { user: safeUser }, error: null };
+    const { password: _, ...safe } = user;
+    return { data: { user: safe }, error: null };
   },
 };
 
-/* =======================================================
+/* =====================================================
    QUERY BUILDER
-======================================================= */
+===================================================== */
 
-const from = <T extends keyof LocalDB>(table: T) => {
+const from = (table: keyof LocalDB) => {
   let db = getDb();
   let rows = [...(db[table] as any[])];
-  let filterKey: string | null = null;
-  let filterValue: any = null;
 
-  const applyFilter = () => {
-    if (!filterKey) return rows;
-    return rows.filter((r) => r?.[filterKey!] === filterValue);
-  };
+  const applySoftFilter = () =>
+    rows.filter((r) => !r.isDeleted);
 
   return {
     select() {
-      rows = applyFilter();
+      rows = applySoftFilter();
       return this;
     },
 
     eq(column: string, value: any) {
-      filterKey = column;
-      filterValue = value;
-      rows = applyFilter();
-      return this;
-    },
-
-    order(column: string, { ascending }: { ascending: boolean }) {
-      rows.sort((a, b) =>
-        ascending
-          ? a[column] > b[column] ? 1 : -1
-          : a[column] < b[column] ? 1 : -1
+      rows = applySoftFilter().filter(
+        (r) => r[column] === value
       );
       return this;
     },
 
-    async single() {
-      return { data: rows[0] || null, error: null };
-    },
-
-    async insert(item: any) {
+    async insert(data: any) {
       db = getDb();
-      const arr = Array.isArray(item) ? item : [item];
+      const arr = Array.isArray(data) ? data : [data];
 
-      const newItems = arr.map((i) => ({
-        ...i,
-        id: i.id || generateId(String(table)),
-        createdAt: now(),
-        updatedAt: now(),
-      }));
+      const injected = arr.map((i) =>
+        injectBase(i, db.session.userId || "system")
+      );
 
-      (db[table] as any[]).push(...newItems);
+      (db[table] as any[]).push(...injected);
       saveDb(db);
 
-      return {
-        data: newItems.length === 1 ? newItems[0] : newItems,
-        error: null,
-      };
+      return { data: injected, error: null };
     },
 
     async update(updates: any) {
       db = getDb();
-
-      db[table] = (db[table] as any[]).map((item) =>
-        filterKey && item?.[filterKey] === filterValue
-          ? { ...item, ...updates, updatedAt: now() }
-          : item
+      (db[table] as any[]) = (db[table] as any[]).map(
+        (item) =>
+          rows.some((r) => r.id === item.id)
+            ? {
+                ...item,
+                ...updates,
+                updatedAt: now(),
+                version: item.version + 1,
+              }
+            : item
       );
-
       saveDb(db);
       return { error: null };
     },
 
     async delete() {
       db = getDb();
-
-      db[table] = (db[table] as any[]).filter(
+      (db[table] as any[]) = (db[table] as any[]).map(
         (item) =>
-          !(filterKey && item?.[filterKey] === filterValue)
+          rows.some((r) => r.id === item.id)
+            ? { ...item, isDeleted: true }
+            : item
       );
-
-      saveDb(db);
-      return { error: null };
-    },
-
-    async deleteAll() {
-      db = getDb();
-      db[table] = [];
       saveDb(db);
       return { error: null };
     },
@@ -304,12 +282,12 @@ const from = <T extends keyof LocalDB>(table: T) => {
   };
 };
 
-/* =======================================================
-   STORAGE (Word / PDF / Image)
-======================================================= */
+/* =====================================================
+   STORAGE
+===================================================== */
 
 const storage = {
-  from: (_bucket: string) => ({
+  from: () => ({
     async upload(path: string, file: File) {
       const db = getDb();
 
@@ -317,14 +295,15 @@ const storage = {
         const reader = new FileReader();
 
         reader.onload = () => {
-          db.files.push({
-            id: generateId("file"),
-            path,
-            content: reader.result as string,
-            file_type: file.type,
-            size: file.size,
-            uploadedAt: now(),
-          });
+          db.files.push(
+            injectBase({
+              fileName: file.name,
+              fileUrl: reader.result,
+              fileType: file.type,
+              fileSize: file.size,
+              uploadedBy: db.session.userId,
+            })
+          );
 
           saveDb(db);
 
@@ -339,16 +318,14 @@ const storage = {
     },
 
     getPublicUrl(path: string) {
-      return {
-        data: { publicUrl: path },
-      };
+      return { data: { publicUrl: path } };
     },
   }),
 };
 
-/* =======================================================
+/* =====================================================
    EXPORT
-======================================================= */
+===================================================== */
 
 export const supabase = {
   from,
