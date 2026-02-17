@@ -9,11 +9,11 @@ interface Props {
 }
 
 /**
- * 🚀 MathPreview Pro
- * - Render LaTeX inline & block
- * - Tối ưu performance
- * - Safe XSS
- * - Hỗ trợ Word / PDF import
+ * 🚀 MathPreview PRO MAX
+ * - Hỗ trợ $...$, $$...$$, \(...\), \[...\]
+ * - Tự động tối ưu render
+ * - Macro mạnh cho Toán VN
+ * - Không crash khi lỗi công thức
  */
 
 const MathPreview: React.FC<Props> = ({
@@ -23,15 +23,17 @@ const MathPreview: React.FC<Props> = ({
 }) => {
 
   /**
-   * 🔥 Smart Split Latex
-   * Hỗ trợ:
-   * $inline$
+   * Regex bắt:
    * $$block$$
+   * $inline$
+   * \[block\]
+   * \(inline\)
    */
   const parts = useMemo(() => {
     if (!content || typeof content !== "string") return [];
 
-    const regex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
+    const regex =
+      /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\([^\\\n]+?\\\))/g;
 
     const result: string[] = [];
     let lastIndex = 0;
@@ -52,18 +54,30 @@ const MathPreview: React.FC<Props> = ({
     return result;
   }, [content]);
 
+  /**
+   * Không có toán → render text thường
+   */
+  if (!parts.length) {
+    return (
+      <div className={`whitespace-pre-wrap ${className}`}>
+        {content}
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`math-content leading-relaxed select-text break-words ${className}`}
+      className={`math-content leading-relaxed select-text break-words transition-all ${className}`}
     >
       {parts.map((part, i) => {
         const isMath =
-          part.startsWith("$$") ||
-          (part.startsWith("$") && part.endsWith("$"));
+          part.startsWith("$") ||
+          part.startsWith("\\(") ||
+          part.startsWith("\\[");
 
         if (!isMath) {
           return (
-            <span key={i} className="whitespace-pre-wrap">
+            <span key={i} className="whitespace-pre-wrap opacity-90">
               {part}
             </span>
           );
@@ -72,11 +86,23 @@ const MathPreview: React.FC<Props> = ({
         let formula = part;
         let isBlock = displayMode;
 
+        // $$block$$
         if (part.startsWith("$$")) {
           formula = part.replace(/^\$\$|\$\$$/g, "");
           isBlock = true;
-        } else {
+        }
+        // $inline$
+        else if (part.startsWith("$")) {
           formula = part.replace(/^\$|\$$/g, "");
+        }
+        // \[block\]
+        else if (part.startsWith("\\[")) {
+          formula = part.replace(/^\\\[|\\\]$/g, "");
+          isBlock = true;
+        }
+        // \(inline\)
+        else if (part.startsWith("\\(")) {
+          formula = part.replace(/^\\\(|\\\)$/g, "");
         }
 
         try {
@@ -84,13 +110,22 @@ const MathPreview: React.FC<Props> = ({
             displayMode: isBlock,
             throwOnError: false,
             strict: false,
-            trust: false, // 🔒 bảo mật
+            trust: false,
             macros: {
+              "\\R": "\\mathbb{R}",
+              "\\Z": "\\mathbb{Z}",
+              "\\N": "\\mathbb{N}",
+              "\\Q": "\\mathbb{Q}",
               "\\RR": "\\mathbb{R}",
               "\\ZZ": "\\mathbb{Z}",
               "\\NN": "\\mathbb{N}",
-              "\\vec": "\\overrightarrow",
+              "\\QQ": "\\mathbb{Q}",
+              "\\vec": "\\overrightarrow{#1}",
               "\\abs": "\\left|#1\\right|",
+              "\\he": "\\left\\{\\begin{aligned}#1\\end{aligned}\\right.",
+              "\\hoac": "\\left[\\begin{aligned}#1\\end{aligned}\\right.",
+              "\\dfrac": "\\displaystyle\\frac{#1}{#2}",
+              "\\lim": "\\displaystyle\\lim",
             },
           });
 
@@ -99,17 +134,17 @@ const MathPreview: React.FC<Props> = ({
               key={i}
               className={
                 isBlock
-                  ? "block my-6 p-6 bg-indigo-50 rounded-2xl overflow-x-auto shadow-inner"
-                  : "inline-block px-1 font-semibold text-indigo-600"
+                  ? "block my-4 p-6 bg-white border border-indigo-100 rounded-2xl overflow-x-auto shadow-sm text-center"
+                  : "inline-block px-1 font-medium text-indigo-700"
               }
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
-        } catch (error) {
+        } catch {
           return (
             <span
               key={i}
-              className="text-rose-500 font-mono text-sm bg-rose-50 px-2 py-1 rounded"
+              className="text-rose-500 bg-rose-50 px-2 py-1 rounded border border-rose-200 text-sm"
             >
               {part}
             </span>
