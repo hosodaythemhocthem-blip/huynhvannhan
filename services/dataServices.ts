@@ -6,10 +6,14 @@ export const dataServices = {
     const { data, error } = await supabase
       .from("exams")
       .select("*")
-      .eq("teacher_id", teacher_id);
+      .eq("teacher_id", teacher_id)
+      .order("created_at", { ascending: false });
 
-    if (error) return [];
+    if (error) {
+      console.error(error);
+      return [];
+    }
 
-    return data as Exam[];
+    return (data as Exam[]) ?? [];
   },
 };
