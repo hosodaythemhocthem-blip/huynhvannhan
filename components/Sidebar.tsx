@@ -6,7 +6,6 @@ import {
   BookOpen,
   Bot,
   LineChart,
-  GraduationCap,
   LogOut,
   Users,
   FileText,
@@ -37,7 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   collapsed = false,
 }) => {
   const navItems = useMemo<NavItem[]>(() => {
-    const items: NavItem[] = [
+    const baseItems: NavItem[] = [
       { id: "dashboard", icon: LayoutDashboard, label: "Tổng quan" },
       { id: "courses", icon: BookOpen, label: "Khóa học" },
       {
@@ -45,59 +44,66 @@ const Sidebar: React.FC<SidebarProps> = ({
         icon: FileText,
         label: user.role === "teacher" ? "Quản lý đề thi" : "Kỳ thi",
       },
+      { id: "ai", icon: Bot, label: "Trợ lý AI" },
+      { id: "progress", icon: LineChart, label: "Tiến độ" },
     ];
 
     if (user.role === "teacher") {
-      items.push({ id: "classes", icon: Users, label: "Quản lý lớp" });
-      items.push({ id: "games", icon: Gamepad2, label: "Đấu trường" });
+      baseItems.splice(3, 0,
+        { id: "classes", icon: Users, label: "Quản lý lớp" },
+        { id: "games", icon: Gamepad2, label: "Đấu trường" }
+      );
     }
-
-    items.push({ id: "ai", icon: Bot, label: "Trợ lý AI" });
-    items.push({ id: "progress", icon: LineChart, label: "Tiến độ" });
 
     if (user.email === "huynhvannhan@gmail.com") {
-      items.push({ id: "admin", icon: ShieldCheck, label: "Quản trị" });
+      baseItems.push({
+        id: "admin",
+        icon: ShieldCheck,
+        label: "Quản trị",
+      });
     }
 
-    return items;
+    return baseItems;
   }, [user.role, user.email]);
 
   return (
     <aside
-      className={`bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-all ${
+      className={`bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-all duration-300 ${
         collapsed ? "w-24" : "w-72"
       }`}
     >
-      <div className="h-20 flex items-center px-6 font-black text-lg">
+      {/* Logo */}
+      <div className="h-20 flex items-center px-6 font-black text-lg tracking-wide">
         {!collapsed && "NhanLMS Pro"}
       </div>
 
+      {/* Navigation */}
       <nav className="flex-1 px-3 space-y-2">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
+        {navItems.map(({ id, icon: Icon, label }) => {
+          const isActive = activeTab === id;
 
           return (
             <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+              key={id}
+              onClick={() => onTabChange(id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-indigo-600"
-                  : "text-slate-400 hover:bg-slate-800"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
               }`}
             >
               <Icon size={20} />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span>{label}</span>}
             </button>
           );
         })}
       </nav>
 
-      <div className="p-4">
+      {/* Logout */}
+      <div className="p-4 border-t border-slate-800">
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition"
         >
           <LogOut size={20} />
           {!collapsed && "Đăng xuất"}
