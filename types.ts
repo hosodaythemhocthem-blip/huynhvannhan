@@ -1,42 +1,28 @@
 /* ======================================================
-   USER
+   BASE ENTITY
 ====================================================== */
 
-export interface User {
+export interface BaseEntity {
   id: string
-  name: string
-  email: string
-  role: "admin" | "teacher" | "student"
-
-  isApproved?: boolean
-
   createdAt: string
   updatedAt: string
+  isDeleted: boolean
+  version: number
 }
 
 /* ======================================================
-   EXAM
+   USER
 ====================================================== */
 
-export interface Exam {
-  id: string
-  title: string
-  teacher_id: string
+export type UserRole = "admin" | "teacher" | "student"
 
-  description?: string
+export interface User extends BaseEntity {
+  email: string
+  fullName: string
+  role: UserRole
 
-  questions: Question[]
-
-  isLocked?: boolean
-  isArchived?: boolean
-
-  file_url?: string
-  raw_content?: string
-
-  version: number
-
-  createdAt: string
-  updatedAt: string
+  isApproved: boolean
+  isActive: boolean
 }
 
 /* ======================================================
@@ -49,12 +35,10 @@ export enum QuestionType {
   SHORT_ANSWER = "SHORT_ANSWER",
 }
 
-export interface Question {
-  id: string
-  examId?: string   // 🔥 optional để tránh TS2741
+export interface Question extends BaseEntity {
+  examId?: string
 
   type: QuestionType
-
   content: string
 
   options?: string[]
@@ -62,16 +46,28 @@ export interface Question {
 
   points: number
   order: number
-  section?: number
 
   explanation?: string
-  image_url?: string
+  imageUrl?: string
 
   aiGenerated?: boolean
+}
 
-  isDeleted: boolean
-  version: number
+/* ======================================================
+   EXAM
+====================================================== */
 
-  createdAt: string
-  updatedAt: string
+export interface Exam extends BaseEntity {
+  title: string
+  teacherId: string
+
+  description?: string
+
+  questions: Question[]
+
+  isLocked: boolean
+  isArchived: boolean
+
+  fileUrl?: string
+  rawContent?: string
 }
