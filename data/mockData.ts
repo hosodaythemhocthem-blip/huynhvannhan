@@ -1,19 +1,20 @@
-import { User, Exam, Question, Class } from "../types"
+// data/mockData.ts
+import { User, Exam, Question, Class } from "../types";
 
 /* ======================================================
-   🧠 UTILITIES
+   UTILITIES
 ====================================================== */
 
-const now = () => new Date().toISOString()
+const now = () => new Date().toISOString();
 
 const baseEntity = (id: string) => ({
   id,
   created_at: now(),
   updated_at: now(),
-})
+});
 
 /* ======================================================
-   👤 MOCK USERS
+   USERS
 ====================================================== */
 
 export const MOCK_USERS: User[] = [
@@ -22,7 +23,7 @@ export const MOCK_USERS: User[] = [
     email: "huynhvannhan@gmail.com",
     full_name: "Thầy Huỳnh Văn Nhẫn",
     role: "teacher",
-    status: "approved", // ✅ FIX
+    status: "approved",
     class_id: null,
   },
   {
@@ -30,7 +31,7 @@ export const MOCK_USERS: User[] = [
     email: "hocsinh1@gmail.com",
     full_name: "Nguyễn Văn Đạt",
     role: "student",
-    status: "approved", // ✅ FIX
+    status: "approved",
     class_id: "class-12a1",
   },
   {
@@ -41,10 +42,10 @@ export const MOCK_USERS: User[] = [
     status: "pending",
     class_id: null,
   },
-]
+];
 
 /* ======================================================
-   📝 MOCK EXAMS
+   EXAMS
 ====================================================== */
 
 export const MOCK_EXAMS: Exam[] = [
@@ -57,13 +58,13 @@ export const MOCK_EXAMS: Exam[] = [
     is_archived: false,
     file_url: null,
     raw_content: null,
-    total_points: 30, // ✅ FIX
-    version: 1,       // ✅ FIX
+    total_points: 30,
+    version: 1,
   },
-]
+];
 
 /* ======================================================
-   ❓ MOCK QUESTIONS
+   QUESTIONS
 ====================================================== */
 
 export const MOCK_QUESTIONS: Question[] = [
@@ -75,8 +76,8 @@ export const MOCK_QUESTIONS: Question[] = [
       "Tính đạo hàm của hàm số $f(x) = \\ln(x^2 + 1)$ tại $x = 1$",
     options: ["$1$", "$\\frac{1}{2}$", "$2$", "$0$"],
     correct_answer: "0",
-    points: 10,  // ✅ FIX
-    order: 1,    // ✅ FIX
+    points: 10,
+    order: 1,
     explanation: null,
     section: null,
   },
@@ -88,33 +89,16 @@ export const MOCK_QUESTIONS: Question[] = [
       "Tìm nguyên hàm của $g(x) = e^{2x} + \\sin(x)$",
     correct_answer:
       "$\\frac{1}{2}e^{2x} - \\cos(x) + C$",
-    points: 10,  // ✅ FIX
-    order: 2,    // ✅ FIX
+    options: null,
+    points: 10,
+    order: 2,
     explanation: null,
     section: null,
   },
-  {
-    ...baseEntity("q-3"),
-    exam_id: "exam-01",
-    type: "multiple_choice",
-    content:
-      "Cho $J = \\int_0^1 x e^x dx$. Khẳng định nào đúng?",
-    options: [
-      "$J = 1$",
-      "$J = e - 1$",
-      "$J = e$",
-      "$J = 0$",
-    ],
-    correct_answer: "0",
-    points: 10,  // ✅ FIX
-    order: 3,    // ✅ FIX
-    explanation: null,
-    section: null,
-  },
-]
+];
 
 /* ======================================================
-   🎓 MOCK CLASSES
+   CLASSES
 ====================================================== */
 
 export const MOCK_CLASSES: Class[] = [
@@ -123,20 +107,6 @@ export const MOCK_CLASSES: Class[] = [
     name: "Lớp 12A1 - Chuyên Toán",
     teacher_id: "teacher-nhan",
     description: "Lớp chuyên toán năm học 2025",
-    is_active: true, // ✅ FIX
+    is_active: true,
   },
-]
-
-/* ======================================================
-   📊 BIỂU ĐỒ
-====================================================== */
-
-export const STUDY_PROGRESS = [
-  { day: "Thứ 2", activeMinutes: 45, exercises: 12 },
-  { day: "Thứ 3", activeMinutes: 120, exercises: 25 },
-  { day: "Thứ 4", activeMinutes: 60, exercises: 15 },
-  { day: "Thứ 5", activeMinutes: 180, exercises: 40 },
-  { day: "Thứ 6", activeMinutes: 90, exercises: 20 },
-  { day: "Thứ 7", activeMinutes: 240, exercises: 55 },
-  { day: "Chủ Nhật", activeMinutes: 30, exercises: 5 },
-]
+];
