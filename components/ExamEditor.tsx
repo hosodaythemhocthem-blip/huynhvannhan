@@ -1,198 +1,126 @@
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
-import { Save, PlusCircle, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import { Exam, Question } from "../types";
+import MathPreview from "./MathPreview";
+import ImportExamFromFile from "./ImportExamFromFile";
+import { examService } from "../services/exam.service";
 
 interface Props {
   exam?: Exam;
-  onSave: (exam: Exam) => void;
-  onCancel: () => void;
+  teacherId: string;
 }
 
-const createEmptyQuestion = (): Question => ({
-  id: crypto.randomUUID(),
-  content: "",
-  type: "text",
-  points: 1,
-});
-
-const ExamEditor: React.FC<Props> = ({
-  exam,
-  onSave,
-  onCancel,
-}) => {
+const ExamEditor: React.FC<Props> = ({ exam, teacherId }) => {
   const [title, setTitle] = useState(exam?.title || "");
-  const [description, setDescription] = useState(
-    exam?.description || ""
-  );
+  const [duration, setDuration] = useState(exam?.duration || 45);
   const [questions, setQuestions] = useState<Question[]>(
-    exam?.questions || [createEmptyQuestion()]
+    exam?.questions || []
   );
-  const [isSaving, setIsSaving] = useState(false);
-
-  // ✅ FIX: Không dùng NodeJS.Timeout
-  const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // =============================
-  // AUTOSAVE (client only)
-  // =============================
-  const triggerAutosave = useCallback(() => {
-    if (autosaveRef.current) {
-      clearTimeout(autosaveRef.current);
-    }
-
-    autosaveRef.current = setTimeout(() => {
-      handleSave();
-    }, 1500);
-  }, [title, description, questions]);
 
   useEffect(() => {
-    triggerAutosave();
-    return () => {
-      if (autosaveRef.current) {
-        clearTimeout(autosaveRef.current);
-      }
-    };
-  }, [title, description, questions, triggerAutosave]);
+    const timeout = setTimeout(() => {
+      handleSave();
+    }, 2000);
 
-  // =============================
-  // SAVE
-  // =============================
-  const handleSave = () => {
-    if (!title.trim()) return;
+    return () => clearTimeout(timeout);
+  }, [title, duration, questions]);
 
-    setIsSaving(true);
-
-    const updatedExam: Exam = {
-      id: exam?.id || crypto.randomUUID(),
-      title,
-      description,
-      questions,
-      createdAt: exam?.createdAt || new Date().toISOString(),
-    };
-
-    onSave(updatedExam);
-    setIsSaving(false);
+  const addQuestion = () => {
+    setQuestions([
+      ...questions,
+      {
+        id: crypto.randomUUID(),
+        content: "",
+        points: 1,
+      },
+    ]);
   };
 
-  // =============================
-  // QUESTION HANDLERS
-  // =============================
-  const updateQuestion = (id: string, value: string) => {
-    setQuestions((prev) =>
-      prev.map((q) =>
-        q.id === id ? { ...q, content: value } : q
+  const updateQuestion = (id: string, content: string) => {
+    setQuestions(
+      questions.map((q) =>
+        q.id === id ? { ...q, content } : q
       )
     );
   };
 
-  const addQuestion = () => {
-    setQuestions((prev) => [...prev, createEmptyQuestion()]);
-  };
-
   const deleteQuestion = (id: string) => {
-    setQuestions((prev) =>
-      prev.length > 1 ? prev.filter((q) => q.id !== id) : prev
-    );
+    setQuestions(questions.filter((q) => q.id !== id));
   };
 
-  // =============================
-  // UI
-  // =============================
+  const handleImport = (text: string) => {
+    const parsed = text.split(/\n+/).map((line, index) => ({
+      id: crypto.randomUUID(),
+      content: line,
+      points: 1,
+    }));
+
+    setQuestions(parsed);
+  };
+
+  const handleSave = async () => {
+    await examService.saveExam({
+      id: exam?.id || crypto.randomUUID(),
+      title,
+      duration,
+      teacher_id: teacherId,
+      questions,
+    });
+  };
+
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl p-8 space-y-8">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">
-          {exam ? "Chỉnh sửa đề" : "Tạo đề mới"}
-        </h2>
+    <div className="space-y-6">
+      <ImportExamFromFile onImport={handleImport} />
 
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-xl border"
-          >
-            Hủy
-          </button>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Tiêu đề đề thi"
+        className="border p-2 w-full rounded"
+      />
 
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl"
-          >
-            <Save size={18} />
-            {isSaving ? "Đang lưu..." : "Lưu"}
-          </button>
-        </div>
-      </div>
+      <input
+        type="number"
+        value={duration}
+        onChange={(e) => setDuration(Number(e.target.value))}
+        className="border p-2 w-32 rounded"
+      />
 
-      {/* TITLE */}
-      <div className="space-y-2">
-        <label className="font-medium">Tiêu đề</label>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full p-3 border rounded-xl"
-          placeholder="Nhập tiêu đề đề thi..."
-        />
-      </div>
+      {questions.map((q, index) => (
+        <div key={q.id} className="border p-4 rounded bg-gray-50">
+          <textarea
+            value={q.content}
+            onChange={(e) => updateQuestion(q.id, e.target.value)}
+            className="w-full border p-2 rounded"
+          />
 
-      {/* DESCRIPTION */}
-      <div className="space-y-2">
-        <label className="font-medium">Mô tả</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="w-full p-3 border rounded-xl"
-          placeholder="Mô tả đề thi..."
-        />
-      </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => deleteQuestion(q.id)}
+              className="bg-red-500 text-white px-3 py-1 rounded"
+            >
+              🗑 Xóa
+            </button>
 
-      {/* QUESTIONS */}
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold text-lg">Câu hỏi</h3>
-
-          <button
-            onClick={addQuestion}
-            className="flex items-center gap-2 text-indigo-600"
-          >
-            <PlusCircle size={18} />
-            Thêm câu hỏi
-          </button>
-        </div>
-
-        {questions.map((q, index) => (
-          <div
-            key={q.id}
-            className="p-4 border rounded-2xl bg-slate-50 space-y-3"
-          >
-            <div className="flex justify-between">
-              <span className="font-medium">
-                Câu {index + 1}
-              </span>
-
-              <button
-                onClick={() => deleteQuestion(q.id)}
-                className="text-red-500"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-
-            <textarea
-              value={q.content}
-              onChange={(e) =>
-                updateQuestion(q.id, e.target.value)
-              }
-              className="w-full p-3 border rounded-xl"
-              placeholder="Nhập nội dung câu hỏi..."
-            />
+            <button
+              onClick={() => navigator.clipboard.writeText(q.content)}
+              className="bg-blue-500 text-white px-3 py-1 rounded"
+            >
+              📋 Ctrl+V
+            </button>
           </div>
-        ))}
-      </div>
+
+          <div className="mt-3">
+            <MathPreview content={q.content} />
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={addQuestion}
+        className="bg-green-600 text-white px-4 py-2 rounded"
+      >
+        + Thêm câu hỏi
+      </button>
     </div>
   );
 };
