@@ -1,23 +1,20 @@
 /**
- * LMS V7 ENTERPRISE CORE TYPES
- * Strict Mode Safe – AI Ready – Supabase Compatible
- * Tối ưu cho Thầy Huỳnh Văn Nhẫn
+ * 🚀 LUMINA LMS V7 PRO MAX
+ * Designed for Thầy Huỳnh Văn Nhẫn
+ * Strict Mode Safe | AI Optimized | Supabase Sync | Word/PDF Ready
  */
 
 export type Role = "teacher" | "student" | "admin";
 export type UserStatus = "pending" | "approved" | "rejected" | "active";
 
 /* =====================================================
-   SYSTEM BASE ENTITY
+   BASE ENTITY
 ===================================================== */
 export interface BaseEntity {
   id: string;
   createdAt: string;
   updatedAt: string;
-  createdBy?: string;
-  updatedBy?: string;
   isDeleted: boolean;
-  version: number;
 }
 
 /* =====================================================
@@ -29,97 +26,86 @@ export interface User extends BaseEntity {
   role: Role;
   avatar?: string;
   status: UserStatus;
-  isApproved: boolean;
-  isActive: boolean;
   classId?: string;
-  className?: string;
+  pendingClassId?: string;
   lastLoginAt?: string;
 }
 
 /* =====================================================
-   QUESTION SYSTEM (Strict Safe)
+   QUESTION SYSTEM (AI + MATH READY)
 ===================================================== */
 export enum QuestionType {
   MCQ = "multiple-choice",
   TRUE_FALSE = "true-false",
   SHORT_ANSWER = "short-answer",
-  ESSAY = "essay",
   MATH = "math",
 }
 
-export interface QuestionBase extends BaseEntity {
+export interface QuestionMeta {
+  aiConfidence?: number;
+  source?: "manual" | "ai" | "imported";
+  importedFrom?: "pdf" | "docx" | "clipboard";
+}
+
+export interface Question extends BaseEntity {
+  examId: string;
   type: QuestionType;
-  content: string; // hỗ trợ LaTeX ($...$)
-  points: number;
+
+  /**
+   * 🔥 Core content field (LaTeX supported)
+   * Example: "Tính $\\int_0^1 x^2 dx$"
+   */
+  content: string;
+
+  /**
+   * ⚠ Backward compatibility
+   * Nếu hệ thống cũ còn dùng text
+   */
+  legacyText?: string;
+
+  options?: string[];
+
+  correctAnswer: string | number | boolean;
+
   explanation?: string;
-  section?: number;
-  image_url?: string;
+
+  points: number;
+
   order: number;
-  aiGenerated?: boolean;
-}
 
-/* ================= MCQ ================= */
-export interface MCQQuestion extends QuestionBase {
-  type: QuestionType.MCQ;
-  options: string[];
-  correctAnswer: number;
-}
+  image_url?: string;
 
-/* ================= TRUE FALSE ================= */
-export interface TrueFalseQuestion extends QuestionBase {
-  type: QuestionType.TRUE_FALSE;
-  options: ["True", "False"];
-  correctAnswer: boolean;
-}
+  ai_suggested?: boolean;
 
-/* ================= SHORT ANSWER ================= */
-export interface ShortAnswerQuestion extends QuestionBase {
-  type: QuestionType.SHORT_ANSWER;
-  correctAnswer?: string;
+  meta?: QuestionMeta;
 }
-
-/* ================= ESSAY ================= */
-export interface EssayQuestion extends QuestionBase {
-  type: QuestionType.ESSAY;
-  rubric?: string;
-}
-
-/* ================= MATH ================= */
-export interface MathQuestion extends QuestionBase {
-  type: QuestionType.MATH;
-  correctAnswer: string;
-  latexSource?: string;
-  renderMode?: "inline" | "block";
-}
-
-/* ================= FINAL UNION ================= */
-export type Question =
-  | MCQQuestion
-  | TrueFalseQuestion
-  | ShortAnswerQuestion
-  | EssayQuestion
-  | MathQuestion;
 
 /* =====================================================
    EXAM SYSTEM
 ===================================================== */
 export interface Exam extends BaseEntity {
   title: string;
-  description: string;
+  description?: string;
   teacherId: string;
-  teacherName?: string;
   questions: Question[];
   duration: number;
   subject: string;
   grade: string;
-  isLocked: boolean;
   isPublished: boolean;
-  isArchived: boolean;
-  assignedClassIds: string[];
   totalPoints: number;
   questionCount: number;
-  file_url?: string;
-  raw_content?: string;
+  accessCode?: string;
+}
+
+/* =====================================================
+   DRAFT EXAM (AUTO SAVE SUPPORT)
+===================================================== */
+export interface DraftExam {
+  tempId: string;
+  teacherId: string;
+  rawText?: string;
+  parsedExam?: Partial<Exam>;
+  lastEditedAt: string;
 }
 
 /* =====================================================
@@ -128,52 +114,56 @@ export interface Exam extends BaseEntity {
 export interface Class extends BaseEntity {
   name: string;
   teacherId: string;
+  inviteCode: string;
   studentCount: number;
-  studentIds: string[];
+  activeStudentIds: string[];
   pendingStudentIds: string[];
 }
 
 /* =====================================================
-   DATABASE MODELS (Snake Case for Supabase)
+   QUIZ RESULT
 ===================================================== */
-
-export interface DBProfile {
-  id: string;
-  email: string;
-  full_name: string;
-  role: Role;
-  status: UserStatus;
-  created_at: string;
+export interface QuizResult extends BaseEntity {
+  examId: string;
+  studentId: string;
+  studentName: string;
+  answers: Record<string, any>;
+  score: number;
+  timeSpent: number;
+  completedAt: string;
 }
 
-export interface DBExam {
-  id: string;
-  title: string;
-  description: string;
-  teacher_id: string;
-  duration: number;
-  subject: string;
-  grade: string;
-  is_locked: boolean;
-  is_published: boolean;
-  is_archived: boolean;
-  total_points: number;
-  question_count: number;
-  file_url?: string;
-  raw_content?: string;
-  created_at: string;
-  updated_at: string;
-}
+/* =====================================================
+   SUPABASE DATABASE MAP
+===================================================== */
+export interface DBTableMap {
+  profiles: {
+    id: string;
+    email: string;
+    full_name: string;
+    role: Role;
+    status: UserStatus;
+    class_id?: string;
+    created_at: string;
+  };
 
-export interface DBQuestion {
-  id: string;
-  exam_id: string;
-  type: QuestionType;
-  content: string;
-  points: number;
-  order: number;
-  explanation?: string;
-  correct_answer?: string;
-  options?: string[];
-  created_at: string;
+  exams: {
+    id: string;
+    title: string;
+    teacher_id: string;
+    duration: number;
+    subject: string;
+    is_published: boolean;
+    created_at: string;
+  };
+
+  questions: {
+    id: string;
+    exam_id: string;
+    content: string;
+    options: string[] | null;
+    correct_answer: string;
+    points: number;
+    order: number;
+  };
 }
