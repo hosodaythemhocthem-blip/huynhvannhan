@@ -53,14 +53,14 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
 
   /* User initials */
   const initials = useMemo(() => {
-    if (!user.fullName) return "";
-    return user.fullName
+    if (!user.full_name) return "";
+    return user.full_name
       .split(" ")
-      .map((n) => n[0])
+      .map((n: string) => n[0])
       .join("")
       .slice(-2)
       .toUpperCase();
-  }, [user.fullName]);
+  }, [user.full_name]);
 
   /* Logout */
   const handleLogout = useCallback(async () => {
@@ -68,7 +68,7 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
     if (!confirmLogout) return;
 
     await supabase.auth.signOut();
-    localStorage.removeItem("nhanlms_current_user");
+    localStorage.removeItem("lms_user");
     window.location.href = "/";
   }, []);
 
@@ -90,7 +90,10 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
     >
       {/* SEARCH */}
       <div className="flex-1 max-w-xl relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <Search
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+          size={18}
+        />
         <input
           type="text"
           value={searchQuery}
@@ -105,7 +108,6 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
 
       {/* RIGHT */}
       <div className="flex items-center gap-6">
-        {/* STATUS */}
         <span
           className={`text-xs font-bold ${
             isOnline ? "text-emerald-600" : "text-rose-600"
@@ -114,12 +116,10 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
           {isOnline ? "Online" : "Offline"}
         </span>
 
-        {/* NOTIFICATION */}
         <button className="relative p-2 rounded-lg hover:bg-slate-100">
           <Bell size={20} />
         </button>
 
-        {/* PROFILE */}
         <div className="relative">
           <button
             onClick={() => setIsProfileOpen((prev) => !prev)}
