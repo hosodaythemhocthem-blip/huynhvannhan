@@ -13,7 +13,6 @@ export interface BaseEntity {
 ====================================================== */
 
 export type UserRole = "admin" | "teacher" | "student"
-
 export type UserStatus = "pending" | "active" | "rejected"
 
 export interface User extends BaseEntity {
@@ -21,6 +20,7 @@ export interface User extends BaseEntity {
   full_name: string
   role: UserRole
   status: UserStatus
+  class_id?: string | null   // 👈 thêm để tránh mismatch DB
 }
 
 /* ======================================================
