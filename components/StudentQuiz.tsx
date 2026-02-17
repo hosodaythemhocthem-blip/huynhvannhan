@@ -1,12 +1,12 @@
 // components/StudentQuiz.tsx
 
-import React, { useMemo, useState } from "react"
-import { Exam, Question } from "../types"
+import React, { useMemo, useState, memo } from "react";
+import { Exam, Question } from "../types";
 
 interface StudentQuizProps {
-  exam: Exam
-  questions: Question[] // truyền toàn bộ question vào
-  onSubmit: (answers: Record<string, string>) => void
+  exam: Exam;
+  questions: Question[];
+  onSubmit: (answers: Record<string, string>) => void;
 }
 
 const StudentQuiz: React.FC<StudentQuizProps> = ({
@@ -14,25 +14,17 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
   questions,
   onSubmit,
 }) => {
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
-  // 🔥 LỌC QUESTION THEO exam_id
   const examQuestions = useMemo(() => {
     return questions
       .filter((q) => q.exam_id === exam.id)
-      .sort((a, b) => a.order - b.order)
-  }, [questions, exam.id])
+      .sort((a, b) => a.order - b.order);
+  }, [questions, exam.id]);
 
   const handleAnswer = (questionId: string, value: string) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: value,
-    }))
-  }
-
-  const handleSubmit = () => {
-    onSubmit(answers)
-  }
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -44,10 +36,9 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
             {question.order}. {question.content}
           </p>
 
-          {/* ================= MCQ ================= */}
           {question.type === "multiple_choice" &&
-            question.options?.map((opt: string, idx: number) => (
-              <label key={idx} className="block">
+            question.options?.map((opt) => (
+              <label key={opt} className="block">
                 <input
                   type="radio"
                   name={question.id}
@@ -59,25 +50,20 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
               </label>
             ))}
 
-          {/* ================= TRUE FALSE ================= */}
-          {question.type === "true_false" && (
-            <>
-              {["true", "false"].map((val: string) => (
-                <label key={val} className="block">
-                  <input
-                    type="radio"
-                    name={question.id}
-                    value={val}
-                    checked={answers[question.id] === val}
-                    onChange={() => handleAnswer(question.id, val)}
-                  />
-                  <span className="ml-2">{val}</span>
-                </label>
-              ))}
-            </>
-          )}
+          {question.type === "true_false" &&
+            ["true", "false"].map((val) => (
+              <label key={val} className="block">
+                <input
+                  type="radio"
+                  name={question.id}
+                  value={val}
+                  checked={answers[question.id] === val}
+                  onChange={() => handleAnswer(question.id, val)}
+                />
+                <span className="ml-2">{val}</span>
+              </label>
+            ))}
 
-          {/* ================= ESSAY ================= */}
           {question.type === "essay" && (
             <textarea
               className="w-full border rounded p-2"
@@ -92,13 +78,13 @@ const StudentQuiz: React.FC<StudentQuizProps> = ({
       ))}
 
       <button
-        onClick={handleSubmit}
+        onClick={() => onSubmit(answers)}
         className="bg-blue-600 text-white px-4 py-2 rounded"
       >
         Nộp bài
       </button>
     </div>
-  )
-}
+  );
+};
 
-export default StudentQuiz
+export default memo(StudentQuiz);
