@@ -1,6 +1,12 @@
 // components/Layout.tsx
 
-import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  memo,
+} from "react";
 import { User } from "../types";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -29,7 +35,10 @@ const Layout: React.FC<LayoutProps> = ({
   });
 
   useEffect(() => {
-    localStorage.setItem("lms_sidebar_state", JSON.stringify(isSidebarOpen));
+    localStorage.setItem(
+      "lms_sidebar_state",
+      JSON.stringify(isSidebarOpen)
+    );
   }, [isSidebarOpen]);
 
   const pageTitle = useMemo(
@@ -82,7 +91,7 @@ const Layout: React.FC<LayoutProps> = ({
       </div>
 
       <AiAssistant
-        user={{ id: user.id, fullName: user.fullName }}
+        user={{ id: user.id, full_name: user.full_name }}
         context={`Đang xem ${activeTab}`}
       />
 
