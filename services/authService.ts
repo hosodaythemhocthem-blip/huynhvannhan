@@ -1,89 +1,67 @@
-import { supabase } from "../supabase"
-import { User } from "../types"
+import { supabase } from "../supabase";
+import { User } from "../types";
+
+const DEFAULT_TEACHER = {
+  email: "huynhvannhan@gmail.com",
+  password: "huynhvannhan2020",
+  full_name: "Thầy Huỳnh Văn Nhẫn",
+};
+
+async function ensureDefaultTeacher() {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("email", DEFAULT_TEACHER.email)
+    .single();
+
+  if (!data) {
+    await supabase.from("users").insert([
+      {
+        email: DEFAULT_TEACHER.email,
+        password: DEFAULT_TEACHER.password,
+        full_name: DEFAULT_TEACHER.full_name,
+        role: "teacher",
+        is_approved: true,
+      },
+    ]);
+  }
+}
 
 export const authService = {
-  /* ======================================================
-     LOGIN
-  ====================================================== */
-  async login(email: string, password: string): Promise<User> {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+  async login(email: string, password: string): Promise<User | null> {
+    await ensureDefaultTeacher();
 
-    if (error || !data.user) {
-      throw new Error("Sai tài khoản hoặc mật khẩu.")
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
+    const { data, error } = await supabase
+      .from("users")
       .select("*")
-      .eq("id", data.user.id)
-      .single()
+      .eq("email", email)
+      .eq("password", password)
+      .single();
 
-    if (profileError || !profile) {
-      throw new Error("Không tìm thấy hồ sơ người dùng.")
+    if (error || !data) return null;
+
+    if (!data.is_approved) {
+      throw new Error("Tài khoản chưa được duyệt");
     }
 
-    return profile as User
+    return data as User;
   },
 
-  /* ======================================================
-     REGISTER STUDENT
-  ====================================================== */
-  async register(
+  async registerStudent(
     email: string,
-    fullName: string,
-    classId: string
-  ): Promise<void> {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: "12345678",
-    })
+    password: string,
+    full_name: string
+  ) {
+    const { error } = await supabase.from("users").insert([
+      {
+        email,
+        password,
+        full_name,
+        role: "student",
+        is_approved: false,
+      },
+    ]);
 
-    if (error || !data.user) {
-      throw new Error("Không thể đăng ký tài khoản.")
-    }
-
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: data.user.id,
-      email,
-      full_name: fullName,
-      role: "student",
-      status: "pending",
-      class_id: classId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-
-    if (profileError) {
-      throw new Error("Không thể tạo hồ sơ người dùng.")
-    }
+    if (error) throw error;
   },
-
-  /* ======================================================
-     GET CURRENT USER
-  ====================================================== */
-  async getCurrentUser(): Promise<User | null> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return null
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single()
-
-    return data as User
-  },
-
-  /* ======================================================
-     LOGOUT
-  ====================================================== */
-  async logout() {
-    await supabase.auth.signOut()
-  },
-}
+};
