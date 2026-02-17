@@ -1,50 +1,20 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js"
 
-/* ======================================================
-   ENVIRONMENT VARIABLES
-====================================================== */
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("❌ Missing Supabase environment variables");
+  console.warn("Supabase env missing")
 }
 
-/* ======================================================
-   SUPABASE CLIENT (PRODUCTION READY)
-====================================================== */
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
-    flowType: "pkce"
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  },
-  global: {
-    headers: {
-      "X-Client-Info": "nhanlms-pro-v60"
-    }
+export const supabase = createClient(
+  supabaseUrl || "",
+  supabaseAnonKey || "",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
   }
-});
-
-/* ======================================================
-   SESSION LISTENER (AUTO RECOVERY)
-====================================================== */
-
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_OUT") {
-    localStorage.removeItem("lms_user");
-  }
-
-  if (event === "SIGNED_IN" && session) {
-    localStorage.setItem("lms_session_active", "true");
-  }
-});
+)
