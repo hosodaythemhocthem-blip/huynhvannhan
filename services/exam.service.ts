@@ -1,9 +1,5 @@
 import { supabase } from "../supabase";
-import {
-  Exam,
-  Question,
-  QuestionType,
-} from "../types";
+import { Exam, Question, QuestionType } from "../types";
 
 /* =========================================================
    UTILITIES
@@ -15,10 +11,10 @@ const generateId = (prefix: string = "id") =>
 const now = () => new Date().toISOString();
 
 /* =========================================================
-   SAFE QUESTION NORMALIZER (V4 STRICT SAFE)
+   SAFE QUESTION NORMALIZER (STRICT PRODUCTION SAFE)
 ========================================================= */
 
-const normalizeQuestion = (q: any): Question => {
+const normalizeQuestion = (q: any, index: number): Question => {
   const base = {
     id: q.id || generateId("q"),
     content: q.content ?? q.text ?? "",
@@ -28,9 +24,12 @@ const normalizeQuestion = (q: any): Question => {
         : 1,
     explanation: q.explanation ?? "",
     section: q.section ?? 1,
-    order: q.order ?? 0,
-    image_url: q.image_url,
+    order: typeof q.order === "number" ? q.order : index,
+    image_url: q.image_url ?? null,
     isDeleted: q.isDeleted ?? false,
+    version: q.version ?? 1,
+    createdAt: q.createdAt ?? now(),
+    updatedAt: now(),
   };
 
   switch (q.type) {
@@ -81,7 +80,8 @@ const normalizeQuestion = (q: any): Question => {
         ...base,
         type: QuestionType.MATH,
         correctAnswer: q.correctAnswer ?? "",
-        latexSource: q.latexSource,
+        latexSource: q.latexSource ?? "",
+        renderMode: q.renderMode ?? "block",
       };
 
     default:
@@ -95,22 +95,20 @@ const normalizeQuestion = (q: any): Question => {
 };
 
 /* =========================================================
-   CALCULATE META (AUTO TOTAL POINTS)
+   CALCULATE META
 ========================================================= */
 
 const calculateMeta = (questions: Question[]) => {
-  const activeQuestions = questions.filter(
-    (q) => !q.isDeleted
-  );
+  const active = questions.filter((q) => !q.isDeleted);
 
-  const totalPoints = activeQuestions.reduce(
+  const totalPoints = active.reduce(
     (sum, q) => sum + (q.points || 0),
     0
   );
 
   return {
     totalPoints,
-    questionCount: activeQuestions.length,
+    questionCount: active.length,
   };
 };
 
@@ -120,16 +118,16 @@ const calculateMeta = (questions: Question[]) => {
 
 export const ExamService = {
   /* =========================================================
-     SAVE OR UPDATE EXAM
+     UPSERT EXAM (INSERT OR UPDATE SAFE)
   ========================================================= */
   async saveExam(exam: Exam): Promise<boolean> {
     try {
       if (!exam.title?.trim())
         throw new Error("Tiêu đề đề thi không được để trống.");
 
-      const normalizedQuestions = (
-        exam.questions || []
-      ).map(normalizeQuestion);
+      const normalizedQuestions = (exam.questions || []).map(
+        (q, i) => normalizeQuestion(q, i)
+      );
 
       const meta = calculateMeta(normalizedQuestions);
 
@@ -141,11 +139,15 @@ export const ExamService = {
         questionCount: meta.questionCount,
         updatedAt: now(),
         createdAt: exam.createdAt || now(),
+        version: exam.version ? exam.version + 1 : 1,
+        isDeleted: exam.isDeleted ?? false,
       };
 
       const { error } = await supabase
         .from("exams")
-        .insert(normalizedExam);
+        .upsert(normalizedExam, {
+          onConflict: "id",
+        });
 
       if (error) {
         console.error("❌ Lỗi lưu đề:", error.message);
@@ -160,13 +162,16 @@ export const ExamService = {
   },
 
   /* =========================================================
-     DELETE EXAM
+     SOFT DELETE EXAM
   ========================================================= */
   async deleteExam(examId: string): Promise<boolean> {
     try {
       const { error } = await supabase
         .from("exams")
-        .delete()
+        .update({
+          isDeleted: true,
+          updatedAt: now(),
+        })
         .eq("id", examId);
 
       if (error) {
@@ -182,13 +187,14 @@ export const ExamService = {
   },
 
   /* =========================================================
-     GET ALL EXAMS
+     GET ALL EXAMS (FILTER SOFT DELETE)
   ========================================================= */
   async getAllExams(): Promise<Exam[]> {
     try {
       const { data, error } = await supabase
         .from("exams")
-        .select()
+        .select("*")
+        .eq("isDeleted", false)
         .order("createdAt", { ascending: false });
 
       if (error) {
@@ -206,29 +212,26 @@ export const ExamService = {
   /* =========================================================
      SOFT DELETE QUESTION
   ========================================================= */
-  softDeleteQuestion(
-    exam: Exam,
-    questionId: string
-  ): Exam {
-    const updatedQuestions = exam.questions.map((q) =>
+  softDeleteQuestion(exam: Exam, questionId: string): Exam {
+    const updated = exam.questions.map((q) =>
       q.id === questionId
-        ? { ...q, isDeleted: true }
+        ? { ...q, isDeleted: true, updatedAt: now() }
         : q
     );
 
     return {
       ...exam,
-      questions: updatedQuestions,
-      ...calculateMeta(updatedQuestions),
+      questions: updated,
+      ...calculateMeta(updated),
     };
   },
 
   /* =========================================================
-     FORMAT RAW QUESTIONS (IMPORT SAFE)
+     IMPORT SAFE FORMAT
   ========================================================= */
   formatQuestionsForUI(rawQs: any[]): Question[] {
     if (!Array.isArray(rawQs)) return [];
-    return rawQs.map(normalizeQuestion);
+    return rawQs.map((q, i) => normalizeQuestion(q, i));
   },
 
   /* =========================================================
@@ -242,10 +245,13 @@ export const ExamService = {
 
       const { error } = await supabase.storage
         .from("exam-files")
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
 
       if (error) {
-        console.error("❌ Lỗi upload file:", error.message);
+        console.error("❌ Lỗi upload:", error.message);
         return null;
       }
 
