@@ -2,55 +2,37 @@ import { supabase } from "../supabase"
 import { Exam } from "../types"
 
 export const ExamService = {
-  /* ======================================================
-     SAVE EXAM (CREATE OR UPDATE)
-  ====================================================== */
-  async saveExam(exam: Exam): Promise<Exam | null> {
-    try {
-      const payload = {
-        ...exam,
-        updatedAt: new Date().toISOString(),
-      }
+  async saveExam(exam: Partial<Exam>): Promise<Exam | null> {
+    const payload = {
+      ...exam,
+      updated_at: new Date().toISOString(),
+    }
 
-      const { data, error } = await supabase
-        .from("exams")
-        .upsert([payload])
-        .select()
+    const { data, error } = await supabase
+      .from("exams")
+      .upsert(payload)
+      .select()
+      .single()
 
-      if (error) {
-        console.error("Save exam error:", error)
-        return null
-      }
-
-      return data?.[0] ?? null
-    } catch (err) {
-      console.error("Unexpected error:", err)
+    if (error) {
+      console.error("Save exam error:", error)
       return null
     }
+
+    return data as Exam
   },
 
-  /* ======================================================
-     GET BY ID
-  ====================================================== */
   async getById(id: string): Promise<Exam | null> {
-    try {
-      const { data, error } = await supabase
-        .from("exams")
-        .select("*")
-        .eq("id", id)
-        .single()
+    const { data, error } = await supabase
+      .from("exams")
+      .select("*")
+      .eq("id", id)
+      .single()
 
-      if (error) return null
-
-      return data
-    } catch {
-      return null
-    }
+    if (error) return null
+    return data as Exam
   },
 
-  /* ======================================================
-     DELETE
-  ====================================================== */
   async deleteExam(id: string): Promise<boolean> {
     const { error } = await supabase
       .from("exams")
