@@ -12,18 +12,25 @@ import {
 const generateId = (prefix: string = "id") =>
   `${prefix}_${crypto.randomUUID()}`;
 
+const now = () => new Date().toISOString();
+
 /* =========================================================
-   NORMALIZE QUESTION (V4 SAFE)
+   SAFE QUESTION NORMALIZER (V4 STRICT SAFE)
 ========================================================= */
 
 const normalizeQuestion = (q: any): Question => {
   const base = {
     id: q.id || generateId("q"),
     content: q.content ?? q.text ?? "",
-    points: q.points ?? 1,
-    explanation: q.explanation,
-    section: q.section,
-    order: q.order,
+    points:
+      typeof q.points === "number" && !isNaN(q.points)
+        ? q.points
+        : 1,
+    explanation: q.explanation ?? "",
+    section: q.section ?? 1,
+    order: q.order ?? 0,
+    image_url: q.image_url,
+    isDeleted: q.isDeleted ?? false,
   };
 
   switch (q.type) {
@@ -44,6 +51,7 @@ const normalizeQuestion = (q: any): Question => {
       };
 
     case QuestionType.TRUE_FALSE:
+    case "true-false":
       return {
         ...base,
         type: QuestionType.TRUE_FALSE,
@@ -65,7 +73,7 @@ const normalizeQuestion = (q: any): Question => {
       return {
         ...base,
         type: QuestionType.ESSAY,
-        correctAnswer: q.correctAnswer,
+        correctAnswer: q.correctAnswer ?? "",
       };
 
     case QuestionType.MATH:
@@ -87,39 +95,66 @@ const normalizeQuestion = (q: any): Question => {
 };
 
 /* =========================================================
-   EXAM SERVICE – SUPABASE PRO VERSION (V4 READY)
+   CALCULATE META (AUTO TOTAL POINTS)
+========================================================= */
+
+const calculateMeta = (questions: Question[]) => {
+  const activeQuestions = questions.filter(
+    (q) => !q.isDeleted
+  );
+
+  const totalPoints = activeQuestions.reduce(
+    (sum, q) => sum + (q.points || 0),
+    0
+  );
+
+  return {
+    totalPoints,
+    questionCount: activeQuestions.length,
+  };
+};
+
+/* =========================================================
+   EXAM SERVICE
 ========================================================= */
 
 export const ExamService = {
   /* =========================================================
-     SAVE OR UPDATE EXAM (UPSERT)
+     SAVE OR UPDATE EXAM
   ========================================================= */
   async saveExam(exam: Exam): Promise<boolean> {
     try {
-      if (!exam.title)
+      if (!exam.title?.trim())
         throw new Error("Tiêu đề đề thi không được để trống.");
+
+      const normalizedQuestions = (
+        exam.questions || []
+      ).map(normalizeQuestion);
+
+      const meta = calculateMeta(normalizedQuestions);
 
       const normalizedExam: Exam = {
         ...exam,
         id: exam.id || generateId("exam"),
-        questions: (exam.questions || []).map(normalizeQuestion),
-        updatedAt: new Date().toISOString(),
-        createdAt:
-          exam.createdAt || new Date().toISOString(),
+        questions: normalizedQuestions,
+        totalPoints: meta.totalPoints,
+        questionCount: meta.questionCount,
+        updatedAt: now(),
+        createdAt: exam.createdAt || now(),
       };
 
       const { error } = await supabase
         .from("exams")
-        .upsert([normalizedExam], { onConflict: "id" });
+        .insert(normalizedExam);
 
       if (error) {
-        console.error("❌ Lỗi Supabase:", error.message);
+        console.error("❌ Lỗi lưu đề:", error.message);
         return false;
       }
 
       return true;
     } catch (err) {
-      console.error("❌ Lỗi lưu đề:", err);
+      console.error("❌ Lỗi hệ thống:", err);
       return false;
     }
   },
@@ -153,7 +188,7 @@ export const ExamService = {
     try {
       const { data, error } = await supabase
         .from("exams")
-        .select("*")
+        .select()
         .order("createdAt", { ascending: false });
 
       if (error) {
@@ -169,7 +204,35 @@ export const ExamService = {
   },
 
   /* =========================================================
-     UPLOAD FILE
+     SOFT DELETE QUESTION
+  ========================================================= */
+  softDeleteQuestion(
+    exam: Exam,
+    questionId: string
+  ): Exam {
+    const updatedQuestions = exam.questions.map((q) =>
+      q.id === questionId
+        ? { ...q, isDeleted: true }
+        : q
+    );
+
+    return {
+      ...exam,
+      questions: updatedQuestions,
+      ...calculateMeta(updatedQuestions),
+    };
+  },
+
+  /* =========================================================
+     FORMAT RAW QUESTIONS (IMPORT SAFE)
+  ========================================================= */
+  formatQuestionsForUI(rawQs: any[]): Question[] {
+    if (!Array.isArray(rawQs)) return [];
+    return rawQs.map(normalizeQuestion);
+  },
+
+  /* =========================================================
+     UPLOAD FILE (WORD / PDF / IMAGE)
   ========================================================= */
   async uploadExamFile(file: File): Promise<string | null> {
     try {
@@ -195,13 +258,5 @@ export const ExamService = {
       console.error("❌ Upload thất bại:", err);
       return null;
     }
-  },
-
-  /* =========================================================
-     FORMAT RAW QUESTIONS
-  ========================================================= */
-  formatQuestionsForUI(rawQs: any[]): Question[] {
-    if (!Array.isArray(rawQs)) return [];
-    return rawQs.map(normalizeQuestion);
   },
 };
