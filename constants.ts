@@ -1,11 +1,11 @@
-import { Exam } from "./types"; // Fix đường dẫn import cho đúng thư mục gốc
+import { Exam } from "./types";
 
 /**
  * Helper: tính tổng điểm từ danh sách câu hỏi
- * Đã fix lỗi implicit 'any' bằng cách định nghĩa type rõ ràng cho param
  */
 const calculateTotalPoints = (questions: { points?: number }[]): number => {
-  return questions.reduce((sum: number, q) => sum + (q.points ?? 0), 0);
+  // Thêm type rõ ràng cho q để sửa lỗi TS7006 (implicit any)
+  return questions.reduce((sum: number, q: { points?: number }) => sum + (q.points ?? 0), 0);
 };
 
 /**
@@ -50,7 +50,7 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
       id: "exam-001",
       title: "Khảo sát hàm số & Đạo hàm - Đề số 1",
       description: "Đề kiểm tra định kỳ chương 1 Giải tích 12",
-      teacher_id: "teacher-nhan", // Đổi về snake_case cho khớp Type
+      teacher_id: "teacher-nhan",
       created_at: now,
       updated_at: now,
       duration: 90,
@@ -60,6 +60,6 @@ export const MOCK_EXAMS: Readonly<Exam[]> = Object.freeze([
       version: 1,
       file_url: null,
       raw_content: null,
-    } as unknown as Exam; // Ép kiểu an toàn để vượt qua Vercel strict mode
+    } as unknown as Exam;
   })(),
 ]);
