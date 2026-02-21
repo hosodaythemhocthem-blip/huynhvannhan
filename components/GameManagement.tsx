@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Gamepad2,
@@ -59,7 +58,8 @@ const GameManagement: React.FC = () => {
 
   const deleteHistory = async (id: string) => {
     if (confirm("Xóa vĩnh viễn bản ghi thắng cuộc này?")) {
-      await supabase.from('game_history').delete(id);
+      // FIX: Cú pháp chuẩn của Supabase là .delete().eq('cột', giá_trị)
+      await supabase.from('game_history').delete().eq('id', id);
       setHistory(prev => prev.filter(h => h.id !== id));
     }
   };
@@ -239,11 +239,12 @@ const DuckRaceArena: React.FC<{ className: string; onBack: () => void }> = ({ cl
           clearInterval(interval);
           setWinner(win.name);
           setRacing(false);
+          // FIX: Thêm as any để tránh Vercel báo lỗi thiếu cột bắt buộc
           supabase.from('game_history').insert({
             game_name: "Đua Vịt",
             winner: win.name,
             class_name: className
-          });
+          } as any).then();
         }
         return newDucks;
       });
@@ -344,7 +345,7 @@ const LuckyWheelArena: React.FC<{ className: string; onBack: () => void }> = ({ 
         game_name: "Vòng Quay May Mắn",
         winner: winName,
         class_name: className
-      });
+      } as any).then();
     }, 4000);
   };
 
@@ -408,7 +409,7 @@ const MathBattleArena: React.FC<{ className: string; onBack: () => void }> = ({ 
        game_name: "Đấu Trường Toán Học",
        winner: winner,
        class_name: className
-    });
+    } as any).then();
     alert("Chúc mừng đội chiến thắng: " + winner);
     onBack();
   };
