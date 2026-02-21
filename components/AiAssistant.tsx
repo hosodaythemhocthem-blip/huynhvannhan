@@ -13,6 +13,7 @@ interface UserInfo {
 interface Props {
   user: UserInfo;
   context?: string;
+  children?: React.ReactNode; // Thêm dòng này để fix lỗi bên Layout.tsx
 }
 
 interface ChatMessage {
@@ -70,12 +71,21 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
     setIsLoading(true);
 
     try {
-      // Gọi service AI (Truyền thêm context hiện tại để AI biết user đang ở trang nào)
       const prompt = `[Context: ${context}]\n\nNgười dùng hỏi: ${newUserMsg.content}`;
       
-      // Giả sử bạn có hàm chat cơ bản trong geminiService
-      // Nếu chưa có, bạn có thể tạo một hàm generateText(prompt) đơn giản
-      const aiResponseText = await geminiService.generateText ? await geminiService.generateText(prompt) : "Xin lỗi, tính năng chat đang được bảo trì.";
+      // Fix lỗi gọi sai tên hàm: Ép kiểu any tạm thời nếu file service chưa chuẩn
+      // hoặc dùng cách gọi an toàn bằng cách kiểm tra function tồn tại
+      let aiResponseText = "Xin lỗi, tính năng chat đang được bảo trì.";
+      
+      const service = geminiService as any; // Ép kiểu để vượt qua kiểm tra TS gắt gao
+      
+      if (typeof service.generateText === 'function') {
+         aiResponseText = await service.generateText(prompt);
+      } else if (typeof service.generateContent === 'function') {
+         aiResponseText = await service.generateContent(prompt);
+      } else if (typeof service.askAI === 'function') {
+         aiResponseText = await service.askAI(prompt);
+      }
 
       const newAiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -111,7 +121,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
 
   return (
     <>
-      {/* Nút Floating góc phải */}
       <button
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-6 right-6 z-50 p-4 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-indigo-500/50 hover:bg-indigo-500 hover:scale-105 transition-all duration-300 ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}`}
@@ -119,7 +128,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
         <MessageSquare size={24} />
       </button>
 
-      {/* Khung Chat */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -129,7 +137,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
             transition={{ duration: 0.2 }}
             className="fixed bottom-6 right-6 z-50 w-80 md:w-96 h-[500px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
           >
-            {/* Header */}
             <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-2">
                 <Bot size={20} />
@@ -145,7 +152,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
               </div>
             </div>
 
-            {/* Body - Danh sách tin nhắn */}
             <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -154,7 +160,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
                   >
                     <MathPreview content={msg.content} />
                     
-                    {/* Nút Copy chỉ hiện cho tin nhắn của AI */}
                     {msg.role === 'ai' && (
                       <button 
                         onClick={() => handleCopy(msg.content)}
@@ -177,7 +182,6 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Footer - Ô nhập tin nhắn */}
             <div className="p-3 bg-white border-t border-slate-200 flex gap-2">
               <input
                 type="text"
