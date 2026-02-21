@@ -61,7 +61,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden">
-      {/* SIDEBAR */}
+      {/* SIDEBAR - FIX TS2322: Đóng thẻ trực tiếp, tuyệt đối không chèn children vào giữa */}
       <Sidebar
         user={user}
         activeTab={activeTab}
@@ -75,10 +75,9 @@ const Layout: React.FC<LayoutProps> = ({
         className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full
           ${isSidebarOpen ? "lg:ml-72" : "lg:ml-20"}`}
       >
-        {/* HEADER */}
-        {/* FIX: Truyền thẻ Fragment rỗng <></> vào để thỏa mãn prop 'children' của TypeScript */}
+        {/* HEADER - FIX TS2741: Bắt buộc truyền một thẻ div ẩn để làm 'children' hợp lệ cho TypeScript */}
         <Header user={user} activeTab={activeTab}>
-          <></>
+          <div className="hidden"></div>
         </Header>
 
         {/* TOGGLE BUTTON */}
