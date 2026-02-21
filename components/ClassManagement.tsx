@@ -9,9 +9,6 @@ import { User } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-const MotionDiv = motion.div as any; // Bypass TS strict for animations
-
-// Định nghĩa rõ ràng kiểu dữ liệu cho Lớp học để hết lỗi "Property 'name' does not exist"
 interface ClassItem {
   id: string;
   name: string;
@@ -48,10 +45,12 @@ const ClassManagement: React.FC = () => {
         .order('name', { ascending: true });
       
       if (userError) throw userError;
+      if (classError) throw classError;
       
-      setUsers(userData || []);
-      setClasses(classData || []);
-    } catch (err: any) {
+      // Ép kiểu rõ ràng để TypeScript không bắt lỗi
+      setUsers((userData as User[]) || []);
+      setClasses((classData as ClassItem[]) || []);
+    } catch (err) {
       console.error("Lỗi data:", err);
       showToast("Không thể tải dữ liệu lớp học", "error");
     } finally {
@@ -76,12 +75,13 @@ const ClassManagement: React.FC = () => {
       showToast(`Đã tạo lớp "${newClassName}" thành công!`, "success");
       await loadAllData();
     } catch (err) {
+      console.error(err);
       showToast("Lỗi khi tạo lớp mới.", "error");
     }
   };
 
   const handleDeleteClass = async (id: string, name: string) => {
-    if (!confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nHọc sinh trong lớp này sẽ mất thông tin lớp.`)) return;
+    if (!window.confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nHọc sinh trong lớp này sẽ mất thông tin lớp.`)) return;
 
     try {
       await supabase.from('users').update({ class_name: null }).eq('class_name', name);
@@ -93,6 +93,7 @@ const ClassManagement: React.FC = () => {
       if (selectedClassId === id) setSelectedClassId(null);
       await loadAllData();
     } catch (err) {
+      console.error(err);
       showToast("Không thể xóa lớp.", "error");
     }
   };
@@ -114,12 +115,13 @@ const ClassManagement: React.FC = () => {
       showToast(`Đã duyệt em ${user.full_name} chính thức!`, "success");
       await loadAllData();
     } catch (err) {
+      console.error(err);
       showToast("Lỗi phê duyệt học sinh.", "error");
     }
   };
 
   const deleteUser = async (id: string) => {
-    if (!confirm("Xóa vĩnh viễn tài khoản học sinh này? Hành động không thể hoàn tác.")) return;
+    if (!window.confirm("Xóa vĩnh viễn tài khoản học sinh này? Hành động không thể hoàn tác.")) return;
     
     try {
       const { error } = await supabase.from('users').delete().eq('id', id);
@@ -128,21 +130,22 @@ const ClassManagement: React.FC = () => {
       showToast("Đã xóa hồ sơ học sinh.", "info");
       await loadAllData();
     } catch (err) {
+      console.error(err);
       showToast("Lỗi khi xóa học sinh.", "error");
     }
   };
 
   const studentList = users.filter(u => u.role === 'student');
   const selectedClassData = classes.find(c => c.id === selectedClassId);
-  const selectedClassName = selectedClassData ? selectedClassData.name : null;
+  const selectedClassName = selectedClassData?.name || null;
 
   const classStudents = selectedClassName
     ? studentList.filter(u => u.class_name === selectedClassName)
     : studentList;
 
   const filteredStudents = classStudents.filter(u => 
-    (u.full_name || "").toLowerCase().includes(search.toLowerCase()) || 
-    (u.email || "").toLowerCase().includes(search.toLowerCase())
+    (u.full_name ?? "").toLowerCase().includes(search.toLowerCase()) || 
+    (u.email ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const pendingList = studentList.filter(u => u.status === 'pending');
@@ -184,7 +187,7 @@ const ClassManagement: React.FC = () => {
       <AnimatePresence>
         {showCreateClass && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-            <MotionDiv 
+            <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
               exit={{ opacity: 0, scale: 0.9, y: 20 }} 
@@ -209,7 +212,7 @@ const ClassManagement: React.FC = () => {
                       XÁC NHẬN TẠO
                   </button>
                </form>
-            </MotionDiv>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
@@ -279,8 +282,7 @@ const ClassManagement: React.FC = () => {
                       <div key={user.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-rose-500 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg shadow-rose-200">
-                                {/* Thêm (user.full_name || 'U') để đảm bảo an toàn nếu tên rỗng */}
-                                {(user.full_name || 'U').charAt(0)}
+                               {(user.full_name || 'U').charAt(0)}
                             </div>
                             <div className="overflow-hidden">
                                <h5 className="font-bold text-slate-800 truncate">{user.full_name || 'Học sinh mới'}</h5>
@@ -325,7 +327,7 @@ const ClassManagement: React.FC = () => {
                              <td className="px-8 py-5">
                                 <div className="flex items-center gap-4">
                                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">
-                                     {(user.full_name || 'U').charAt(0)}
+                                      {(user.full_name || 'U').charAt(0)}
                                    </div>
                                    <div>
                                       <span className="font-bold text-slate-800 block text-sm">{user.full_name || 'Chưa cập nhật tên'}</span>
