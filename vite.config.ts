@@ -5,7 +5,7 @@ import path from "path"
 export default defineConfig({
   plugins: [react()],
   
-  // Quan trọng: Dùng './' để chạy được cả trên máy local và khi deploy
+  // Quan trọng: Dùng './' để chạy được cả trên máy local và khi deploy lên Vercel
   base: './', 
 
   resolve: {
@@ -18,15 +18,13 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: false,
-    chunkSizeWarningLimit: 3000, // Tăng giới hạn để không báo vàng
+    chunkSizeWarningLimit: 3000, 
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          // Tách nhỏ các thư viện để load nhanh hơn, tránh lỗi quá tải
+        // Cấu hình đơn giản hóa việc chia file để tránh lỗi 404 khi mạng chậm
+        manualChunks: (id) => {
           if (id.includes("node_modules")) {
-            if (id.includes("react")) return "vendor-react";
-            if (id.includes("katex")) return "vendor-math";
-            return "vendor-libs";
+            return "vendor"; // Gom hết thư viện vào 1 file cho ổn định
           }
         },
       },
