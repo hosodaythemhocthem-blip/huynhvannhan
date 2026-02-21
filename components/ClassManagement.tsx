@@ -9,6 +9,15 @@ import { User } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
+// FIX: Mở rộng type User gốc để TypeScript không báo lỗi thiếu thuộc tính (TS2339)
+interface ExtendedUser extends User {
+  role?: string;
+  class_name?: string | null;
+  status?: string;
+  full_name?: string;
+  email?: string;
+}
+
 interface ClassItem {
   id: string;
   name: string;
@@ -17,7 +26,8 @@ interface ClassItem {
 
 const ClassManagement: React.FC = () => {
   const { showToast } = useToast();
-  const [users, setUsers] = useState<User[]>([]);
+  // Sử dụng ExtendedUser thay vì User
+  const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -47,8 +57,8 @@ const ClassManagement: React.FC = () => {
       if (userError) throw userError;
       if (classError) throw classError;
       
-      // Ép kiểu rõ ràng để TypeScript không bắt lỗi
-      setUsers((userData as User[]) || []);
+      // Ép kiểu rõ ràng về ExtendedUser
+      setUsers((userData as ExtendedUser[]) || []);
       setClasses((classData as ClassItem[]) || []);
     } catch (err) {
       console.error("Lỗi data:", err);
@@ -98,7 +108,7 @@ const ClassManagement: React.FC = () => {
     }
   };
 
-  const approveUser = async (user: User) => {
+  const approveUser = async (user: ExtendedUser) => {
     try {
       const targetClass = classes.find(c => c.id === selectedClassId)?.name || null;
 
