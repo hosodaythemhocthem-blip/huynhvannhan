@@ -5,7 +5,8 @@ import {
   Upload, MoreVertical, File
 } from "lucide-react";
 import MathPreview from "./MathPreview";
-import { supabase, uploadFileToStorage } from "../supabase";
+// FIX: Xóa uploadFileToStorage vì không sử dụng và gây lỗi TS2305
+import { supabase } from "../supabase"; 
 import { motion } from "framer-motion";
 import { useToast } from "./Toast"; 
 
@@ -173,11 +174,11 @@ const CourseCard: React.FC<CourseCardProps> = ({
         
         {/* Description rendering Math */}
         <div className="text-sm text-slate-500 mb-6 flex-1 line-clamp-3">
-            {course.description ? (
+             {course.description ? (
                 <MathPreview content={course.description} />
-            ) : (
+             ) : (
                 <span className="italic opacity-60">Chưa có mô tả cho khóa học này.</span>
-            )}
+             )}
         </div>
 
         {/* Course Meta Info */}
