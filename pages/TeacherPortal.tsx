@@ -55,6 +55,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         is_archived: false,
         total_points: 10,
         version: 1,
+        duration: 45, // Thêm duration mặc định
         created_at: now,
         updated_at: now,
       })
@@ -89,7 +90,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         <div className="flex justify-between items-end mb-6">
           <div>
             <h1 className="text-3xl font-bold text-indigo-900 mb-2">
-              Xin chào, {user.name} 👋
+              Xin chào, {user.full_name || "Thầy cô"} 👋 {/* Đã sửa từ user.name thành user.full_name */}
             </h1>
             <p className="text-slate-500">Quản lý kho đề thi và lớp học của thầy.</p>
           </div>
@@ -199,7 +200,8 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
                 <div className="flex items-center gap-4 text-xs text-slate-400 border-t pt-4">
                   <div className="flex items-center gap-1">
                     <Clock size={14} />
-                    {new Date(e.updated_at).toLocaleDateString('vi-VN')}
+                    {/* Đã thêm check undefined cho e.updated_at */}
+                    {e.updated_at ? new Date(e.updated_at).toLocaleDateString('vi-VN') : 'Mới cập nhật'}
                   </div>
                   <div className="ml-auto font-medium px-2 py-1 bg-slate-100 rounded text-slate-600">
                     v{e.version}
