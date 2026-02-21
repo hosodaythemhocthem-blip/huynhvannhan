@@ -1,74 +1,60 @@
+import { supabase } from '../supabase';
+import { ExamSubmission, Question } from '../types';
 
-import { GoogleGenAI, Type } from "@google/genai";
+export const quizService = {
+  // 1. Nộp bài thi
+  async submitExam(submission: Partial<ExamSubmission>) {
+    const { data, error } = await supabase
+      .from('exam_submissions')
+      .insert({
+        ...submission,
+        is_submitted: true,
+        submitted_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-export const geminiService = {
-  async askGemini(prompt: string, systemInstruction?: string): Promise<string> {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) return "⚠️ Thiếu API Key trong hệ thống.";
-
-    try {
-      // Khởi tạo SDK theo chuẩn mới: dùng named parameter { apiKey }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-          systemInstruction: systemInstruction || 
-            "Bạn là Lumina AI, trợ lý học tập của Thầy Huỳnh Văn Nhẫn. Hãy giải đáp toán học một cách chuyên sâu, sử dụng LaTeX $...$ cho mọi công thức.",
-          temperature: 0.7,
-        },
-      });
-      // Lấy text trực tiếp từ thuộc tính .text (KHÔNG dùng .text())
-      return response.text || "Lumina đang suy nghĩ...";
-    } catch (error) {
-      console.error("Lỗi AI:", error);
-      return "⚠️ Hệ thống AI Lumina đang bảo trì hoặc API Key hết hạn. Thầy hãy kiểm tra lại nhé.";
-    }
+    if (error) throw error;
+    return data;
   },
 
-  async parseExamWithAI(rawText: string): Promise<any> {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API Key missing");
+  // 2. Tự động chấm điểm (cho câu trắc nghiệm)
+  gradeExam(questions: Question[], answers: Record<string, string>): number {
+    let score = 0;
+    questions.forEach(q => {
+      if (q.type === 'multiple_choice' || q.type === 'true_false') {
+        // So sánh đáp án học sinh chọn với đáp án đúng
+        // Lưu ý: answers[q.id] lưu index (0,1,2,3) hoặc ký tự (A,B,C,D) tùy logic Editor
+        // Ở ExamEditor phần trước ta lưu 'A','B','C','D'.
+        if (answers[q.id] === q.correct_answer) {
+          score += (Number(q.points) || 0);
+        }
+      }
+    });
+    return score;
+  },
 
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: `Chuyển văn bản sau thành cấu hình JSON đề thi chuẩn: ${rawText}`,
-        config: {
-          responseMimeType: "application/json",
-          systemInstruction: "Bạn là chuyên gia bóc tách đề thi Toán học. Trích xuất tiêu đề và danh sách câu hỏi. Mọi công thức Toán phải dùng LaTeX $...$. Đảm bảo đúng định dạng JSON yêu cầu.",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    text: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    correctAnswer: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                    type: { type: Type.STRING }
-                  },
-                  required: ["text", "options", "correctAnswer"]
-                }
-              }
-            },
-            required: ["title", "questions"]
-          }
-        },
-      });
-      // Lấy text trực tiếp từ thuộc tính .text
-      const jsonStr = response.text || '{}';
-      return JSON.parse(jsonStr);
-    } catch (error) {
-      console.error("AI Parsing Error:", error);
-      throw new Error("AI không thể bóc tách nội dung này.");
-    }
+  // 3. Lấy lịch sử làm bài của học sinh
+  async getStudentHistory(studentId: string) {
+    const { data, error } = await supabase
+      .from('exam_submissions')
+      .select('*, exams(title)')
+      .eq('student_id', studentId)
+      .order('submitted_at', { ascending: false });
+      
+    if (error) throw error;
+    return data;
+  },
+
+  // 4. Lấy chi tiết một bài làm (để xem lại)
+  async getSubmissionDetail(submissionId: string) {
+    const { data, error } = await supabase
+      .from('exam_submissions')
+      .select('*')
+      .eq('id', submissionId)
+      .single();
+      
+    if (error) throw error;
+    return data;
   }
 };
-
-export const askGemini = geminiService.askGemini;
