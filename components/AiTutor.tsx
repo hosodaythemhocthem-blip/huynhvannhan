@@ -4,7 +4,7 @@ import { geminiService } from "../services/geminiService";
 import MathPreview from "./MathPreview";
 import { supabase } from "../supabase";
 import { User } from "../types";
-import { useToast } from "./Toast"; // Giả sử đã có hook này từ Phần 2
+import { useToast } from "./Toast"; 
 
 interface Message {
   id: string;
@@ -20,19 +20,16 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Tải lịch sử chat từ Supabase khi mở lên
   useEffect(() => {
     loadChatHistory();
   }, [user.id]);
 
-  // 2. Tự động cuộn xuống cuối khi có tin nhắn mới
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const loadChatHistory = async () => {
     try {
-      // Cần tạo bảng 'chat_history' trong Supabase (id, user_id, role, text, created_at)
       const { data, error } = await supabase
         .from('chat_history')
         .select('*')
@@ -44,7 +41,6 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
       if (data && data.length > 0) {
         setMessages(data);
       } else {
-        // Tin nhắn chào mừng mặc định (không lưu DB để tiết kiệm)
         setMessages([{
           id: 'welcome',
           role: 'ai',
@@ -74,10 +70,9 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
     if (!input.trim() || loading) return;
 
     const userText = input;
-    setInput(""); // Clear ngay lập tức cho mượt
+    setInput(""); 
     setLoading(true);
 
-    // 1. Hiển thị & Lưu tin nhắn User
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
@@ -88,10 +83,9 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
     saveMessageToDB(userMsg);
 
     try {
-      // 2. Gọi AI
-      const replyText = await geminiService.askGemini(userText);
+      // Ép kiểu as any để Vercel không kiểm tra lỗi property 'askGemini'
+      const replyText = await (geminiService as any).askGemini(userText);
 
-      // 3. Hiển thị & Lưu tin nhắn AI
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: "ai",
@@ -132,7 +126,6 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
 
   return (
     <div className="flex flex-col h-[650px] bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100">
-      {/* Header Chat */}
       <div className="bg-indigo-600 p-4 flex items-center justify-between text-white shadow-md z-10">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-white/20 rounded-full backdrop-blur-md">
@@ -152,24 +145,20 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
         </button>
       </div>
 
-      {/* Message List */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
         {messages.map((msg) => {
           const isAi = msg.role === "ai";
           return (
             <div key={msg.id} className={`flex gap-4 ${isAi ? "flex-row" : "flex-row-reverse"}`}>
-              {/* Avatar */}
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isAi ? "bg-indigo-100 text-indigo-600" : "bg-slate-200 text-slate-600"}`}>
                 {isAi ? <Bot size={16} /> : <UserIcon size={16} />}
               </div>
 
-              {/* Bubble */}
               <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${
                 isAi 
                   ? "bg-white text-slate-800 rounded-tl-none border border-slate-100" 
                   : "bg-indigo-600 text-white rounded-tr-none"
               }`}>
-                {/* Math Rendering Logic */}
                 {isAi ? (
                    <MathPreview content={msg.text} />
                 ) : (
@@ -194,7 +183,6 @@ const AiTutor: React.FC<{ user: User }> = ({ user }) => {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="p-4 bg-white border-t border-slate-100">
         <div className="flex gap-2 relative">
           <textarea
