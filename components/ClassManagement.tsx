@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Users, Trash2, CheckCircle2, Search, 
-  Loader2, School, Info, Plus, ListFilter, X, 
+  Loader2, School, Plus, ListFilter, X, 
   ChevronRight, UserMinus, ShieldAlert, BadgeCheck
 } from "lucide-react";
 import { supabase } from "../supabase";
@@ -11,10 +11,17 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const MotionDiv = motion.div as any; // Bypass TS strict for animations
 
+// Định nghĩa rõ ràng kiểu dữ liệu cho Lớp học để hết lỗi "Property 'name' does not exist"
+interface ClassItem {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+
 const ClassManagement: React.FC = () => {
   const { showToast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -30,21 +37,18 @@ const ClassManagement: React.FC = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // Lấy danh sách users
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: false });
       
-      // Lấy danh sách classes
       const { data: classData, error: classError } = await supabase
-        .from('classes') // Đảm bảo bạn đã tạo bảng 'classes' (id, name, created_at)
+        .from('classes')
         .select('*')
         .order('name', { ascending: true });
       
       if (userError) throw userError;
       
-      // Nếu bảng classes chưa có, ta dùng set rỗng, không throw error để app không crash
       setUsers(userData || []);
       setClasses(classData || []);
     } catch (err: any) {
@@ -70,7 +74,7 @@ const ClassManagement: React.FC = () => {
       setNewClassName("");
       setShowCreateClass(false);
       showToast(`Đã tạo lớp "${newClassName}" thành công!`, "success");
-      await loadAllData(); // Reload lại list
+      await loadAllData();
     } catch (err) {
       showToast("Lỗi khi tạo lớp mới.", "error");
     }
@@ -80,10 +84,8 @@ const ClassManagement: React.FC = () => {
     if (!confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nHọc sinh trong lớp này sẽ mất thông tin lớp.`)) return;
 
     try {
-      // 1. Cập nhật học sinh trong lớp về null
       await supabase.from('users').update({ class_name: null }).eq('class_name', name);
       
-      // 2. Xóa lớp
       const { error } = await supabase.from('classes').delete().eq('id', id);
       if (error) throw error;
       
@@ -97,14 +99,13 @@ const ClassManagement: React.FC = () => {
 
   const approveUser = async (user: User) => {
     try {
-      // Mặc định duyệt vào lớp đang chọn hoặc để trống
       const targetClass = classes.find(c => c.id === selectedClassId)?.name || null;
 
       const { error } = await supabase
         .from('users')
         .update({ 
             status: 'active', 
-            class_name: targetClass // Gán luôn lớp nếu đang ở trong view lớp đó
+            class_name: targetClass
         })
         .eq('id', user.id);
 
@@ -121,7 +122,6 @@ const ClassManagement: React.FC = () => {
     if (!confirm("Xóa vĩnh viễn tài khoản học sinh này? Hành động không thể hoàn tác.")) return;
     
     try {
-      // Xóa ở bảng users (Trigger Supabase nên xóa luôn ở Auth nếu cấu hình, hoặc chỉ xóa data)
       const { error } = await supabase.from('users').delete().eq('id', id);
       if (error) throw error;
       
@@ -132,7 +132,6 @@ const ClassManagement: React.FC = () => {
     }
   };
 
-  // --- Filtering Logic ---
   const studentList = users.filter(u => u.role === 'student');
   const selectedClassData = classes.find(c => c.id === selectedClassId);
   const selectedClassName = selectedClassData ? selectedClassData.name : null;
@@ -159,7 +158,6 @@ const ClassManagement: React.FC = () => {
   return (
     <div className="space-y-8 animate-fade-in pb-20">
       
-      {/* --- HEADER --- */}
       <header className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
         
@@ -183,7 +181,6 @@ const ClassManagement: React.FC = () => {
         </button>
       </header>
 
-      {/* --- MODAL TẠO LỚP --- */}
       <AnimatePresence>
         {showCreateClass && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
@@ -219,7 +216,6 @@ const ClassManagement: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* --- SIDEBAR DANH SÁCH LỚP --- */}
         <aside className="lg:col-span-4 space-y-4">
            <div className="flex items-center justify-between px-2 mb-2">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -245,7 +241,6 @@ const ClassManagement: React.FC = () => {
                      <span className="flex items-center gap-3"><School size={18} /> {cls.name}</span>
                   </button>
                   
-                  {/* Nút xóa lớp (chỉ hiện khi hover) */}
                   <button 
                     onClick={() => handleDeleteClass(cls.id, cls.name)}
                     className="p-4 bg-white border border-rose-100 text-rose-400 hover:bg-rose-500 hover:text-white rounded-2xl transition-all shadow-sm opacity-0 group-hover:opacity-100 absolute right-0 translate-x-[110%] group-hover:translate-x-0 z-20"
@@ -258,9 +253,7 @@ const ClassManagement: React.FC = () => {
            </div>
         </aside>
 
-        {/* --- MAIN CONTENT --- */}
         <main className="lg:col-span-8 space-y-8">
-           {/* Search Bar */}
            <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
                 <Search className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
@@ -274,7 +267,6 @@ const ClassManagement: React.FC = () => {
               />
            </div>
 
-           {/* --- PENDING APPROVAL LIST --- */}
            {pendingList.length > 0 && !selectedClassId && (
              <div className="bg-rose-50/50 border border-rose-100 rounded-[2.5rem] p-8 space-y-6">
                 <div className="flex items-center gap-3 text-rose-600 px-2">
@@ -287,10 +279,11 @@ const ClassManagement: React.FC = () => {
                       <div key={user.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-rose-500 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg shadow-rose-200">
-                                {user.full_name.charAt(0)}
+                                {/* Thêm (user.full_name || 'U') để đảm bảo an toàn nếu tên rỗng */}
+                                {(user.full_name || 'U').charAt(0)}
                             </div>
                             <div className="overflow-hidden">
-                               <h5 className="font-bold text-slate-800 truncate">{user.full_name}</h5>
+                               <h5 className="font-bold text-slate-800 truncate">{user.full_name || 'Học sinh mới'}</h5>
                                <p className="text-xs text-slate-400 font-medium truncate">{user.email}</p>
                             </div>
                          </div>
@@ -308,7 +301,6 @@ const ClassManagement: React.FC = () => {
              </div>
            )}
 
-           {/* --- APPROVED STUDENTS LIST --- */}
            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
               <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                  <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
@@ -332,9 +324,11 @@ const ClassManagement: React.FC = () => {
                           <tr key={user.id} className="group hover:bg-indigo-50/30 transition-all">
                              <td className="px-8 py-5">
                                 <div className="flex items-center gap-4">
-                                   <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">{user.full_name.charAt(0)}</div>
+                                   <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">
+                                     {(user.full_name || 'U').charAt(0)}
+                                   </div>
                                    <div>
-                                      <span className="font-bold text-slate-800 block text-sm">{user.full_name}</span>
+                                      <span className="font-bold text-slate-800 block text-sm">{user.full_name || 'Chưa cập nhật tên'}</span>
                                       <span className="text-[11px] text-slate-400 font-medium">{user.email}</span>
                                    </div>
                                 </div>
