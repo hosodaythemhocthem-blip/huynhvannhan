@@ -4,8 +4,8 @@
 
 export interface BaseEntity {
   id: string
-  created_at: string
-  updated_at: string
+  created_at?: string // Thêm dấu ? để frontend có thể tự tạo ID tạm mà không bị lỗi thiếu field
+  updated_at?: string
 }
 
 /* ======================================================
@@ -16,7 +16,7 @@ export type UserRole = "admin" | "teacher" | "student"
 
 export type UserStatus =
   | "pending"
-  | "approved"
+  | "active"   // Đổi từ approved thành active cho khớp với logic Login
   | "rejected"
   | "suspended"
 
@@ -24,8 +24,9 @@ export interface User extends BaseEntity {
   email: string
   full_name: string
   role: UserRole
-  status: UserStatus
+  status?: UserStatus // Optional cho lúc mới đăng nhập
   class_id?: string | null
+  avatar?: string     // Thêm field avatar cho giao diện
 }
 
 /* ======================================================
@@ -48,6 +49,7 @@ export type QuestionType =
   | "true_false"
   | "essay"
 
+// Interface dùng chung cho Database
 export interface Question extends BaseEntity {
   exam_id: string
   content: string
@@ -69,17 +71,20 @@ export interface Question extends BaseEntity {
 
 export interface Exam extends BaseEntity {
   title: string
-  teacher_id: string
+  teacher_id?: string // Thêm optional cho lúc tạo mới chưa có ID
 
-  description: string | null
-  is_locked: boolean
-  is_archived: boolean
+  description?: string | null
+  is_locked?: boolean
+  is_archived?: boolean
 
-  file_url: string | null
-  raw_content: string | null
+  file_url?: string | null
+  raw_content?: string | null
+  
+  // Field bổ sung để Frontend lưu mảng JSON câu hỏi trực tiếp vào bảng Exam (nếu muốn)
+  questions?: any[] | null 
 
-  total_points: number
-  version: number
+  total_points?: number
+  version?: number
 }
 
 /* ======================================================
