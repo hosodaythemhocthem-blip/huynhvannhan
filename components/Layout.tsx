@@ -21,16 +21,23 @@ const Layout: React.FC<LayoutProps> = ({
   onTabChange,
   onLogout,
 }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
-    try {
-      if (typeof window === "undefined") return true;
-      const saved = localStorage.getItem("lms_sidebar_state");
-      return saved !== null ? Boolean(JSON.parse(saved)) : true;
-    } catch (e) {
-      return true;
-    }
-  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
+  // Khôi phục trạng thái sidebar
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("lms_sidebar_state");
+        if (saved !== null) {
+          setIsSidebarOpen(JSON.parse(saved));
+        }
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc trạng thái Sidebar", e);
+    }
+  }, []);
+
+  // Lưu trạng thái
   useEffect(() => {
     localStorage.setItem("lms_sidebar_state", JSON.stringify(isSidebarOpen));
   }, [isSidebarOpen]);
@@ -50,7 +57,10 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden">
-      {/* FIX LỖI TS2322: Sidebar KHÔNG được phép có children. Bắt buộc dùng thẻ tự đóng /> */}
+      
+      {/* CHÚ Ý 1: Sidebar chỉ được dùng thẻ tự đóng "/>". 
+        Tuyệt đối không có <Sidebar>...</Sidebar> 
+      */}
       <Sidebar
         user={user}
         activeTab={activeTab}
@@ -64,12 +74,15 @@ const Layout: React.FC<LayoutProps> = ({
           isSidebarOpen ? "lg:ml-72" : "lg:ml-20"
         }`}
       >
-        {/* FIX LỖI TS2741: Header BẮT BUỘC phải có children. Truyền một React.Fragment rỗng để thỏa mãn TypeScript */}
+        
+        {/* CHÚ Ý 2: Header bắt buộc phải bọc một thành phần (children). 
+          Ta truyền vào một thẻ span rỗng để TypeScript không báo lỗi nữa.
+        */}
         <Header user={user} activeTab={activeTab}>
-          <React.Fragment></React.Fragment>
+          <span className="hidden"></span>
         </Header>
 
-        {/* TOGGLE BUTTON */}
+        {/* Nút Toggle Menu */}
         <button
           onClick={toggleSidebar}
           className="absolute top-4 left-4 z-40 bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md hover:bg-indigo-50 transition-all active:scale-95 hidden lg:flex items-center justify-center"
@@ -82,7 +95,7 @@ const Layout: React.FC<LayoutProps> = ({
           )}
         </button>
 
-        {/* CONTENT */}
+        {/* Main Content */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           <div className="max-w-7xl mx-auto w-full">
             <div className="flex items-center gap-2 mb-6">
