@@ -1,12 +1,22 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+// Tương thích an toàn cho cả môi trường Vite và Next.js/Vercel
+const getApiKey = (): string => {
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_GEMINI_API_KEY) {
+    return process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  }
+  if (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_GEMINI_API_KEY) {
+    return (import.meta as any).env.VITE_GEMINI_API_KEY;
+  }
+  return "";
+};
 
-// Khởi tạo model
-const genAI = new GoogleGenerativeAI(API_KEY);
+const API_KEY = getApiKey();
+
+// Khởi tạo model (Dùng dummy-key để bypass lúc Vercel build)
+const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash", 
-  // Cấu hình để AI trả lời sáng tạo nhưng vẫn bám sát logic
   generationConfig: {
     temperature: 0.7, 
     topP: 0.8,
@@ -16,9 +26,7 @@ const model = genAI.getGenerativeModel({
 
 // --- HELPER: Làm sạch chuỗi JSON từ AI ---
 const cleanJsonString = (text: string): string => {
-  // Loại bỏ markdown code block (```json ... ```)
   let clean = text.replace(/```json/g, "").replace(/```/g, "");
-  // Tìm điểm bắt đầu [ hoặc { và kết thúc ] hoặc }
   const firstOpen = clean.indexOf("[");
   const firstBrace = clean.indexOf("{");
   const start = (firstOpen !== -1 && (firstBrace === -1 || firstOpen < firstBrace)) ? firstOpen : firstBrace;
@@ -51,13 +59,13 @@ export const geminiService = {
         {
           "text": "Nội dung câu hỏi (giữ nguyên các công thức LaTeX dạng $...$ hoặc $$...$$)",
           "options": ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D"],
-          "correctAnswer": 0 (Số nguyên: 0=A, 1=B, 2=C, 3=D. Nếu không tìm thấy đáp án đúng trong văn bản, hãy tự giải và điền vào)
+          "correctAnswer": 0
         }
       ]
     }
 
     Lưu ý quan trọng:
-    1. Giữ nguyên định dạng LaTeX (ví dụ: $\\frac{1}{2}$, $x^2$).
+    1. Giữ nguyên định dạng LaTeX.
     2. Tự động loại bỏ các từ thừa như "Câu 1:", "A.", "B." ở đầu nội dung.
     3. Nếu văn bản bị lỗi font, hãy cố gắng sửa lỗi chính tả tiếng Việt.
 
@@ -69,8 +77,7 @@ export const geminiService = {
 
     try {
       const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const rawText = response.text();
+      const rawText = result.response.text();
       const cleanedJson = cleanJsonString(rawText);
       return JSON.parse(cleanedJson);
     } catch (error) {
@@ -86,7 +93,7 @@ export const geminiService = {
     const prompt = `
     Hãy đóng vai giáo viên giỏi. Tạo một đề thi trắc nghiệm môn Toán lớp ${grade} về chủ đề: "${topic}".
     Số lượng: ${questionCount} câu.
-    Độ khó: Tăng dần từ Nhận biết -> Thông hiểu -> Vận dụng.
+    Độ khó: Tăng dần.
     
     Yêu cầu Output JSON:
     [
@@ -110,14 +117,14 @@ export const geminiService = {
   },
 
   /**
-   * Chấm bài tự luận (Dành cho tính năng AiTutor sau này)
+   * Chấm bài tự luận
    */
   async gradeEssay(question: string, userAnswer: string) {
     const prompt = `
     Câu hỏi: ${question}
     Bài làm của học sinh: ${userAnswer}
     
-    Hãy chấm điểm trên thang 10 và đưa ra nhận xét chi tiết, giọng văn khích lệ.
+    Hãy chấm điểm trên thang 10 và đưa ra nhận xét chi tiết.
     Output JSON:
     {
       "score": number,
@@ -131,6 +138,7 @@ export const geminiService = {
       const cleanedJson = cleanJsonString(result.response.text());
       return JSON.parse(cleanedJson);
     } catch (error) {
+      console.error("Gemini Grade Error:", error);
       return { score: 0, feedback: "Lỗi chấm bài AI", suggestions: "" };
     }
   },
