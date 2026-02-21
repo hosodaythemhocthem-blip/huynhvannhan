@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, 
   Check, Loader2, Layout, Eye, EyeOff, Settings 
@@ -15,11 +15,12 @@ interface Props {
   onClose: () => void;
 }
 
-interface Question {
+// Đổi tên thành EditorQuestion để không đụng độ với type Question trong types.ts
+interface EditorQuestion {
   id: string;
   text: string;
-  options: string[]; // [A, B, C, D]
-  answer: string;    // 'A', 'B', 'C', 'D'
+  options: string[]; 
+  answer: string;    
   type: 'multiple_choice' | 'essay';
   score: number;
 }
@@ -29,9 +30,9 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
   
   // --- STATE MANAGEMENT ---
   const [title, setTitle] = useState(exam?.title || "Đề thi mới");
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    // Khởi tạo dữ liệu câu hỏi (nếu edit thì lấy từ db, mới thì tạo mảng rỗng)
-    return Array.isArray(exam?.questions) ? exam.questions : [];
+  const [questions, setQuestions] = useState<EditorQuestion[]>(() => {
+    // Ép kiểu an toàn từ database
+    return Array.isArray(exam?.questions) ? (exam?.questions as EditorQuestion[]) : [];
   });
   const [saving, setSaving] = useState(false);
   const [activeQId, setActiveQId] = useState<string | null>(null);
@@ -42,6 +43,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     if (questions.length > 0 && !activeQId) {
       setActiveQId(questions[0].id);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- CORE FUNCTIONS ---
@@ -55,19 +57,17 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     try {
       const payload = {
         title,
-        questions, // Supabase sẽ lưu mảng JSON này
+        questions, 
         updated_at: new Date().toISOString(),
-        created_by: user.id,
-        is_locked: true, // Mặc định khóa khi đang soạn
+        teacher_id: user.id, // Sửa lại thành teacher_id cho khớp types.ts
+        is_locked: true,
       };
 
       let error;
       if (exam?.id) {
-        // Update existing
         const res = await supabase.from('exams').update(payload).eq('id', exam.id);
         error = res.error;
       } else {
-        // Create new
         const res = await supabase.from('exams').insert(payload);
         error = res.error;
       }
@@ -75,7 +75,6 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
       if (error) throw error;
       showToast("Đã lưu đề thi thành công!", "success");
       
-      // Nếu là tạo mới xong thì đóng hoặc chuyển chế độ edit (ở đây ta đóng về dashboard)
       if (!exam?.id) onClose(); 
 
     } catch (err) {
@@ -89,7 +88,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
   // 2. Thêm câu hỏi mới
   const addQuestion = () => {
     const newId = crypto.randomUUID();
-    const newQ: Question = {
+    const newQ: EditorQuestion = {
       id: newId,
       text: "",
       type: 'multiple_choice',
@@ -100,7 +99,6 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     setQuestions([...questions, newQ]);
     setActiveQId(newId);
     
-    // Scroll xuống cuối
     setTimeout(() => {
         const el = document.getElementById(`q-${newId}`);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -109,13 +107,13 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
 
   // 3. Xóa câu hỏi
   const deleteQuestion = (id: string) => {
-    if (questions.length <= 1 && !confirm("Xóa câu hỏi cuối cùng?")) return;
+    if (questions.length <= 1 && !window.confirm("Xóa câu hỏi cuối cùng?")) return;
     setQuestions(questions.filter(q => q.id !== id));
     if (activeQId === id) setActiveQId(null);
   };
 
-  // 4. Update dữ liệu câu hỏi
-  const updateQuestion = (id: string, field: keyof Question, value: any) => {
+  // 4. Update dữ liệu câu hỏi (Dùng Generics K để loại bỏ lỗi 'any')
+  const updateQuestion = <K extends keyof EditorQuestion>(id: string, field: K, value: EditorQuestion[K]) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   };
 
@@ -131,10 +129,12 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
 
   // --- SMART PASTE IMAGE (CTRL + V) ---
   const handlePaste = async (e: React.ClipboardEvent, qId: string) => {
-    const items = e.clipboardData.items;
-    for (let item of items) {
+    // Chuyển DataTransferItemList thành Array để tránh lỗi iterability của TypeScript
+    const items = Array.from(e.clipboardData.items);
+    
+    for (const item of items) {
       if (item.type.indexOf("image") !== -1) {
-        e.preventDefault(); // Chặn paste mặc định
+        e.preventDefault();
         const file = item.getAsFile();
         if (!file) return;
 
@@ -142,19 +142,16 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
         
         try {
           const fileName = `questions/${user.id}/${Date.now()}.png`;
-          // Upload lên Supabase Storage bucket 'exam_assets'
           const { error: uploadError } = await supabase.storage
             .from('exam_assets')
             .upload(fileName, file);
 
           if (uploadError) throw uploadError;
 
-          // Lấy Public URL
           const { data: { publicUrl } } = supabase.storage
             .from('exam_assets')
             .getPublicUrl(fileName);
 
-          // Chèn Markdown ảnh vào vị trí con trỏ (hoặc cuối text)
           const qIndex = questions.findIndex(q => q.id === qId);
           if (qIndex === -1) return;
           
@@ -176,7 +173,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
   const activeQuestion = questions.find(q => q.id === activeQId);
 
   return (
-    <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden">
+    <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden font-sans">
       {/* 1. HEADER TOOLBAR */}
       <div className="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm shrink-0 h-16">
         <div className="flex items-center gap-4 flex-1">
