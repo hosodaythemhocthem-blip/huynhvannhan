@@ -1,81 +1,105 @@
-// components/ImportExamFromFile.tsx
-
 import React, { useState } from "react";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min?url";
 
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc;
+// Cấu hình Worker bằng CDN để đảm bảo luôn chạy được trên Vercel mà không cần cấu hình file tĩnh phức tạp
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Props {
   onImport: (content: string) => void;
 }
 
+// Định nghĩa kiểu dữ liệu cho text item của PDF
+interface TextItem {
+  str: string;
+}
+
 const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string | null>(null);
 
   const handleFile = async (file: File) => {
+    if (!file) return;
+
     try {
       setLoading(true);
       setFileName(file.name);
 
-      if (file.name.endsWith(".docx")) {
-        const buffer = await file.arrayBuffer();
+      const buffer = await file.arrayBuffer();
+
+      // Xử lý file DOCX
+      if (file.name.toLowerCase().endsWith(".docx")) {
         const result = await mammoth.extractRawText({ arrayBuffer: buffer });
         onImport(result.value.trim());
-      }
+      } 
+      // Xử lý file PDF
+      else if (file.name.toLowerCase().endsWith(".pdf")) {
+        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        const pdf = await loadingTask.promise;
 
-      if (file.name.endsWith(".pdf")) {
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
-        let text = "";
+        let fullText = "";
 
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          text +=
-            content.items
-              .map((item: any) => item.str)
-              .join(" ")
-              .trim() + "\n\n";
+          
+          // Lọc và nối các chuỗi văn bản một cách an toàn
+          const pageText = content.items
+            .filter((item): item is TextItem => "str" in item)
+            .map((item) => item.str)
+            .join(" ");
+          
+          fullText += pageText.trim() + "\n\n";
         }
 
-        onImport(text.trim());
+        onImport(fullText.trim());
+      } else {
+        alert("Định dạng file không hỗ trợ. Vui lòng chọn .docx hoặc .pdf");
       }
     } catch (error) {
-      console.error("Import error:", error);
-      alert("Không thể đọc file.");
+      console.error("Lỗi khi đọc file:", error);
+      alert("Không thể đọc nội dung file. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleClear = () => {
+    setFileName(null);
+    onImport("");
+  };
+
   return (
     <div className="border p-4 rounded-xl bg-white shadow-sm space-y-3">
-      <input
-        type="file"
-        accept=".docx,.pdf"
-        onChange={(e) => e.target.files && handleFile(e.target.files[0])}
-      />
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-gray-700">Tải đề thi lên</label>
+        <input
+          type="file"
+          accept=".docx,.pdf"
+          disabled={loading}
+          onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+          className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer disabled:opacity-50"
+        />
+      </div>
 
       {fileName && (
-        <div className="text-sm text-gray-500 flex justify-between">
-          <span>{fileName}</span>
+        <div className="text-sm text-gray-600 flex justify-between items-center bg-gray-50 p-2 rounded">
+          <span className="truncate max-w-[200px]">{fileName}</span>
           <button
-            onClick={() => {
-              setFileName(null);
-              onImport("");
-            }}
-            className="text-red-500 text-xs"
+            onClick={handleClear}
+            className="text-red-500 hover:text-red-700 font-medium transition-colors"
           >
             Xóa
           </button>
         </div>
       )}
 
-      {loading && <p className="text-blue-500 text-sm">Đang xử lý...</p>}
+      {loading && (
+        <div className="flex items-center gap-2 text-blue-600 text-sm animate-pulse">
+          <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></span>
+          Đang xử lý nội dung file...
+        </div>
+      )}
     </div>
   );
 };
