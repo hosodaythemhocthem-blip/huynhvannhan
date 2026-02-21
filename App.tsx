@@ -83,17 +83,10 @@ const App: React.FC = () => {
                     element={<TeacherPortal user={user} />}
                   />
                 </>
-              ) : (
+             ) : (
                 <Route
                   path="*"
-                  element={
-                    <StudentDashboard
-                      user={user}
-                      onStartExam={(exam: Exam) =>
-                        console.log("Start exam:", exam)
-                      }
-                    />
-                  }
+                  element={<StudentDashboard user={user} />}
                 />
               )}
             </Routes>
