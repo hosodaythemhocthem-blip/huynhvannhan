@@ -17,8 +17,9 @@ const MathPreview: React.FC<MathPreviewProps> = ({ content, className = "" }) =>
   }, [content]);
 
   // Định nghĩa các components chuẩn type để tránh lỗi Vercel
+  // Thêm _ trước node để báo cho TS biết đây là biến cố tình không sử dụng
   const markdownComponents: Components = {
-    img: ({ node, ...props }) => (
+    img: ({ node: _node, ...props }) => (
       <img 
         {...props} 
         className="max-h-64 rounded-xl shadow-md border border-slate-200 my-4 mx-auto block object-contain" 
@@ -26,7 +27,7 @@ const MathPreview: React.FC<MathPreviewProps> = ({ content, className = "" }) =>
         loading="lazy"
       />
     ),
-    p: ({ node, ...props }) => (
+    p: ({ node: _node, ...props }) => (
       <p {...props} className="mb-2 leading-relaxed whitespace-pre-wrap break-words" />
     )
   };
