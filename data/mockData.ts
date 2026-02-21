@@ -1,4 +1,3 @@
-// data/mockData.ts
 import { User, Exam, Question, Class } from "../types";
 
 /* ======================================================
@@ -23,7 +22,7 @@ export const MOCK_USERS: User[] = [
     email: "huynhvannhan@gmail.com",
     full_name: "Thầy Huỳnh Văn Nhẫn",
     role: "teacher",
-    status: "approved",
+    status: "active", // Đã sửa từ "approved" thành "active"
     class_id: null,
   },
   {
@@ -31,7 +30,7 @@ export const MOCK_USERS: User[] = [
     email: "hocsinh1@gmail.com",
     full_name: "Nguyễn Văn Đạt",
     role: "student",
-    status: "approved",
+    status: "active", // Đã sửa từ "approved" thành "active"
     class_id: "class-12a1",
   },
   {
@@ -60,6 +59,7 @@ export const MOCK_EXAMS: Exam[] = [
     raw_content: null,
     total_points: 30,
     version: 1,
+    duration: 45, // Thêm duration để sửa lỗi bên StudentQuiz
   },
 ];
 
