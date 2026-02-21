@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import mammoth from "mammoth";
+
+// @ts-ignore: Bỏ qua kiểm tra type khắt khe của Vercel cho thư viện PDF.js
 import * as pdfjsLib from "pdfjs-dist";
 
-// Cấu hình Worker bằng CDN để đảm bảo luôn chạy được trên Vercel mà không cần cấu hình file tĩnh phức tạp
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Cấu hình Worker bằng CDN với version cố định (4.8.69) để tránh lỗi undefined version khi build
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs`;
 
 interface Props {
   onImport: (content: string) => void;
