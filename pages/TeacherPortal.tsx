@@ -30,7 +30,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
 
   const loadExams = async () => {
     setLoading(true);
-    // Lấy danh sách đề thi, sắp xếp mới nhất lên đầu
     const { data, error } = await supabase
       .from("exams")
       .select("*")
@@ -55,7 +54,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         is_archived: false,
         total_points: 10,
         version: 1,
-        duration: 45, // Thêm duration mặc định
+        duration: 45,
         created_at: now,
         updated_at: now,
       })
@@ -63,11 +62,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
       .single();
 
     if (data && !error) {
-      // Chuyển hướng ngay sang trang edit
-      // Giả sử route edit là /exam/:id/edit
-      // Ở đây ta load lại list, thực tế nên navigate
       loadExams(); 
-      // navigate(`/exam/${data.id}/edit`); // Uncomment nếu đã setup router
     }
   };
 
@@ -75,7 +70,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
     if (!window.confirm("Thầy có chắc chắn muốn xóa đề thi này không? Hành động này không thể hoàn tác.")) return;
     
     await supabase.from("exams").delete().eq("id", id);
-    // Optimistic update: Xóa khỏi state ngay lập tức để cảm giác nhanh hơn
     setExams(prev => prev.filter(e => e.id !== id));
   };
 
@@ -85,12 +79,12 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-800">
-      {/* Header Section */}
       <div className="max-w-7xl mx-auto mb-10">
         <div className="flex justify-between items-end mb-6">
           <div>
             <h1 className="text-3xl font-bold text-indigo-900 mb-2">
-              Xin chào, {user.full_name || "Thầy cô"} 👋 {/* Đã sửa từ user.name thành user.full_name */}
+              {/* Thêm fallback an toàn để tránh lỗi render */}
+              Xin chào, {user?.full_name || "Thầy cô"} 👋 
             </h1>
             <p className="text-slate-500">Quản lý kho đề thi và lớp học của thầy.</p>
           </div>
@@ -104,7 +98,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           </button>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
@@ -135,7 +128,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           </div>
         </div>
 
-        {/* Search & Filter */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 mb-6 flex items-center gap-3">
           <Search className="text-slate-400" size={20} />
           <input 
@@ -147,7 +139,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           />
         </div>
 
-        {/* Exam Grid */}
         {loading ? (
           <div className="flex justify-center items-center py-20">
             <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
@@ -157,7 +148,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
             <div className="inline-flex p-4 bg-slate-50 rounded-full mb-4">
               <FileText className="text-slate-300 w-8 h-8" />
             </div>
-            <p className="text-slate-500 font-medium">Chưa có đề thi nào. Hãy tạo ngay!</p>
+            <p className="text-slate-500 font-medium">Chưa có đề thi nào phù hợp.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -174,7 +165,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
                   </div>
                   <div className="flex gap-1">
                     <button 
-                      // onClick={() => navigate(`/exam/${e.id}/edit`)} // Logic chuyển trang edit
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                       title="Chỉnh sửa"
                     >
@@ -200,7 +190,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
                 <div className="flex items-center gap-4 text-xs text-slate-400 border-t pt-4">
                   <div className="flex items-center gap-1">
                     <Clock size={14} />
-                    {/* Đã thêm check undefined cho e.updated_at */}
                     {e.updated_at ? new Date(e.updated_at).toLocaleDateString('vi-VN') : 'Mới cập nhật'}
                   </div>
                   <div className="ml-auto font-medium px-2 py-1 bg-slate-100 rounded text-slate-600">
