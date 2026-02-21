@@ -21,27 +21,27 @@ export const MOCK_USERS: User[] = [
     ...baseEntity("teacher-nhan"),
     email: "huynhvannhan@gmail.com",
     full_name: "Thầy Huỳnh Văn Nhẫn",
-    role: "teacher",
-    status: "active", // Đã sửa từ "approved" thành "active"
+    role: "teacher" as const, // Ép kiểu cứng để khớp với Type định sẵn
+    status: "active" as const, 
     class_id: null,
   },
   {
     ...baseEntity("student-01"),
     email: "hocsinh1@gmail.com",
     full_name: "Nguyễn Văn Đạt",
-    role: "student",
-    status: "active", // Đã sửa từ "approved" thành "active"
+    role: "student" as const,
+    status: "active" as const,
     class_id: "class-12a1",
   },
   {
     ...baseEntity("student-02"),
     email: "hocsinh2@gmail.com",
     full_name: "Lê Thị Hồng",
-    role: "student",
-    status: "pending",
+    role: "student" as const,
+    status: "pending" as const,
     class_id: null,
   },
-];
+] as User[];
 
 /* ======================================================
    EXAMS
@@ -59,8 +59,8 @@ export const MOCK_EXAMS: Exam[] = [
     raw_content: null,
     total_points: 30,
     version: 1,
-    duration: 45, // Thêm duration để sửa lỗi bên StudentQuiz
-  },
+    duration: 45,
+  } as Exam,
 ];
 
 /* ======================================================
@@ -71,30 +71,27 @@ export const MOCK_QUESTIONS: Question[] = [
   {
     ...baseEntity("q-1"),
     exam_id: "exam-01",
-    type: "multiple_choice",
-    content:
-      "Tính đạo hàm của hàm số $f(x) = \\ln(x^2 + 1)$ tại $x = 1$",
+    type: "multiple_choice" as const,
+    content: "Tính đạo hàm của hàm số $f(x) = \\ln(x^2 + 1)$ tại $x = 1$",
     options: ["$1$", "$\\frac{1}{2}$", "$2$", "$0$"],
     correct_answer: "0",
     points: 10,
     order: 1,
     explanation: null,
     section: null,
-  },
+  } as Question,
   {
     ...baseEntity("q-2"),
     exam_id: "exam-01",
-    type: "essay",
-    content:
-      "Tìm nguyên hàm của $g(x) = e^{2x} + \\sin(x)$",
-    correct_answer:
-      "$\\frac{1}{2}e^{2x} - \\cos(x) + C$",
+    type: "essay" as const,
+    content: "Tìm nguyên hàm của $g(x) = e^{2x} + \\sin(x)$",
+    correct_answer: "$\\frac{1}{2}e^{2x} - \\cos(x) + C$",
     options: null,
     points: 10,
     order: 2,
     explanation: null,
     section: null,
-  },
+  } as Question,
 ];
 
 /* ======================================================
@@ -108,5 +105,5 @@ export const MOCK_CLASSES: Class[] = [
     teacher_id: "teacher-nhan",
     description: "Lớp chuyên toán năm học 2025",
     is_active: true,
-  },
+  } as Class,
 ];
