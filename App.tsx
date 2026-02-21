@@ -80,7 +80,6 @@ const App: React.FC = () => {
                   <Route path="/admin" element={<AdminDashboard />} />
                   <Route
                     path="*"
-                    {/* Đã xóa activeTab={activeTab} để sửa lỗi TS2322 */}
                     element={<TeacherPortal user={user} />}
                   />
                 </>
@@ -90,7 +89,6 @@ const App: React.FC = () => {
                   element={
                     <StudentDashboard
                       user={user}
-                      {/* Đã xóa activeTab={activeTab} để sửa lỗi TS2322 */}
                       onStartExam={(exam: Exam) =>
                         console.log("Start exam:", exam)
                       }
