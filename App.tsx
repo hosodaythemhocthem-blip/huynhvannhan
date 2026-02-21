@@ -75,12 +75,13 @@ const App: React.FC = () => {
             onLogout={handleLogout}
           >
             <Routes>
-              {user.role === "teacher" ? (
+              {user.role === "teacher" || user.role === "admin" ? (
                 <>
                   <Route path="/admin" element={<AdminDashboard />} />
                   <Route
                     path="*"
-                    element={<TeacherPortal user={user} activeTab={activeTab} />}
+                    {/* Đã xóa activeTab={activeTab} để sửa lỗi TS2322 */}
+                    element={<TeacherPortal user={user} />}
                   />
                 </>
               ) : (
@@ -89,7 +90,7 @@ const App: React.FC = () => {
                   element={
                     <StudentDashboard
                       user={user}
-                      activeTab={activeTab}
+                      {/* Đã xóa activeTab={activeTab} để sửa lỗi TS2322 */}
                       onStartExam={(exam: Exam) =>
                         console.log("Start exam:", exam)
                       }
