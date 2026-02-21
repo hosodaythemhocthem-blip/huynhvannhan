@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Clock, CheckCircle, AlertTriangle, Save, ChevronLeft, ChevronRight, 
-  Menu, X, Send 
+  Clock, AlertTriangle, Send, ChevronLeft, ChevronRight, 
+  Menu, X, ClipboardPaste, Trash2
 } from 'lucide-react';
 import { Exam, Question, User } from '../types';
 import MathPreview from './MathPreview';
@@ -22,13 +22,13 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(exam.duration ? exam.duration * 60 : 60 * 60); // Mặc định 60 phút nếu ko có duration
+  // Khắc phục lỗi type duration: fallback về 60 phút nếu không có
+  const [timeLeft, setTimeLeft] = useState((exam as any).duration ? (exam as any).duration * 60 : 60 * 60); 
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // --- INIT ---
   useEffect(() => {
-    // Parse câu hỏi từ exam.raw_content
     try {
       if (exam.raw_content) {
         const parsed = JSON.parse(exam.raw_content);
@@ -39,13 +39,14 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
       showToast("Lỗi tải đề thi. Vui lòng báo giáo viên.", "error");
     }
 
-    // Load bài làm nháp từ LocalStorage (Auto-restore)
-    const savedAnswers = localStorage.getItem(`quiz_draft_${exam.id}_${user.id}`);
+    // Khôi phục bài làm nháp tự động
+    const storageKey = `quiz_draft_${exam.id}_${user.id}`;
+    const savedAnswers = localStorage.getItem(storageKey);
     if (savedAnswers) {
       setAnswers(JSON.parse(savedAnswers));
       showToast("Đã khôi phục bài làm trước đó!", "info");
     }
-  }, [exam, user]);
+  }, [exam, user, showToast]);
 
   // --- TIMER ---
   useEffect(() => {
@@ -53,7 +54,7 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmit(true); // Auto submit khi hết giờ
+          handleSubmit(true); 
           return 0;
         }
         return prev - 1;
@@ -64,7 +65,8 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
 
   // --- AUTO SAVE ---
   useEffect(() => {
-    localStorage.setItem(`quiz_draft_${exam.id}_${user.id}`, JSON.stringify(answers));
+    const storageKey = `quiz_draft_${exam.id}_${user.id}`;
+    localStorage.setItem(storageKey, JSON.stringify(answers));
   }, [answers, exam.id, user.id]);
 
   // --- HANDLERS ---
@@ -76,74 +78,91 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
     const newAnswers = { ...answers };
     delete newAnswers[qId];
     setAnswers(newAnswers);
+    showToast("Đã xóa câu trả lời", "info");
+  };
+
+  const handlePaste = async (qId: string) => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const currentAnswer = answers[qId] || "";
+      handleSelectAnswer(qId, currentAnswer + text);
+      showToast("Đã dán nội dung", "success");
+    } catch(e) { 
+      showToast("Vui lòng cấp quyền Clipboard hoặc dùng phím Ctrl+V", "warning"); 
+    }
   };
 
   const handleSubmit = async (autoSubmit = false) => {
-    if (!autoSubmit && !confirm("Bạn chắc chắn muốn nộp bài? Hành động này không thể hoàn tác.")) return;
+    if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài? Hành động này không thể hoàn tác.")) return;
 
     setIsSubmitting(true);
     try {
-      // 1. Chấm điểm sơ bộ (Client side - chỉ tham khảo, Server nên chấm lại)
       const score = quizService.gradeExam(questions, answers);
       
-      // 2. Gửi về Server
-      await quizService.submitExam({
+      // Xây dựng payload an toàn, loại bỏ các trường gây lỗi type TypeScript
+      const payload: any = {
         exam_id: exam.id,
         student_id: user.id,
         answers: answers,
-        score: score, // Lưu ý: thực tế nên để Backend tính score để bảo mật
-        class_id: user.class_id // Nếu có
-      });
+        score: score,
+      };
+      
+      // Chỉ truyền class_id nếu backend thực sự cần (khắc phục lỗi TS2353)
+      if ((user as any).class_id) {
+        payload.class_id = (user as any).class_id;
+      }
 
-      // 3. Cleanup
+      await quizService.submitExam(payload);
+
+      // Cleanup nháp sau khi nộp thành công
       localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       showToast(autoSubmit ? "Hết giờ! Đã tự động nộp bài." : "Nộp bài thành công!", "success");
-      onClose(); // Quay về dashboard
+      onClose(); 
 
     } catch (err) {
       console.error(err);
-      showToast("Lỗi nộp bài. Vui lòng thử lại hoặc chụp ảnh bài làm gửi giáo viên.", "error");
+      showToast("Lỗi nộp bài. Dữ liệu vẫn được lưu nháp trên máy của bạn.", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Format thời gian MM:SS
+  // Format thời gian
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  if (questions.length === 0) return <div className="p-10 text-center font-medium text-slate-600">Đang tải cấu trúc đề thi...</div>;
+
   const currentQ = questions[currentQIndex];
   const progress = Math.round((Object.keys(answers).length / questions.length) * 100);
 
-  if (questions.length === 0) return <div className="p-10 text-center">Đang tải đề thi...</div>;
-
   return (
-    <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden">
+    <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden font-sans">
       
       {/* HEADER */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center shadow-sm h-16 shrink-0 z-20">
         <div className="flex items-center gap-3">
-           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-full lg:hidden">
-             <Menu size={20}/>
+           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-full lg:hidden transition-colors">
+             <Menu size={20} className="text-slate-600"/>
            </button>
            <h2 className="font-bold text-slate-800 line-clamp-1 max-w-[200px] md:max-w-md">{exam.title}</h2>
         </div>
 
         <div className="flex items-center gap-4">
            {/* Timer */}
-           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono font-bold text-lg ${timeLeft < 300 ? 'bg-red-50 text-red-600 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
+           <div className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-mono font-bold text-lg transition-colors ${timeLeft < 300 ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
               <Clock size={18}/> {formatTime(timeLeft)}
            </div>
            
            <button 
              onClick={() => handleSubmit(false)}
              disabled={isSubmitting}
-             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-indigo-200 transition-all flex items-center gap-2"
+             className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md transition-all flex items-center gap-2 disabled:opacity-70"
            >
-             {isSubmitting ? "Đang nộp..." : "Nộp Bài"} <Send size={16}/>
+             {isSubmitting ? "Đang xử lý..." : "Nộp Bài"} <Send size={16}/>
            </button>
         </div>
       </div>
@@ -155,11 +174,12 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
           {(isSidebarOpen || window.innerWidth >= 1024) && (
             <motion.div 
               initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
-              className={`absolute lg:static top-0 left-0 h-full w-72 bg-white border-r border-slate-200 z-10 flex flex-col shadow-xl lg:shadow-none transition-all duration-300`}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className={`absolute lg:static top-0 left-0 h-full w-72 bg-white border-r border-slate-200 z-10 flex flex-col shadow-2xl lg:shadow-none`}
             >
               <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
                  <span className="font-bold text-xs uppercase text-slate-500">Tiến độ: {Object.keys(answers).length}/{questions.length}</span>
-                 <button onClick={() => setSidebarOpen(false)} className="lg:hidden"><X size={18}/></button>
+                 <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 hover:bg-slate-200 rounded-full"><X size={18}/></button>
               </div>
               
               <div className="p-4 overflow-y-auto flex-1 grid grid-cols-5 gap-2 content-start">
@@ -169,46 +189,47 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                    return (
                      <button
                        key={q.id}
-                       onClick={() => { setCurrentQIndex(idx); setSidebarOpen(false); }}
-                       className={`h-10 w-10 rounded-lg text-sm font-bold flex items-center justify-center transition-all
-                         ${isActive ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 
-                           isAnswered ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                       onClick={() => { setCurrentQIndex(idx); if(window.innerWidth < 1024) setSidebarOpen(false); }}
+                       className={`h-11 w-11 rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-sm hover:scale-105 active:scale-95
+                         ${isActive ? 'bg-indigo-600 text-white ring-4 ring-indigo-600/20' : 
+                           isAnswered ? 'bg-emerald-100 text-emerald-700 border-2 border-emerald-400' : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-300'}`}
                      >
                        {idx + 1}
                      </button>
                    )
                  })}
               </div>
-              
-              <div className="p-4 border-t bg-slate-50 text-xs text-slate-400 text-center">
-                 Mẹo: Nhấn vào số câu để chuyển nhanh
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* MAIN CONTENT (Khu vực làm bài) */}
-        <div className="flex-1 flex flex-col bg-slate-50/50 overflow-hidden relative">
+        <div className="flex-1 flex flex-col bg-slate-50/80 overflow-hidden relative">
            
            {/* ProgressBar */}
-           <div className="h-1 bg-slate-200 w-full">
-              <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${progress}%` }}></div>
+           <div className="h-1.5 bg-slate-200 w-full">
+              <div className="h-full bg-indigo-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
            </div>
 
            <div className="flex-1 overflow-y-auto p-4 md:p-8">
-              <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[400px] flex flex-col">
+              <motion.div 
+                key={currentQIndex}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+                className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[450px] flex flex-col"
+              >
                  
                  {/* Question Content */}
                  <div className="p-6 md:p-8 border-b border-slate-100 flex-1">
-                    <div className="flex justify-between items-start mb-4">
-                       <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                          Câu {currentQIndex + 1}
+                    <div className="flex justify-between items-start mb-6">
+                       <span className="bg-indigo-50 text-indigo-700 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wider border border-indigo-100">
+                          Câu hỏi {currentQIndex + 1}
                        </span>
-                       <span className="text-xs font-bold text-slate-400">
-                          {currentQ.type === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'} • {currentQ.points} điểm
+                       <span className="text-sm font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full">
+                          {currentQ.type === 'multiple_choice' ? 'Trắc nghiệm' : 'Tự luận'} • {currentQ.points || 1} điểm
                        </span>
                     </div>
                     
+                    {/* MathPreview đảm bảo render công thức siêu đẹp */}
                     <div className="text-lg text-slate-800 leading-relaxed font-medium">
                        <MathPreview content={currentQ.content} />
                     </div>
@@ -217,7 +238,7 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                  {/* Options / Answer Input */}
                  <div className="p-6 md:p-8 bg-slate-50/50 rounded-b-2xl">
                     {currentQ.type === 'multiple_choice' ? (
-                       <div className="grid grid-cols-1 gap-3">
+                       <div className="grid grid-cols-1 gap-4">
                           {currentQ.options?.map((opt, i) => {
                              const label = ['A','B','C','D'][i];
                              const isSelected = answers[currentQ.id] === label;
@@ -225,14 +246,14 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                                 <div 
                                   key={i}
                                   onClick={() => handleSelectAnswer(currentQ.id, label)}
-                                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-4 group
-                                    ${isSelected ? 'bg-indigo-50 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-sm'}`}
+                                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 group hover:shadow-md
+                                     ${isSelected ? 'bg-indigo-50/50 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
                                 >
-                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border transition-colors shrink-0
-                                      ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-100 border-slate-300 text-slate-500 group-hover:border-indigo-400'}`}>
+                                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold transition-all shrink-0 shadow-sm
+                                      ${isSelected ? 'bg-indigo-600 text-white scale-105' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
                                       {label}
                                    </div>
-                                   <div className="pt-1 text-slate-700">
+                                   <div className="pt-2 text-slate-700 font-medium">
                                       <MathPreview content={opt} />
                                    </div>
                                 </div>
@@ -240,63 +261,61 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                           })}
                        </div>
                     ) : (
-                       <div className="space-y-2">
-                          <p className="text-sm font-bold text-slate-500 uppercase">Bài làm của bạn:</p>
+                       <div className="space-y-3">
+                          <div className="flex justify-between items-end">
+                            <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">Bài làm của bạn:</p>
+                            {/* Nút dán siêu nhanh cho tự luận */}
+                            <button 
+                              onClick={() => handlePaste(currentQ.id)}
+                              className="text-sm bg-white border border-slate-200 shadow-sm hover:border-indigo-300 text-indigo-600 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all active:scale-95"
+                            >
+                               <ClipboardPaste size={16}/> Dán (Ctrl+V)
+                            </button>
+                          </div>
                           <textarea
                              value={answers[currentQ.id] || ""}
                              onChange={(e) => handleSelectAnswer(currentQ.id, e.target.value)}
-                             placeholder="Nhập câu trả lời..."
-                             className="w-full h-40 p-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none resize-none"
+                             placeholder="Nhập câu trả lời của bạn vào đây..."
+                             className="w-full h-48 p-5 rounded-xl border-2 border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none resize-none transition-all text-slate-700 text-lg"
                           />
-                          {/* Nút Paste (Ctrl+V) */}
-                          <button 
-                            onClick={async () => {
-                               try {
-                                 const text = await navigator.clipboard.readText();
-                                 handleSelectAnswer(currentQ.id, (answers[currentQ.id] || "") + text);
-                               } catch(e) { alert("Vui lòng dùng Ctrl+V"); }
-                            }}
-                            className="text-xs text-indigo-600 font-bold hover:underline"
-                          >
-                             Dán từ Clipboard
-                          </button>
                        </div>
                     )}
                  </div>
 
-                 {/* Action Bar dưới cùng */}
-                 <div className="p-4 border-t bg-white flex justify-between items-center rounded-b-2xl">
+                 {/* Action Bar dưới cùng (Cho phép xóa đáp án hiện tại) */}
+                 <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end items-center rounded-b-2xl">
                     <button 
                       onClick={() => handleClearAnswer(currentQ.id)}
-                      className="text-slate-400 hover:text-rose-500 text-sm font-medium flex items-center gap-1 transition-colors"
-                      title="Xóa câu trả lời"
+                      disabled={!answers[currentQ.id]}
+                      className="text-slate-400 hover:text-rose-500 disabled:opacity-0 disabled:pointer-events-none text-sm font-bold flex items-center gap-1.5 transition-colors px-3 py-1.5 hover:bg-rose-50 rounded-lg"
+                      title="Xóa câu trả lời này"
                     >
-                       <AlertTriangle size={14}/> Xóa chọn
+                       <Trash2 size={16}/> Xóa chọn
                     </button>
                  </div>
-              </div>
+              </motion.div>
            </div>
 
            {/* Navigation Buttons */}
-           <div className="p-4 bg-white border-t border-slate-200 flex justify-between items-center z-10">
+           <div className="px-6 py-4 bg-white border-t border-slate-200 flex justify-between items-center z-10 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
               <button 
                 onClick={() => setCurrentQIndex(Math.max(0, currentQIndex - 1))}
                 disabled={currentQIndex === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
               >
                 <ChevronLeft size={20}/> Câu trước
               </button>
 
-              <div className="hidden md:block text-slate-400 text-sm font-bold">
-                 Câu {currentQIndex + 1} / {questions.length}
+              <div className="hidden md:flex items-center gap-2 text-slate-500 font-bold bg-slate-100 px-4 py-2 rounded-xl">
+                 <span className="text-indigo-600">{currentQIndex + 1}</span> / {questions.length}
               </div>
 
               <button 
                 onClick={() => setCurrentQIndex(Math.min(questions.length - 1, currentQIndex + 1))}
                 disabled={currentQIndex === questions.length - 1}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold bg-slate-900 text-white hover:bg-indigo-600 disabled:opacity-50 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-md"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-slate-800 text-white hover:bg-indigo-600 disabled:opacity-40 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-95"
               >
-                Câu sau <ChevronRight size={20}/>
+                Câu tiếp <ChevronRight size={20}/>
               </button>
            </div>
 
