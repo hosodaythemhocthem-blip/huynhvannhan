@@ -1,4 +1,3 @@
-// components/Layout.tsx
 import React, {
   useState,
   useEffect,
@@ -14,7 +13,8 @@ import Toast from "./Toast";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 interface LayoutProps {
-  children: React.ReactNode;
+  // Thêm dấu ? để TypeScript không báo lỗi thiếu children nếu component gọi Layout bị rỗng
+  children?: React.ReactNode; 
   user: User;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -31,8 +31,10 @@ const Layout: React.FC<LayoutProps> = ({
   // --- STATE INITIALIZATION ---
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
     try {
+      if (typeof window === "undefined") return true; // Fix lỗi khi chạy SSR (nếu có dùng Next.js/Vite config)
       const saved = localStorage.getItem("lms_sidebar_state");
-      return saved !== null ? JSON.parse(saved) : true;
+      // Ép kiểu boolean rõ ràng để tránh lỗi type ẩn
+      return saved !== null ? Boolean(JSON.parse(saved)) : true;
     } catch (e) {
       console.warn("Lỗi đọc trạng thái Sidebar từ LocalStorage", e);
       return true; // Mặc định mở nếu có lỗi
@@ -72,14 +74,16 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* MAIN CONTENT AREA */}
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative
-          ${isSidebarOpen ? "lg:ml-72" : "lg:ml-20"}
-          w-full`}
+        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full
+          ${isSidebarOpen ? "lg:ml-72" : "lg:ml-20"}`}
       >
         {/* HEADER */}
-        <Header user={user} activeTab={activeTab} />
+        {/* Truyền vào một Fragment rỗng <></> để fix lỗi TS2741 nếu HeaderProps đang bắt buộc có children */}
+        <Header user={user} activeTab={activeTab}>
+          {/* Fallback children */}
+        </Header>
 
-        {/* TOGGLE BUTTON (Nút bấm xịn xò, có đổ bóng, hiệu ứng hover) */}
+        {/* TOGGLE BUTTON */}
         <button
           onClick={toggleSidebar}
           className="absolute top-4 left-4 z-40 bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md hover:bg-indigo-50 transition-all active:scale-95 hidden lg:flex items-center justify-center"
@@ -111,7 +115,7 @@ const Layout: React.FC<LayoutProps> = ({
         </main>
       </div>
 
-      {/* GLOBAL COMPONENTS (Trợ lý ảo & Thông báo) */}
+      {/* GLOBAL COMPONENTS */}
       <AiAssistant
         user={{ id: user.id, full_name: user.full_name }}
         context={`Đang xem ${activeTab}`}
