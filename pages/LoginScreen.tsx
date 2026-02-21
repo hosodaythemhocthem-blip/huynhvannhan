@@ -9,10 +9,12 @@ import {
   GraduationCap, 
   ShieldCheck, 
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { User } from "../types";
-// import { authService } from "../services/authService"; // Uncomment khi tích hợp backend thật
+// import { authService } from "../services/authService";
 
 interface Props {
   onLogin: (user: User) => void;
@@ -27,6 +29,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,16 +37,15 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      // Giả lập độ trễ mạng để hiệu ứng mượt hơn
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // 1. LUỒNG ĐĂNG NHẬP GIÁO VIÊN (ADMIN)
+      // 1. LUỒNG GIÁO VIÊN
       if (mode === "teacher") {
         if (email.trim().toLowerCase() === "huynhvannhan@gmail.com" && password === "huynhvannhan2020") {
           const teacherUser: User = {
             id: "teacher-admin-nhan",
             email: email,
-            name: "Thầy Huỳnh Văn Nhẫn",
+            full_name: "Thầy Huỳnh Văn Nhẫn",
             role: "teacher",
             avatar: "https://ui-avatars.com/api/?name=Huynh+Van+Nhan&background=4f46e5&color=fff&size=128",
           };
@@ -52,34 +54,36 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
           throw new Error("Thông tin đăng nhập Giáo viên không chính xác!");
         }
       } 
-      // 2. LUỒNG ĐĂNG NHẬP HỌC SINH
+      // 2. LUỒNG HỌC SINH ĐĂNG NHẬP
       else if (mode === "student-login") {
         if (!email || !password) throw new Error("Vui lòng nhập đầy đủ Email và Mật khẩu.");
         
-        // Mock login thành công
         const studentUser: User = {
           id: `student-${Date.now()}`,
           email: email,
-          name: "Học sinh Demo", 
+          full_name: "Học sinh Demo", 
           role: "student",
           status: "active"
         };
         onLogin(studentUser);
       } 
-      // 3. LUỒNG ĐĂNG KÝ HỌC SINH
+      // 3. LUỒNG HỌC SINH ĐĂNG KÝ
       else if (mode === "student-register") {
         if (!email || !password || !fullName) {
           throw new Error("Vui lòng điền đủ Họ tên, Email và Mật khẩu.");
         }
-        // Mock đăng ký
         alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName}.\nHãy chờ Thầy Nhẫn duyệt nhé!`);
         setMode("student-login");
         setFullName("");
         setPassword("");
       }
 
-    } catch (err: any) {
-      setError(err.message || "Đã có lỗi xảy ra.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Đã có lỗi không xác định xảy ra.");
+      }
     } finally {
       setLoading(false);
     }
@@ -91,6 +95,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     setEmail("");
     setPassword("");
     setFullName("");
+    setShowPassword(false);
   };
 
   return (
@@ -165,10 +170,14 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
               >
                 {/* Error Box */}
                 {error && (
-                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm font-medium">
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }} 
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm font-medium"
+                  >
                     <div className="w-1.5 h-8 bg-rose-500 rounded-full"></div>
                     {error}
-                  </div>
+                  </motion.div>
                 )}
 
                 {/* Teacher Specific Welcome */}
@@ -201,13 +210,13 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   <div className="relative group">
                     <Mail className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                     <input
-                      type="text" // Dùng text để linh hoạt nhập user/email
+                      type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
                       placeholder={mode === "teacher" ? "huynhvannhan@gmail.com" : "student@email.com"}
                     />
-                    {/* Easter Egg: Checkmark if Teacher email is typed */}
+                    {/* Checkmark if Teacher email is typed */}
                     {mode === "teacher" && email === "huynhvannhan@gmail.com" && (
                       <CheckCircle2 className="absolute right-4 top-3.5 w-5 h-5 text-emerald-500 animate-bounce" />
                     )}
@@ -222,12 +231,19 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   <div className="relative group">
                     <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-12 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
                       placeholder="••••••••"
                     />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-3.5 text-slate-500 hover:text-cyan-400 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
                   </div>
                 </div>
 
