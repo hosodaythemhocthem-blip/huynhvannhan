@@ -13,7 +13,6 @@ import Toast from "./Toast";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 interface LayoutProps {
-  // Thêm dấu ? để TypeScript không báo lỗi thiếu children nếu component gọi Layout bị rỗng
   children?: React.ReactNode; 
   user: User;
   activeTab: string;
@@ -31,13 +30,12 @@ const Layout: React.FC<LayoutProps> = ({
   // --- STATE INITIALIZATION ---
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
     try {
-      if (typeof window === "undefined") return true; // Fix lỗi khi chạy SSR (nếu có dùng Next.js/Vite config)
+      if (typeof window === "undefined") return true;
       const saved = localStorage.getItem("lms_sidebar_state");
-      // Ép kiểu boolean rõ ràng để tránh lỗi type ẩn
       return saved !== null ? Boolean(JSON.parse(saved)) : true;
     } catch (e) {
       console.warn("Lỗi đọc trạng thái Sidebar từ LocalStorage", e);
-      return true; // Mặc định mở nếu có lỗi
+      return true;
     }
   });
 
@@ -78,9 +76,9 @@ const Layout: React.FC<LayoutProps> = ({
           ${isSidebarOpen ? "lg:ml-72" : "lg:ml-20"}`}
       >
         {/* HEADER */}
-        {/* Truyền vào một Fragment rỗng <></> để fix lỗi TS2741 nếu HeaderProps đang bắt buộc có children */}
+        {/* FIX: Truyền thẻ Fragment rỗng <></> vào để thỏa mãn prop 'children' của TypeScript */}
         <Header user={user} activeTab={activeTab}>
-          {/* Fallback children */}
+          <></>
         </Header>
 
         {/* TOGGLE BUTTON */}
