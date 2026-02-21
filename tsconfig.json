@@ -3,34 +3,28 @@
     "target": "ESNext",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-
-    "jsx": "react-jsx",
-    "strict": true,
-
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true,
-
     "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "jsx": "react-jsx",
 
+    /* Strict Type-Checking */
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* PATHS: Quan trọng để map với vite.config.ts */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
-    },
-
-    "types": ["vite/client"],
-    "incremental": true
+      "@/*": ["./*"] 
+    }
   },
-  "include": [
-    "components",
-    "pages",
-    "services",
-    "data",
-    "*.ts",
-    "*.tsx"
-  ],
+  "include": ["**/*.ts", "**/*.tsx"], // Quét tất cả file ts/tsx ở mọi nơi
   "exclude": ["node_modules", "dist"]
 }
