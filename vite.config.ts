@@ -1,53 +1,40 @@
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import path from "path"
-import { fileURLToPath } from "url"
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 export default defineConfig({
   plugins: [react()],
-
-  base: "/", // ⚠ Chuẩn cho Vercel
+  
+  // Quan trọng: Dùng './' để chạy được cả trên máy local và khi deploy
+  base: './', 
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "."),
+      // Dấu @ sẽ trỏ thẳng vào thư mục chứa file vite.config.ts này (thư mục gốc)
+      "@": path.resolve(__dirname, "."), 
     },
   },
 
   build: {
     outDir: "dist",
-    target: "esnext",
-    minify: "esbuild",
-    cssCodeSplit: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 3000, // Tăng giới hạn để không báo vàng
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Tách nhỏ các thư viện để load nhanh hơn, tránh lỗi quá tải
           if (id.includes("node_modules")) {
-            if (id.includes("react")) return "vendor-react"
-            if (id.includes("framer-motion")) return "vendor-motion"
-            if (id.includes("lucide-react")) return "vendor-icons"
-            if (id.includes("@google/generative-ai")) return "vendor-ai"
-            if (id.includes("katex") || id.includes("pdfjs-dist"))
-              return "vendor-math-pdf"
-            return "vendor-common"
+            if (id.includes("react")) return "vendor-react";
+            if (id.includes("katex")) return "vendor-math";
+            return "vendor-libs";
           }
         },
       },
     },
   },
 
-  optimizeDeps: {
-    include: ["react", "react-dom", "framer-motion", "lucide-react", "katex"],
-  },
-
   server: {
     port: 5173,
-    strictPort: true,
-    host: true,
+    host: true, // Cho phép truy cập qua IP mạng LAN
   },
 })
