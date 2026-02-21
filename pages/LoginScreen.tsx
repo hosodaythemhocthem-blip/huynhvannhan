@@ -38,16 +38,21 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000));
+      const now = new Date().toISOString();
 
       // 1. LUỒNG GIÁO VIÊN
       if (mode === "teacher") {
         if (email.trim().toLowerCase() === "huynhvannhan@gmail.com" && password === "huynhvannhan2020") {
+          // Chuẩn hóa Object User khớp 100% với types.ts
           const teacherUser: User = {
             id: "teacher-admin-nhan",
             email: email,
             full_name: "Thầy Huỳnh Văn Nhẫn",
             role: "teacher",
-            avatar: "https://ui-avatars.com/api/?name=Huynh+Van+Nhan&background=4f46e5&color=fff&size=128",
+            status: "active",
+            created_at: now,
+            updated_at: now,
+            class_id: null,
           };
           onLogin(teacherUser);
         } else {
@@ -58,12 +63,16 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       else if (mode === "student-login") {
         if (!email || !password) throw new Error("Vui lòng nhập đầy đủ Email và Mật khẩu.");
         
+        // Chuẩn hóa Object User khớp 100% với types.ts
         const studentUser: User = {
           id: `student-${Date.now()}`,
           email: email,
           full_name: "Học sinh Demo", 
           role: "student",
-          status: "active"
+          status: "active",
+          created_at: now,
+          updated_at: now,
+          class_id: null,
         };
         onLogin(studentUser);
       } 
