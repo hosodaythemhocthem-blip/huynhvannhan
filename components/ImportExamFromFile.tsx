@@ -11,10 +11,7 @@ interface Props {
   onImport: (content: string) => void;
 }
 
-// Định nghĩa kiểu dữ liệu cho text item của PDF
-interface TextItem {
-  str: string;
-}
+// Đã xóa interface TextItem tự định nghĩa để tránh xung đột type với pdfjs-dist
 
 const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
   const [loading, setLoading] = useState<boolean>(false);
@@ -46,9 +43,10 @@ const ImportExamFromFile: React.FC<Props> = ({ onImport }) => {
           const content = await page.getTextContent();
           
           // Lọc và nối các chuỗi văn bản một cách an toàn
+          // FIX: Dùng any để bypass lỗi type TS2677 và TS2339 của Vercel
           const pageText = content.items
-            .filter((item): item is TextItem => "str" in item)
-            .map((item) => item.str)
+            .filter((item: any) => item && "str" in item)
+            .map((item: any) => item.str)
             .join(" ");
           
           fullText += pageText.trim() + "\n\n";
