@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  memo,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { User } from "../types";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -13,7 +7,7 @@ import Toast from "./Toast";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 interface LayoutProps {
-  children?: React.ReactNode; 
+  children?: React.ReactNode;
   user: User;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -27,19 +21,16 @@ const Layout: React.FC<LayoutProps> = ({
   onTabChange,
   onLogout,
 }) => {
-  // --- STATE INITIALIZATION ---
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
     try {
       if (typeof window === "undefined") return true;
       const saved = localStorage.getItem("lms_sidebar_state");
       return saved !== null ? Boolean(JSON.parse(saved)) : true;
     } catch (e) {
-      console.warn("Lỗi đọc trạng thái Sidebar từ LocalStorage", e);
       return true;
     }
   });
 
-  // --- EFFECTS ---
   useEffect(() => {
     localStorage.setItem("lms_sidebar_state", JSON.stringify(isSidebarOpen));
   }, [isSidebarOpen]);
@@ -48,20 +39,18 @@ const Layout: React.FC<LayoutProps> = ({
     localStorage.setItem("lms_last_active", Date.now().toString());
   }, [activeTab]);
 
-  // --- MEMOIZED VALUES ---
   const pageTitle = useMemo(
     () => activeTab.replace(/-/g, " ").toUpperCase(),
     [activeTab]
   );
 
-  // --- HANDLERS ---
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((prev) => !prev);
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden">
-      {/* SIDEBAR - FIX TS2322: Đóng thẻ trực tiếp, tuyệt đối không chèn children vào giữa */}
+      {/* FIX LỖI TS2322: Sidebar KHÔNG được phép có children. Bắt buộc dùng thẻ tự đóng /> */}
       <Sidebar
         user={user}
         activeTab={activeTab}
@@ -70,14 +59,14 @@ const Layout: React.FC<LayoutProps> = ({
         collapsed={!isSidebarOpen}
       />
 
-      {/* MAIN CONTENT AREA */}
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full
-          ${isSidebarOpen ? "lg:ml-72" : "lg:ml-20"}`}
+        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full ${
+          isSidebarOpen ? "lg:ml-72" : "lg:ml-20"
+        }`}
       >
-        {/* HEADER - FIX TS2741: Bắt buộc truyền một thẻ div ẩn để làm 'children' hợp lệ cho TypeScript */}
+        {/* FIX LỖI TS2741: Header BẮT BUỘC phải có children. Truyền một React.Fragment rỗng để thỏa mãn TypeScript */}
         <Header user={user} activeTab={activeTab}>
-          <div className="hidden"></div>
+          <React.Fragment></React.Fragment>
         </Header>
 
         {/* TOGGLE BUTTON */}
@@ -96,23 +85,18 @@ const Layout: React.FC<LayoutProps> = ({
         {/* CONTENT */}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           <div className="max-w-7xl mx-auto w-full">
-            {/* Breadcrumb / Title */}
             <div className="flex items-center gap-2 mb-6">
               <h2 className="text-sm font-bold tracking-wide text-slate-400">
-                LMS <span className="mx-2 text-slate-300">/</span> 
+                LMS <span className="mx-2 text-slate-300">/</span>
                 <span className="text-indigo-500">{pageTitle}</span>
               </h2>
             </div>
-            
-            {/* Render Component Con */}
-            <div className="animate-fade-in">
-              {children}
-            </div>
+
+            <div className="animate-fade-in">{children}</div>
           </div>
         </main>
       </div>
 
-      {/* GLOBAL COMPONENTS */}
       <AiAssistant
         user={{ id: user.id, full_name: user.full_name }}
         context={`Đang xem ${activeTab}`}
