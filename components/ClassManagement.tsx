@@ -9,14 +9,12 @@ import { User } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-// FIX: Mở rộng type User gốc để TypeScript không báo lỗi thiếu thuộc tính (TS2339)
-interface ExtendedUser extends User {
+// FIX LỖI TS2430: Dùng type intersection (&) và KHÔNG khai báo lại email/full_name để tránh xung đột với User gốc
+type ExtendedUser = User & {
   role?: string;
   class_name?: string | null;
   status?: string;
-  full_name?: string;
-  email?: string;
-}
+};
 
 interface ClassItem {
   id: string;
@@ -26,7 +24,6 @@ interface ClassItem {
 
 const ClassManagement: React.FC = () => {
   const { showToast } = useToast();
-  // Sử dụng ExtendedUser thay vì User
   const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +54,6 @@ const ClassManagement: React.FC = () => {
       if (userError) throw userError;
       if (classError) throw classError;
       
-      // Ép kiểu rõ ràng về ExtendedUser
       setUsers((userData as ExtendedUser[]) || []);
       setClasses((classData as ClassItem[]) || []);
     } catch (err) {
