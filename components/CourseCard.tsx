@@ -7,7 +7,7 @@ import {
 import MathPreview from "./MathPreview";
 import { supabase, uploadFileToStorage } from "../supabase";
 import { motion } from "framer-motion";
-import { useToast } from "./Toast"; // Cần Toast để thông báo đẹp
+import { useToast } from "./Toast"; 
 
 export interface Course {
   id: string;
@@ -33,7 +33,7 @@ const CourseCard: React.FC<CourseCardProps> = ({
   onDelete,
   role = "student",
 }) => {
-  const { showToast } = useToast(); // Hook thông báo
+  const { showToast } = useToast(); 
   const isTeacher = role === "teacher";
 
   const [isDeleting, setIsDeleting] = useState(false);
@@ -58,11 +58,10 @@ const CourseCard: React.FC<CourseCardProps> = ({
     setIsUploading(true);
     try {
       // Upload lên Supabase Storage bucket 'course_materials'
-      // Path: course_id/filename
       const filePath = `${course.id}/${Date.now()}_${file.name}`;
       
       const { error: uploadError } = await supabase.storage
-        .from('course_materials') // Hãy tạo bucket này trong Supabase Storage (Public)
+        .from('course_materials') 
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
@@ -87,7 +86,6 @@ const CourseCard: React.FC<CourseCardProps> = ({
   };
 
   // --- 2. Xử lý Paste nhanh mô tả (Ctrl+V) ---
-  // Tính năng này ẩn, có thể kích hoạt bằng nút Paste
   const handleQuickPasteDescription = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -101,7 +99,6 @@ const CourseCard: React.FC<CourseCardProps> = ({
 
       if (error) throw error;
       showToast("Đã dán mô tả mới từ Clipboard!", "success");
-      // Để UI cập nhật, component cha cần fetch lại hoặc ta dùng local state (nhưng ở đây đơn giản là báo thành công)
     } catch (err) {
       showToast("Không thể dán nội dung.", "error");
     }
@@ -136,7 +133,7 @@ const CourseCard: React.FC<CourseCardProps> = ({
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ y: -8, shadow: "0 20px 40px -10px rgba(99, 102, 241, 0.2)" }}
+      whileHover={{ y: -8, boxShadow: "0 20px 40px -10px rgba(99, 102, 241, 0.2)" }}
       className="group bg-white rounded-[2rem] border border-slate-100 shadow-lg overflow-hidden flex flex-col h-full relative transition-all duration-300"
     >
       {/* Nút Upload ẩn (kích hoạt qua ref) */}
@@ -170,89 +167,79 @@ const CourseCard: React.FC<CourseCardProps> = ({
       {/* --- Content --- */}
       <div className="p-6 flex flex-col flex-1 relative">
         {/* Title rendering Math */}
-        <div className="mb-3 min-h-[3rem]">
-           <h3 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-600 transition-colors">
-              <MathPreview content={course.title} className="font-sans" />
-           </h3>
+        <div className="font-bold text-slate-800 text-lg mb-2 line-clamp-2">
+           <MathPreview content={course.title} />
+        </div>
+        
+        {/* Description rendering Math */}
+        <div className="text-sm text-slate-500 mb-6 flex-1 line-clamp-3">
+            {course.description ? (
+                <MathPreview content={course.description} />
+            ) : (
+                <span className="italic opacity-60">Chưa có mô tả cho khóa học này.</span>
+            )}
         </div>
 
-        {/* Date & Author */}
-        <div className="flex items-center gap-3 text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-4">
-          <span className="flex items-center gap-1"><Calendar size={12} /> {createdDate}</span>
-        </div>
-
-        {/* Description */}
-        <p className="text-slate-500 text-sm line-clamp-2 mb-6 leading-relaxed">
-          {course.description ? (
-             <MathPreview content={course.description} />
-          ) : (
-             <span className="italic opacity-50">Chưa có mô tả chi tiết...</span>
-          )}
-        </p>
-
-        {/* --- Stats Row --- */}
-        <div className="grid grid-cols-2 gap-3 mt-auto mb-6">
-          <div className="bg-slate-50 p-3 rounded-xl text-center border border-slate-100 group-hover:border-indigo-100 transition-colors">
-             <p className="text-[10px] text-slate-400 font-black uppercase">Bài giảng</p>
-             <p className="text-xl font-black text-slate-700">{course.lesson_count || 0}</p>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-xl text-center border border-slate-100 group-hover:border-indigo-100 transition-colors">
-             <p className="text-[10px] text-slate-400 font-black uppercase">Tài liệu</p>
-             <p className="text-xl font-black text-slate-700">{course.file_count || 0}</p>
-          </div>
-        </div>
-
-        {/* --- Actions --- */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3">
-          <button
-            onClick={() => onOpen?.(course)}
-            className="flex-1 flex items-center justify-center gap-2 bg-slate-900 text-white py-3 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-200 transition-all active:scale-95"
-          >
-            Vào học <ArrowRight size={14} />
-          </button>
-
-          {isTeacher && (
-            <div className="flex gap-2">
-              {/* Nút Paste Mô tả */}
-              <button
-                onClick={handleQuickPasteDescription}
-                className="p-3 border border-slate-200 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all"
-                title="Dán mô tả (Ctrl+V)"
-              >
-                <ClipboardPaste size={16} />
-              </button>
-
-              {/* Nút Upload File */}
-              <button
-                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                disabled={isUploading}
-                className="p-3 border border-slate-200 text-slate-400 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 transition-all relative overflow-hidden"
-                title="Tải lên Word/PDF"
-              >
-                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              </button>
-
-              {/* Nút Delete */}
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"
-                title="Xóa khóa học"
-              >
-                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-              </button>
+        {/* Course Meta Info */}
+        <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-6 mt-auto">
+            <div className="flex items-center gap-1.5" title="Số bài học">
+                <FileText size={14} />
+                <span>{course.lesson_count || 0}</span>
             </div>
-          )}
+            <div className="flex items-center gap-1.5" title="Tài liệu đính kèm">
+                <File size={14} />
+                <span>{course.file_count || 0}</span>
+            </div>
+            <div className="flex items-center gap-1.5" title="Ngày tạo">
+                <Calendar size={14} />
+                <span>{createdDate}</span>
+            </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+            <button 
+                onClick={() => onOpen?.(course)}
+                className="flex-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 group/btn"
+            >
+                Vào Lớp
+                <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+            </button>
+
+            {isTeacher && (
+                <>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            fileInputRef.current?.click();
+                        }}
+                        disabled={isUploading}
+                        className="p-3 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-xl transition-colors disabled:opacity-50"
+                        title="Tải lên tài liệu"
+                    >
+                        {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                    </button>
+
+                    <button 
+                        onClick={handleQuickPasteDescription}
+                        className="p-3 bg-slate-50 text-slate-400 hover:text-emerald-600 hover:bg-emerald-100 rounded-xl transition-colors"
+                        title="Dán nhanh mô tả từ Clipboard"
+                    >
+                        <ClipboardPaste size={18} />
+                    </button>
+
+                    <button 
+                        onClick={handleDelete}
+                        disabled={isDeleting}
+                        className="p-3 bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50"
+                        title="Xóa khóa học"
+                    >
+                        {isDeleting ? <Loader2 size={18} className="animate-spin text-rose-500" /> : <Trash2 size={18} />}
+                    </button>
+                </>
+            )}
         </div>
       </div>
-      
-      {/* Uploading Overlay Effect */}
-      {isUploading && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
-            <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
-            <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest animate-pulse">Đang tải lên...</span>
-        </div>
-      )}
     </motion.div>
   );
 };
