@@ -52,10 +52,10 @@ const mapAiDataToEditor = (aiData: any): EditorQuestion[] => {
       }
     }
 
-    // 2. Đảm bảo options luôn có 4 phần tử an toàn
+    // 2. Đảm bảo options luôn có 4 phần tử an toàn (ĐÃ FIX TYPE)
     const safeOptions = ["", "", "", ""];
     if (Array.isArray(q.options)) {
-      q.options.slice(0, 4).forEach((opt, idx) => {
+      q.options.slice(0, 4).forEach((opt: any, idx: number) => {
         if (opt !== undefined && opt !== null) safeOptions[idx] = String(opt);
       });
     }
@@ -108,7 +108,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
       const mapped = mapAiDataToEditor(aiGeneratedData);
       setQuestions(mapped);
       
-      // ĐÃ FIX: Ép kiểu prev là string để tránh lỗi TS7006 của TypeScript
+      // ĐÃ FIX: Ép kiểu prev là string
       setTitle((prev: string) => prev === DEFAULT_TITLE ? (aiGeneratedData.title || DEFAULT_AI_TITLE) : prev);
       
       if(mapped.length > 0) setActiveQId(mapped[0].id);
@@ -158,7 +158,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
       score: 1
     };
     
-    setQuestions(prev => [...prev, newQ]);
+    // ĐÃ FIX: Định nghĩa rõ kiểu cho prev
+    setQuestions((prev: EditorQuestion[]) => [...prev, newQ]);
     setActiveQId(newId);
     
     setTimeout(() => {
@@ -169,7 +170,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   const deleteQuestion = (id: string) => {
     if (questions.length <= 1 && !window.confirm("Xóa câu hỏi cuối cùng?")) return;
     
-    setQuestions(prev => {
+    // ĐÃ FIX: Định nghĩa rõ kiểu cho prev
+    setQuestions((prev: EditorQuestion[]) => {
       const remaining = prev.filter(q => q.id !== id);
       if (activeQId === id) {
         setActiveQId(remaining.length > 0 ? remaining[0].id : null);
@@ -179,11 +181,13 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   };
 
   const updateQuestion = <K extends keyof EditorQuestion>(id: string, field: K, value: EditorQuestion[K]) => {
-    setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+    // ĐÃ FIX: Định nghĩa rõ kiểu cho prev
+    setQuestions((prev: EditorQuestion[]) => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   };
 
   const updateOption = (qId: string, index: number, val: string) => {
-    setQuestions(prev => prev.map(q => {
+    // ĐÃ FIX: Định nghĩa rõ kiểu cho prev
+    setQuestions((prev: EditorQuestion[]) => prev.map(q => {
       if (q.id !== qId) return q;
       const newOpts = [...q.options];
       newOpts[index] = val;
@@ -215,7 +219,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
         .from('exam_assets')
         .getPublicUrl(fileName);
 
-      setQuestions(prev => prev.map(q => {
+      // ĐÃ FIX: Định nghĩa rõ kiểu cho prev
+      setQuestions((prev: EditorQuestion[]) => prev.map(q => {
         if (q.id === qId) {
           return { ...q, text: `${q.text}\n\n![Minh họa](${publicUrl})\n` };
         }
