@@ -7,15 +7,15 @@ const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /* =========================================================
-    🧠 GỌI MODEL THẾ HỆ 1.5 (HỖ TRỢ JSON MODE CHÍNH CHỦ)
+    🧠 GỌI MODEL THẾ HỆ MỚI NHẤT (GEMINI 2.5)
 ========================================================= */
 const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) => {
   if (!genAI) throw new Error("Chưa cấu hình API Key cho Gemini.");
 
   try {
-    // Sử dụng model gemini-1.5-flash thay cho gemini-pro cũ để tránh lỗi 404
+    // SỬ DỤNG MODEL GEMINI 2.5 MỚI NHẤT ĐỂ TRÁNH LỖI 404 DO MODEL CŨ BỊ KHAI TỬ
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash", 
+      model: "gemini-2.5-flash", 
     });
 
     const generationConfig: any = {
@@ -48,20 +48,17 @@ const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
   
   try {
-    // Vì đã bật JSON Mode, chuỗi trả về chắc chắn là JSON. 
-    // Chúng ta chỉ cần giữ lại 1 lớp bảo vệ mỏng cho LaTeX (đề phòng JSON.parse lỗi do dấu \ của Toán học)
     let cleaned = rawText.trim();
+    // Lớp bảo vệ mỏng cho LaTeX
     cleaned = cleaned.replace(/\\(?![\\"])/g, "\\\\");
 
     const parsed = JSON.parse(cleaned);
 
-    // Chuẩn hóa thành mảng
     let rawArray: any[] = [];
     if (Array.isArray(parsed)) rawArray = parsed;
     else if (parsed.questions && Array.isArray(parsed.questions)) rawArray = parsed.questions;
     else rawArray = Object.values(parsed).find(v => Array.isArray(v)) || [];
 
-    // Map lại đúng format ứng dụng cần
     return rawArray.map((item: any) => ({
       type: item.type || "multiple_choice",
       question: item.question || "Nội dung trống",
@@ -83,7 +80,6 @@ export const geminiService = {
   async parseExamWithAI(text: string) {
     if (!text.trim()) return null;
 
-    // LƯU Ý: Khi dùng JSON Mode, Prompt bắt buộc phải có chữ "JSON"
     const prompt = `
       Nhiệm vụ: Trích xuất câu hỏi từ đề thi dưới đây và trả về định dạng JSON Array.
       
@@ -97,7 +93,6 @@ export const geminiService = {
       ${text}
     `;
 
-    // Truyền tham số thứ 3 (isJsonMode) = true
     const raw = await generate(prompt, 0.1, true);
     return parseSafeJSON(raw);
   },
@@ -111,13 +106,11 @@ export const geminiService = {
       - Các lệnh LATEX PHẢI ĐƯỢC NHÂN ĐÔI DẤU GẠCH CHÉO (ví dụ: \\\\sqrt, \\\\frac).
     `;
 
-    // Truyền tham số thứ 3 (isJsonMode) = true
     const raw = await generate(prompt, 0.7, true);
     return parseSafeJSON(raw);
   },
 
   async chatWithAI(prompt: string): Promise<string> {
-    // Chat bình thường thì không bật JSON Mode (isJsonMode = false theo mặc định)
     const result = await generate(prompt, 0.7);
     return result || "AI không phản hồi.";
   }
