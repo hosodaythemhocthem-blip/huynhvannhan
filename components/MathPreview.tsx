@@ -10,14 +10,23 @@ interface MathPreviewProps {
 }
 
 const MathPreview: React.FC<MathPreviewProps> = ({ content, className = "" }) => {
-  // Memoize và tiền xử lý nội dung để KaTeX không bị lỗi cú pháp khi thiếu dấu cách
+  // Memoize và tiền xử lý nội dung để "dọn đường" cho KaTeX
   const formattedContent = useMemo(() => {
     if (!content) return "";
-    return content.replace(/\n/g, '  \n');
+    let processed = content;
+
+    // 1. Chuyển các dấu phân cách dạng \( \) và \[ \] về chuẩn $ và $$
+    // Vì remark-math làm việc tốt nhất với $ và $$
+    processed = processed.replace(/\\\(/g, '$').replace(/\\\)/g, '$');
+    processed = processed.replace(/\\\[/g, '$$').replace(/\\\]/g, '$$');
+
+    // 2. Xóa bỏ dòng replace(\n) cũ của bạn vì nó làm vỡ cấu trúc \begin{cases} của KaTeX.
+    // CSS whitespace-pre-wrap ở thẻ <p> bên dưới đã đủ để xử lý xuống dòng rồi!
+    
+    return processed;
   }, [content]);
 
   // Định nghĩa các components chuẩn type để tránh lỗi Vercel
-  // Thêm _ trước node để báo cho TS biết đây là biến cố tình không sử dụng
   const markdownComponents: Components = {
     img: ({ node: _node, ...props }) => (
       <img 
@@ -36,7 +45,9 @@ const MathPreview: React.FC<MathPreviewProps> = ({ content, className = "" }) =>
     <div className={`prose prose-slate max-w-none text-slate-800 overflow-x-auto custom-scrollbar ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        // 🔥 CẬP NHẬT QUAN TRỌNG: Thêm tuỳ chọn throwOnError: false
+        // Nếu AI lỡ viết sai 1 ký tự, KaTeX sẽ hiển thị mã gốc màu đỏ thay vì làm "tàng hình" công thức
+        rehypePlugins={[[rehypeKatex, { strict: false, throwOnError: false }]]}
         components={markdownComponents}
       >
         {formattedContent}
