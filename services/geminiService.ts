@@ -1,10 +1,9 @@
 // services/geminiService.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// import { QuestionType } from "../types"; // Đảm bảo file types.ts có tồn tại
 
-// --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU (TYPESCRIPT PRO) ---
+// --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU (Đã sửa 'content' thành 'text' để khớp với Frontend) ---
 export interface ExamQuestion {
-  content: string;
+  text: string; // <-- FIX LỖI 1: Vercel báo thiếu property 'text'
   type: "multiple_choice" | "true_false" | "essay";
   options: string[];
   correct_answer: string | null;
@@ -42,17 +41,17 @@ const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash",
   generationConfig: {
-    temperature: 0.1, // AI nghiêm túc, bám sát văn bản
+    temperature: 0.1, 
     topP: 0.8,
     topK: 40,
-    responseMimeType: "application/json", // Ép trả về JSON chuẩn
+    // Đã TẠM TẮT dòng dưới đây để FIX LỖI 2: Thư viện cũ trên Vercel không hỗ trợ
+    // responseMimeType: "application/json", 
   }
 });
 
 // --- 4. HELPER: XỬ LÝ CHUỖI JSON ---
 const cleanAndParseJSON = <T>(text: string): T => {
   try {
-    // Xóa các block markdown thừa nếu AI vô tình trả về (dù đã ép mimeType)
     const cleanedText = text.replace(/```json/gi, "").replace(/```/g, "").trim();
     return JSON.parse(cleanedText) as T;
   } catch (error) {
@@ -82,7 +81,7 @@ Yêu cầu Output JSON:
   "description": "Mô tả ngắn gọn (nếu có)",
   "questions": [
     {
-      "content": "Nội dung câu hỏi",
+      "text": "Nội dung câu hỏi", // <-- Đã sửa 'content' thành 'text'
       "type": "multiple_choice", 
       "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
       "correct_answer": "Nội dung chính xác của đáp án đúng",
@@ -128,7 +127,7 @@ Số lượng: ${questionCount} câu. Độ khó tăng dần.
 Yêu cầu Output JSON là một MẢNG các câu hỏi:
 [
   {
-    "content": "Nội dung câu hỏi (dùng LaTeX cho công thức trong cặp $...$)",
+    "text": "Nội dung câu hỏi (dùng LaTeX cho công thức trong cặp $...$)", // <-- Đã sửa 'content' thành 'text'
     "type": "multiple_choice",
     "options": ["Tùy chọn 1", "Tùy chọn 2", "Tùy chọn 3", "Tùy chọn 4"],
     "correct_answer": "Text của tùy chọn đúng",
@@ -171,7 +170,6 @@ Yêu cầu Output JSON:
       return cleanAndParseJSON<GradeResult>(result.response.text());
     } catch (error: any) {
       console.error("Gemini Grade Error:", error);
-      // Fixed: Dùng template string chuẩn, không bị escape lỗi
       return { 
         score: 0, 
         feedback: `Lỗi chấm bài AI: ${error?.message || "Không xác định"}`, 
