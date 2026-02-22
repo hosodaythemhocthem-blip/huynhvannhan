@@ -9,7 +9,6 @@ import { User } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-// FIX LỖI TS2430: Dùng type intersection (&) và KHÔNG khai báo lại email/full_name để tránh xung đột với User gốc
 type ExtendedUser = User & {
   role?: string;
   class_name?: string | null;
@@ -30,7 +29,6 @@ const ClassManagement: React.FC = () => {
   const [search, setSearch] = useState("");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   
-  // Modal states
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
 
@@ -346,11 +344,12 @@ const ClassManagement: React.FC = () => {
                                    {user.class_name || 'Chưa xếp lớp'}
                                 </span>
                              </td>
+                             {/* ĐÂY LÀ PHẦN CODE ĐÃ ĐƯỢC BỔ SUNG ĐỂ SỬA LỖI CẮT NGANG */}
                              <td className="px-8 py-5 text-right">
                                 <button 
                                   onClick={() => deleteUser(user.id)} 
-                                  className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                  title="Xóa học sinh"
+                                  className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                  title="Xóa học sinh này"
                                 >
                                    <Trash2 size={18} />
                                 </button>
@@ -358,11 +357,8 @@ const ClassManagement: React.FC = () => {
                           </tr>
                        )) : (
                           <tr>
-                             <td colSpan={3} className="py-20 text-center">
-                                <div className="flex flex-col items-center gap-3">
-                                   <div className="p-4 bg-slate-50 rounded-full"><Users className="text-slate-300" size={32} /></div>
-                                   <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Không tìm thấy dữ liệu</p>
-                                </div>
+                             <td colSpan={3} className="px-8 py-12 text-center text-slate-400 font-medium">
+                                Không có học sinh nào trong danh sách.
                              </td>
                           </tr>
                        )}
@@ -371,7 +367,7 @@ const ClassManagement: React.FC = () => {
               </div>
            </div>
         </main>
-      </div>
+     </div>
     </div>
   );
 };
