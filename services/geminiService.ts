@@ -1,6 +1,6 @@
 // services/geminiService.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuestionType } from "../types"; // Import type từ file types.ts (Thầy nhớ check đường dẫn nhé)
+import { QuestionType } from "../types"; 
 
 // Tương thích an toàn cho cả môi trường Vite và Next.js/Vercel
 const getApiKey = (): string => {
@@ -20,34 +20,31 @@ const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash", 
   generationConfig: {
-    temperature: 0.2, // Giảm temperature xuống 0.2 để AI bóc tách chính xác, bớt "sáng tạo" thêm chữ
+    temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc, không sáng tạo bậy bạ
     topP: 0.8,
     topK: 40,
+    // 🔥 VŨ KHÍ BÍ MẬT: Ép AI chỉ được phép xuất ra định dạng JSON chuẩn 100%
+    responseMimeType: "application/json",
   }
 });
 
-// --- HELPER: Làm sạch chuỗi JSON từ AI ---
+// --- HELPER: Làm sạch chuỗi JSON an toàn ---
 const cleanJsonString = (text: string): string => {
-  let clean = text.replace(/```json/g, "").replace(/```/g, "");
-  const firstOpen = clean.indexOf("[");
-  const firstBrace = clean.indexOf("{");
-  const start = (firstOpen !== -1 && (firstBrace === -1 || firstOpen < firstBrace)) ? firstOpen : firstBrace;
-  
-  const lastClose = clean.lastIndexOf("]");
-  const lastBrace = clean.lastIndexOf("}");
-  const end = (lastClose !== -1 && (lastBrace === -1 || lastClose > lastBrace)) ? lastClose : lastBrace;
-
-  if (start !== -1 && end !== -1) {
-    clean = clean.substring(start, end + 1);
-  }
-  return clean.trim();
+  // Vì đã dùng responseMimeType nên AI hầu như sẽ không bọc markdown nữa,
+  // nhưng cứ dọn dẹp cho chắc ăn nếu có ```json
+  return text.replace(/```json/gi, "").replace(/```/g, "").trim();
 };
 
 export const geminiService = {
   /**
-   * CỰC ĐỈNH: Phân tích văn bản thô (từ PDF/Word) thành cấu trúc JSON chuẩn xác theo types.ts
+   * CỰC ĐỈNH: Phân tích văn bản thô (từ PDF/Word) thành cấu trúc JSON chuẩn xác
    */
   async parseExamWithAI(text: string) {
+    // 1. Kiểm tra API Key đầu tiên
+    if (!API_KEY || API_KEY === "dummy-key") {
+      throw new Error("CHƯA CẤU HÌNH API KEY! Thầy vui lòng kiểm tra lại file .env (biến VITE_GEMINI_API_KEY) nhé.");
+    }
+
     if (!text.trim()) return null;
 
     const prompt = `
@@ -89,9 +86,10 @@ export const geminiService = {
       const rawText = result.response.text();
       const cleanedJson = cleanJsonString(rawText);
       return JSON.parse(cleanedJson);
-    } catch (error) {
-      console.error("Gemini Parse Error:", error);
-      throw new Error("Không thể phân tích đề thi. Đảm bảo file Word/PDF rõ ràng và có cấu trúc hợp lý.");
+    } catch (error: any) {
+      console.error("Gemini Parse Error Detail:", error);
+      // 🔥 FIX: Không giấu lỗi nữa, ném thẳng lỗi thật ra để biết tại sao hỏng
+      throw new Error(error?.message || "Lỗi đọc dữ liệu từ AI. Vui lòng xem tab Console (F12) để biết chi tiết.");
     }
   },
 
@@ -99,6 +97,10 @@ export const geminiService = {
    * Tạo đề thi mới tự động (Đã nâng cấp khớp với types.ts)
    */
   async generateExam(topic: string, grade: string, questionCount: number = 10) {
+    if (!API_KEY || API_KEY === "dummy-key") {
+      throw new Error("Chưa cấu hình API Key của Gemini.");
+    }
+
     const prompt = `
     Hãy đóng vai một giáo viên giỏi. Tạo một đề thi trắc nghiệm môn Toán lớp ${grade} về chủ đề: "${topic}".
     Số lượng: ${questionCount} câu. Độ khó tăng dần.
@@ -121,9 +123,9 @@ export const geminiService = {
       const result = await model.generateContent(prompt);
       const cleanedJson = cleanJsonString(result.response.text());
       return JSON.parse(cleanedJson);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini Generate Error:", error);
-      throw new Error("Lỗi khi tạo đề thi mới bằng AI.");
+      throw new Error(error?.message || "Lỗi khi tạo đề thi mới bằng AI.");
     }
   },
 
@@ -131,7 +133,10 @@ export const geminiService = {
    * Chấm bài tự luận (Giữ nguyên)
    */
   async gradeEssay(question: string, userAnswer: string) {
-    // ... (Phần này của Thầy đã hoàn hảo, em giữ nguyên hoàn toàn)
+    if (!API_KEY || API_KEY === "dummy-key") {
+      return { score: 0, feedback: "Chưa cấu hình API Key", suggestions: "" };
+    }
+
     const prompt = `
     Câu hỏi: ${question}
     Bài làm của học sinh: ${userAnswer}
@@ -149,9 +154,9 @@ export const geminiService = {
       const result = await model.generateContent(prompt);
       const cleanedJson = cleanJsonString(result.response.text());
       return JSON.parse(cleanedJson);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini Grade Error:", error);
-      return { score: 0, feedback: "Lỗi chấm bài AI", suggestions: "" };
+      return { score: 0, feedback: `Lỗi chấm bài AI: ${error?.message}`, suggestions: "" };
     }
   },
 };
