@@ -2,19 +2,11 @@
 import { GoogleGenAI } from "@google/genai";
 
 /* =========================================================
-   🔐 LẤY API KEY CHUẨN VITE (Đã Fix lỗi TypeScript Build)
+   🔐 LẤY API KEY CHUẨN VITE (Đã Fix lỗi Vercel)
 ========================================================= */
-// Sử dụng cách ép kiểu an toàn cho TypeScript để Vercel không báo lỗi TS2339
-const getApiKey = (): string => {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
-  } catch (e) {
-    return "";
-  }
-};
-
-const API_KEY = getApiKey();
+// Dùng @ts-ignore để ép Vercel bỏ qua lỗi kiểm tra type của Vite
+// @ts-ignore
+const API_KEY = import.meta.env?.VITE_GEMINI_API_KEY || "";
 
 if (!API_KEY) {
   console.error("❌ Thiếu VITE_GEMINI_API_KEY trong environment variables");
@@ -45,7 +37,7 @@ const generate = async (
       contents: prompt,
       config: { 
         temperature,
-        // Ép model trả về JSON chuẩn xác (Chỉ hoạt động tốt trên các model mới)
+        // Ép model trả về JSON chuẩn xác
         ...(isJson ? { responseMimeType: "application/json" } : {}),
       },
     });
@@ -67,12 +59,10 @@ const parseSafeJSON = (rawText: string | undefined) => {
     // 1. Dọn dẹp mạnh tay mọi loại Markdown rác AI thường thêm vào
     let cleaned = rawText.trim();
     if (cleaned.startsWith('```')) {
-      // Tìm vị trí xuống dòng đầu tiên (để bỏ qua ```json)
       const firstNewline = cleaned.indexOf('\n');
       if (firstNewline !== -1) {
           cleaned = cleaned.substring(firstNewline + 1);
       }
-      // Xóa các backticks còn lại
       cleaned = cleaned.replace(/```/g, "").trim();
     }
     
@@ -92,12 +82,10 @@ const parseSafeJSON = (rawText: string | undefined) => {
     if (Array.isArray(parsed)) {
         finalArray = parsed;
     } else if (parsed && typeof parsed === 'object') {
-        // AI nhét vào Object -> moi mảng ra
         if (Array.isArray(parsed.questions)) finalArray = parsed.questions;
         else if (Array.isArray(parsed.data)) finalArray = parsed.data;
         else if (Array.isArray(parsed.exam)) finalArray = parsed.exam;
         else {
-             // Nếu là object mà không có key quen thuộc, lấy array đầu tiên tìm thấy
              const possibleArray = Object.values(parsed).find(val => Array.isArray(val));
              if (possibleArray) finalArray = possibleArray as any[];
         }
@@ -107,11 +95,10 @@ const parseSafeJSON = (rawText: string | undefined) => {
          throw new Error("Dữ liệu parse ra trống hoặc không tìm thấy mảng câu hỏi.");
     }
 
-    // 4. Chuẩn hóa Data: Đảm bảo correctAnswer luôn là số (để hàm map bên giao diện không lỗi)
+    // 4. Chuẩn hóa Data: Đảm bảo correctAnswer luôn là số
     const sanitizedArray = finalArray.map((item: any) => ({
          question: item.question || "Lỗi đọc câu hỏi",
          options: Array.isArray(item.options) ? item.options : ["A", "B", "C", "D"],
-         // Ép về kiểu Number hoặc mặc định là 0
          correctAnswer: typeof item.correctAnswer === 'number' ? item.correctAnswer : (parseInt(item.correctAnswer) || 0),
          explanation: item.explanation || ""
     }));
@@ -135,7 +122,6 @@ export const geminiService = {
   async parseExamWithAI(text: string) {
     if (!text.trim()) return null;
 
-    // Prompt siêu khắt khe, áp đặt cấu trúc
     const prompt = `
       Nhiệm vụ: Trích xuất các câu hỏi trắc nghiệm từ văn bản sau thành JSON Array.
       Yêu cầu nghiêm ngặt:
@@ -157,7 +143,7 @@ export const geminiService = {
 
     try {
       const raw = await generate(prompt, {
-        temperature: 0.1, // Nhiệt độ thấp để AI "ngoan"
+        temperature: 0.1, 
         isJson: true,
       });
 
