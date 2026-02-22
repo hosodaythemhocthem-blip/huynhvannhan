@@ -22,10 +22,9 @@ const model = genAI.getGenerativeModel({
   generationConfig: {
     temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc, không sáng tạo bậy bạ
     topP: 0.8,
-    topK: 40,
-    // 🔥 Ép AI chỉ được phép xuất ra định dạng JSON chuẩn 100%
-    responseMimeType: "application/json",
-  } as any // <--- BÍ QUYẾT FIX LỖI BUILD TS2353 NẰM Ở ĐÂY
+    topK: 40
+    // ĐÃ XÓA responseMimeType VÀ as any ĐỂ CHẠY MƯỢT TRÊN VERCEL
+  } 
 });
 
 // --- HELPER: Làm sạch chuỗi JSON an toàn ---
