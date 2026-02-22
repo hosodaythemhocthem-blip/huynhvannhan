@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 /* =========================================================
-   🔐 LẤY API KEY CHUẨN VITE (Đã lách lỗi TypeScript Vercel)
+   🔐 LẤY API KEY CHUẨN VITE 
 ========================================================= */
 const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 
@@ -9,7 +9,8 @@ if (!API_KEY) {
   console.error("❌ Thiếu VITE_GEMINI_API_KEY trong environment variables");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Chỉ khởi tạo AI nếu có API Key để tránh lỗi sập App
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 /* =========================================================
    🧠 HELPER: GỌI MODEL
@@ -21,19 +22,23 @@ const generate = async (
     isJson?: boolean;
   }
 ) => {
+  if (!ai) {
+    throw new Error("Chưa cấu hình API Key cho Gemini. Vui lòng kiểm tra biến môi trường VITE_GEMINI_API_KEY.");
+  }
+
   const { temperature = 0.7, isJson = false } = options || {};
 
   const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    // Đã nâng cấp model để sửa lỗi 404 Not Found
+    model: "gemini-2.5-flash", 
     contents: prompt,
-    // ⚠️ CHÚ Ý: SDK mới dùng "config", không phải "generationConfig"
     config: { 
       temperature,
       ...(isJson ? { responseMimeType: "application/json" } : {}),
     },
   });
 
-  return response.text; // Trong SDK mới, text là property (thuộc tính), không phải hàm text()
+  return response.text;
 };
 
 /* =========================================================
@@ -82,9 +87,11 @@ export const geminiService = {
     try {
       const result = await generate(prompt, { temperature: 0.7 });
       return result || "AI không phản hồi.";
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Lỗi chatWithAI:", error);
-      return "AI đang bận, thử lại sau nhé!";
+      return error.message.includes("API Key") 
+        ? "Lỗi hệ thống: Thiếu API Key." 
+        : "AI đang bận, thử lại sau nhé!";
     }
   },
 
