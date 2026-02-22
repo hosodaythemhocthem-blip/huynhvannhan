@@ -188,8 +188,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   };
 
   // Thay đổi loại câu hỏi
-  const handleTypeChange = (id: string, newType: 'multiple_choice' | 'true_false' | 'short_answer') => {
-    setQuestions(prev => prev.map(q => {
+  const handleTypeChange = (id: string, newType: EditorQuestion['type']) => {
+    setQuestions((prev: EditorQuestion[]) => prev.map(q => {
       if (q.id !== id) return q;
       
       let newOptions = [...q.options];
@@ -219,7 +219,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
     }));
   };
 
-  const handlePaste = async (e: React.ClipboardEvent, qId: string) => {
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>, qId: string) => {
     const items = Array.from(e.clipboardData.items);
     const imageItem = items.find(item => item.type.indexOf("image") !== -1);
     
@@ -324,7 +324,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
                         Câu {idx + 1}
                       </span>
                       <button 
-                        onClick={(e) => { e.stopPropagation(); deleteQuestion(q.id); }}
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); deleteQuestion(q.id); }}
                         className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity"
                       >
                         <Trash2 size={14}/>
@@ -365,7 +365,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
                                {/* Chọn Loại Câu Hỏi */}
                                <select 
                                  value={activeQuestion.type}
-                                 onChange={(e) => handleTypeChange(activeQuestion.id, e.target.value as any)}
+                                 onChange={(e) => handleTypeChange(activeQuestion.id, e.target.value as EditorQuestion['type'])}
                                  className="text-sm border border-slate-200 rounded-lg bg-slate-50 px-3 py-1.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-medium text-slate-700 transition-all"
                                >
                                  <option value="multiple_choice">Trắc nghiệm (A,B,C,D)</option>
