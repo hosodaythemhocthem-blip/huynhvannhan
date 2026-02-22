@@ -18,12 +18,11 @@ const API_KEY = getApiKey();
 // Khởi tạo model 
 const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash", 
+  model: "gemini-pro", // <--- ĐÃ SỬA THÀNH 'gemini-pro' Ở ĐÂY ĐỂ VERCEL KHÔNG BÁO LỖI 404 NỮA
   generationConfig: {
     temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc, không sáng tạo bậy bạ
     topP: 0.8,
     topK: 40
-    // ĐÃ XÓA responseMimeType VÀ as any ĐỂ CHẠY MƯỢT TRÊN VERCEL
   } 
 });
 
@@ -85,7 +84,6 @@ export const geminiService = {
       return JSON.parse(cleanedJson);
     } catch (error: any) {
       console.error("Gemini Parse Error Detail:", error);
-      // 🔥 FIX: Không giấu lỗi nữa, ném thẳng lỗi thật ra để biết tại sao hỏng
       throw new Error(error?.message || "Lỗi đọc dữ liệu từ AI. Vui lòng xem tab Console (F12) để biết chi tiết.");
     }
   },
