@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Mail, 
@@ -12,10 +12,10 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  BookOpen // Đã import thêm icon BookOpen cho trường chọn Lớp
+  BookOpen
 } from "lucide-react";
 import { User } from "../types";
-// import { authService } from "../services/authService";
+import { supabase } from "../supabase"; // IMPORT SUPABASE ĐỂ LẤY LỚP
 
 interface Props {
   onLogin: (user: User) => void;
@@ -28,11 +28,34 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  // 1. Thêm state để lưu Lớp được chọn
+  
   const [selectedClass, setSelectedClass] = useState(""); 
+  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]); // STATE LƯU LỚP
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // GỌI SUPABASE LẤY DANH SÁCH LỚP KHI VÀO TRANG HOẶC CHUYỂN TAB ĐĂNG KÝ
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('classes')
+          .select('*')
+          .order('name', { ascending: true });
+          
+        if (error) throw error;
+        if (data) setAvailableClasses(data);
+      } catch (err) {
+        console.error("Lỗi tải danh sách lớp:", err);
+      }
+    };
+
+    if (mode === "student-register") {
+      fetchClasses();
+    }
+  }, [mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +66,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       const now = new Date().toISOString();
 
-      // 1. LUỒNG GIÁO VIÊN
       if (mode === "teacher") {
         if (email.trim().toLowerCase() === "huynhvannhan@gmail.com" && password === "huynhvannhan2020") {
           const teacherUser: User = {
@@ -61,7 +83,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
           throw new Error("Thông tin đăng nhập Giáo viên không chính xác!");
         }
       } 
-      // 2. LUỒNG HỌC SINH ĐĂNG NHẬP
       else if (mode === "student-login") {
         if (!email || !password) throw new Error("Vui lòng nhập đầy đủ Email và Mật khẩu.");
         
@@ -77,17 +98,19 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         };
         onLogin(studentUser);
       } 
-      // 3. LUỒNG HỌC SINH ĐĂNG KÝ
       else if (mode === "student-register") {
-        // Cập nhật validation bắt buộc chọn lớp
         if (!email || !password || !fullName || !selectedClass) {
           throw new Error("Vui lòng điền đủ Họ tên, Lớp, Email và Mật khẩu.");
         }
-        alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName} (Lớp ${selectedClass}).\nHãy chờ Thầy Nhẫn duyệt nhé!`);
+        
+        // Lấy tên lớp để hiện thông báo cho đẹp
+        const className = availableClasses.find(c => c.id === selectedClass)?.name || selectedClass;
+        
+        alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName} (Lớp ${className}).\nHãy chờ Thầy Nhẫn duyệt nhé!`);
         setMode("student-login");
         setFullName("");
         setPassword("");
-        setSelectedClass(""); // Reset class sau khi đăng ký
+        setSelectedClass(""); 
       }
 
     } catch (err: unknown) {
@@ -107,13 +130,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     setEmail("");
     setPassword("");
     setFullName("");
-    setSelectedClass(""); // Reset class khi chuyển tab
+    setSelectedClass(""); 
     setShowPassword(false);
   };
 
   return (
     <div className="min-h-screen bg-[#0f172a] relative flex items-center justify-center overflow-hidden font-sans">
-      {/* Background Effects */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/30 rounded-full blur-[100px] animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-cyan-600/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: "2s" }}></div>
@@ -124,7 +146,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md z-10 p-4"
       >
-        {/* Logo Section */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 shadow-lg shadow-indigo-500/30 mb-6 transform rotate-3 hover:rotate-0 transition-all duration-500">
             <Sparkles className="w-10 h-10 text-white" />
@@ -135,10 +156,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
           <p className="text-slate-400 font-medium">Hệ sinh thái Toán học 4.0</p>
         </div>
 
-        {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl">
           
-          {/* Tabs Switcher */}
           <div className="flex p-1 bg-slate-950/50 rounded-xl mb-8 border border-white/5 relative">
              <button
               onClick={() => switchMode("teacher")}
@@ -157,7 +176,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
               <GraduationCap className="w-4 h-4" /> Học sinh
             </button>
 
-            {/* Active Tab Background */}
             <motion.div 
               layoutId="activeTab"
               className="absolute top-1 bottom-1 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-500/20"
@@ -181,7 +199,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                 transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
-                {/* Error Box */}
                 {error && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }} 
@@ -193,14 +210,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   </motion.div>
                 )}
 
-                {/* Teacher Specific Welcome */}
                 {mode === "teacher" && (
                    <div className="text-center pb-2">
                      <p className="text-indigo-300 text-sm font-semibold">Cổng đăng nhập dành riêng cho Thầy Nhẫn</p>
                    </div>
                 )}
 
-                {/* Full Name Input (Register only) */}
                 {mode === "student-register" && (
                   <>
                     <div className="space-y-1">
@@ -217,7 +232,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                       </div>
                     </div>
 
-                    {/* Class Selection Input (Register only) */}
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wide">Chọn Lớp</label>
                       <div className="relative group">
@@ -227,12 +241,15 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                           onChange={(e) => setSelectedClass(e.target.value)}
                           className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-10 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all appearance-none cursor-pointer"
                         >
-                          <option value="" disabled>-- Chọn khối lớp --</option>
-                          <option value="10">Lớp 10</option>
-                          <option value="11">Lớp 11</option>
-                          <option value="12">Lớp 12</option>
+                          <option value="" disabled>-- Chọn lớp học --</option>
+                          {/* ĐỔ DỮ LIỆU TỪ SUPABASE VÀO ĐÂY */}
+                          {availableClasses.map((cls) => (
+                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                          ))}
+                          {availableClasses.length === 0 && (
+                            <option value="" disabled>Đang tải lớp...</option>
+                          )}
                         </select>
-                        {/* Custom Dropdown Arrow */}
                         <div className="absolute right-4 top-4 pointer-events-none text-slate-500">
                           <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
                         </div>
@@ -241,7 +258,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   </>
                 )}
 
-                {/* Email Input */}
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wide">Email / Tài khoản</label>
                   <div className="relative group">
@@ -253,14 +269,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
                       placeholder={mode === "teacher" ? "huynhvannhan@gmail.com" : "student@email.com"}
                     />
-                    {/* Checkmark if Teacher email is typed */}
                     {mode === "teacher" && email === "huynhvannhan@gmail.com" && (
                       <CheckCircle2 className="absolute right-4 top-3.5 w-5 h-5 text-emerald-500 animate-bounce" />
                     )}
                   </div>
                 </div>
 
-                {/* Password Input */}
                 <div className="space-y-1">
                   <div className="flex justify-between ml-1">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Mật khẩu</label>
@@ -284,7 +298,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   </div>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -300,7 +313,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   )}
                 </button>
 
-                {/* Footer Links */}
                 {mode !== "teacher" && (
                   <div className="text-center mt-4">
                     <p className="text-slate-500 text-sm">
