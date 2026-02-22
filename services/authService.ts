@@ -39,26 +39,35 @@ export const authService = {
       throw new Error("Mật khẩu tối thiểu 6 ký tự.");
     }
 
+    // 1. Tạo tài khoản trong hệ thống Auth của Supabase
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: full_name,
+        }
+      }
     });
 
     if (error || !data.user) {
+      console.error("Lỗi Supabase Auth:", error);
       throw new Error("Email đã tồn tại hoặc không hợp lệ.");
     }
 
+    // 2. Lưu thông tin vào bảng public.users để Quản lý lớp query được
     const { error: insertError } = await supabase.from("users").insert({
       id: data.user.id,
-      email,
-      full_name,
-      role: "student",
-      status: "pending",
+      email: email,
+      full_name: full_name,
+      role: "student",     // Cố định chữ thường
+      status: "pending",   // Cố định chữ thường để code filter dễ dàng
       created_at: now(),
       updated_at: now(),
     });
 
     if (insertError) {
+      console.error("Lỗi chèn dữ liệu vào bảng users:", insertError);
       throw new Error("Lỗi tạo hồ sơ người dùng.");
     }
   },
