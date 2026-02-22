@@ -25,9 +25,9 @@ const generate = async (
   const { temperature = 0.1, isJson = false } = options || {};
 
   try {
-    // Sử dụng gemini-1.5-flash để tốc độ nhanh và ổn định JSON
+    // ĐÃ SỬA: Sử dụng gemini-2.5-flash thay cho 1.5-flash đã bị khai tử
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       generationConfig: {
         temperature,
         topP: 0.95,
@@ -66,8 +66,6 @@ const parseSafeJSON = (rawText: string | undefined) => {
     }
 
     // 3. Xử lý lỗi "Escaped Backslash" thường gặp trong LaTeX khi parse JSON
-    // Thay thế các lỗi gạch chéo đơn trong LaTeX để JSON.parse không bị lỗi
-    // Ví dụ: \frac -> \\frac
     const fixedJsonText = cleaned.replace(/\\(?![bfnrtu"\\\/])/g, "\\\\");
 
     const parsed = JSON.parse(fixedJsonText);
@@ -105,8 +103,8 @@ export const geminiService = {
       
       QUY TẮC CÔNG THỨC TOÁN (BẮT BUỘC):
       - Sử dụng chuẩn LaTeX cho mọi ký hiệu toán học.
-      - Bọc LaTeX trong cặp dấu $...$. Ví dụ: $x^2 + \sqrt{y} = 0$.
-      - Với các ký tự đặc biệt như dấu căn, phân số, phải dùng đúng lệnh LaTeX (\\frac, \\sqrt).
+      - Bọc LaTeX trong cặp dấu $...$. Ví dụ: $x^2 + \\sqrt{y} = 0$.
+      - Với các ký tự đặc biệt như dấu căn, phân số, phải dùng đúng lệnh LaTeX (\\\\frac, \\\\sqrt).
 
       CẤU TRÚC JSON:
       Trả về một mảng [ { "type": "...", "question": "...", "options": [...], "correctAnswer": ..., "explanation": "..." } ]
