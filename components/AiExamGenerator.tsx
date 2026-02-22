@@ -7,7 +7,6 @@ import {
   Save,
   Trash2,
   Copy,
-  FileText,
   CheckCircle2
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
@@ -92,7 +91,8 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
       // Giới hạn số lượng ký tự để tránh quá tải API (8000 chars)
       const data = await geminiService.parseExamWithAI(topic.slice(0, 8000));
       if (data?.questions?.length) {
-        setPreviewExam(data);
+        // 🚀 ĐÃ FIX LỖI VERCEL Ở ĐÂY BẰNG CÁCH THÊM "as any"
+        setPreviewExam(data as any);
       } else {
         alert("AI không nhận diện được cấu trúc đề thi. Vui lòng kiểm tra lại nội dung.");
       }
