@@ -1,6 +1,6 @@
 // services/geminiService.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuestionType } from "../types"; 
+import { QuestionType } from "../types"; // Import type từ file types.ts
 
 // Tương thích an toàn cho cả môi trường Vite và Next.js/Vercel
 const getApiKey = (): string => {
@@ -23,15 +23,13 @@ const model = genAI.getGenerativeModel({
     temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc, không sáng tạo bậy bạ
     topP: 0.8,
     topK: 40,
-    // 🔥 VŨ KHÍ BÍ MẬT: Ép AI chỉ được phép xuất ra định dạng JSON chuẩn 100%
+    // 🔥 Ép AI chỉ được phép xuất ra định dạng JSON chuẩn 100%
     responseMimeType: "application/json",
-  }
+  } as any // <--- BÍ QUYẾT FIX LỖI BUILD TS2353 NẰM Ở ĐÂY
 });
 
 // --- HELPER: Làm sạch chuỗi JSON an toàn ---
 const cleanJsonString = (text: string): string => {
-  // Vì đã dùng responseMimeType nên AI hầu như sẽ không bọc markdown nữa,
-  // nhưng cứ dọn dẹp cho chắc ăn nếu có ```json
   return text.replace(/```json/gi, "").replace(/```/g, "").trim();
 };
 
@@ -94,7 +92,7 @@ export const geminiService = {
   },
 
   /**
-   * Tạo đề thi mới tự động (Đã nâng cấp khớp với types.ts)
+   * Tạo đề thi mới tự động
    */
   async generateExam(topic: string, grade: string, questionCount: number = 10) {
     if (!API_KEY || API_KEY === "dummy-key") {
@@ -130,7 +128,7 @@ export const geminiService = {
   },
 
   /**
-   * Chấm bài tự luận (Giữ nguyên)
+   * Chấm bài tự luận 
    */
   async gradeEssay(question: string, userAnswer: string) {
     if (!API_KEY || API_KEY === "dummy-key") {
