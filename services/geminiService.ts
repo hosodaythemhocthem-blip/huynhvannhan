@@ -7,33 +7,34 @@ const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /* =========================================================
-    🧠 GỌI MODEL MỚI NHẤT (FIX LỖI 404)
+    🧠 GỌI MODEL "GEMINI-PRO" (TƯƠNG THÍCH 100%, KHÔNG BỊ 404)
 ========================================================= */
-const generate = async (prompt: string, temperature = 0.2) => {
+const generate = async (prompt: string, temperature = 0.1) => {
   if (!genAI) throw new Error("Chưa cấu hình API Key cho Gemini.");
 
   try {
-    // 🟢 Sửa thành flash-latest để Google không báo lỗi 404 Not Found
+    // Đổi sang "gemini-pro" chuẩn để dứt điểm lỗi 404 Not Found
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest", 
-      generationConfig: {
-        temperature,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 8192,
-      }
+      model: "gemini-pro", 
     });
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: temperature,
+        topP: 0.8,
+        topK: 10,
+      }
+    });
     return result.response.text();
   } catch (error: any) {
-    console.error("❌ Lỗi gọi API:", error);
+    console.error("❌ Lỗi gọi API Gemini:", error);
     throw new Error(`Lỗi kết nối AI: ${error.message}`);
   }
 };
 
 /* =========================================================
-    🛡️ THUẬT TOÁN "BỌC THÉP" CHỐNG SẬP JSON LATEX
+    🛡️ THUẬT TOÁN "BỌC THÉP" JSON - XỬ LÝ TRIỆT ĐỂ LATEX
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
@@ -41,21 +42,21 @@ const parseSafeJSON = (rawText: string | undefined) => {
   try {
     let cleaned = rawText.trim();
     
-    // 1. Chỉ lấy phần nằm trong ngoặc vuông (loại bỏ rác AI nói chuyện)
+    // 1. Chỉ lấy phần trong ngoặc vuông
     const firstBracket = cleaned.indexOf('[');
     const lastBracket = cleaned.lastIndexOf(']');
     if (firstBracket !== -1 && lastBracket !== -1) {
       cleaned = cleaned.substring(firstBracket, lastBracket + 1);
     }
 
-    // 2. ÉP PHẲNG CHUỖI: Thay thế toàn bộ dấu xuống dòng bằng dấu cách
-    // Đây là nguyên nhân chính gây lỗi "Unterminated string in JSON"
-    cleaned = cleaned.replace(/\n/g, " ").replace(/\r/g, "");
+    // 2. ÉP PHẲNG CHUỖI: Ép mọi dấu xuống dòng (\n) thành khoảng trắng
+    cleaned = cleaned.replace(/[\r\n]+/g, " ");
 
-    // 3. NHÂN ĐÔI GẠCH CHÉO LATEX: \sqrt biến thành \\sqrt để JSON hiểu được
+    // 3. KHẮC PHỤC TRIỆT ĐỂ LỖI LATEX (\begin, \frac...)
+    // Biến mọi dấu \ đơn lẻ thành \\ để JSON.parse không hiểu lầm
     cleaned = cleaned.replace(/\\(?![\\"])/g, "\\\\");
-    
-    // 4. Lọc ký tự ẩn
+
+    // 4. Lọc ký tự rác
     cleaned = cleaned.replace(/[\u0000-\u001F]+/g, "");
 
     const parsed = JSON.parse(cleaned);
@@ -74,13 +75,13 @@ const parseSafeJSON = (rawText: string | undefined) => {
     }));
 
   } catch (error: any) {
-    console.error("❌ Lỗi Parse JSON:", error, "\nChuỗi gốc AI:", rawText);
-    throw new Error("Dữ liệu AI toán học quá phức tạp gây gãy chuỗi. Thầy vui lòng bấm tạo lại lần nữa.");
+    console.error("❌ Lỗi Parse JSON:", error, "\nChuỗi AI gốc:", rawText);
+    throw new Error("Dữ liệu chứa phương trình Toán học phức tạp gây nhiễu. Thầy vui lòng ấn tạo lại nhé.");
   }
 };
 
 /* =========================================================
-    🚀 EXPORT SERVICE CÙNG PROMPT ÉP KHUÔN
+    🚀 EXPORT SERVICE CÙNG PROMPT ÉP KHUÔN NGHIÊM NGẶT
 ========================================================= */
 export const geminiService = {
   async parseExamWithAI(text: string) {
@@ -89,13 +90,11 @@ export const geminiService = {
     const prompt = `
       Nhiệm vụ: Trích xuất câu hỏi từ đề thi sang JSON Array.
       
-      ⚠️ LỆNH CẤM (RẤT QUAN TRỌNG):
-      1. KHÔNG DÙNG dấu xuống dòng (Enter/Newline) bên trong nội dung câu hỏi hoặc đáp án. Mọi thứ phải viết liền trên 1 dòng.
+      ⚠️ LỆNH CẤM & QUY TẮC SỐNG CÒN (PHẢI TUÂN THỦ):
+      1. TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON MẢNG: [ { "type": "multiple_choice", "question": "...", "options": ["A. ...", "B. ..."], "correctAnswer": 0, "explanation": "..." } ]
       2. MỌI công thức Toán phải bọc trong $...$.
-      3. MỌI dấu gạch chéo ngược (\\) của LaTeX phải viết thành hai dấu (\\\\). Vd: $\\\\sqrt{x}$.
-      
-      CẤU TRÚC JSON:
-      [ { "type": "multiple_choice", "question": "...", "options": [...], "correctAnswer": 0, "explanation": "..." } ]
+      3. LATEX: TUYỆT ĐỐI nhân đôi dấu gạch chéo ngược. Ví dụ: phải viết là \\\\begin{cases}, \\\\sqrt, \\\\frac. (Nếu bạn chỉ ghi \\begin, JSON sẽ bị lỗi).
+      4. KHÔNG XUỐNG DÒNG (Enter) bên trong nội dung câu hỏi hoặc đáp án. Mọi thứ ghi liền trên 1 dòng.
 
       VĂN BẢN ĐỀ THI:
       ${text}
@@ -108,8 +107,10 @@ export const geminiService = {
   async generateExam(topic: string, grade: string, count = 10) {
     const prompt = `
       Tạo ${count} câu hỏi Toán lớp ${grade}, chủ đề "${topic}".
-      ⚠️ KHÔNG DÙNG dấu xuống dòng trong nội dung. Dùng LaTeX bọc trong $...$. Nhân đôi dấu (\\) thành (\\\\).
-      Trả về JSON Array gồm: type, question, options, correctAnswer, explanation.
+      ⚠️ QUY TẮC BẮT BUỘC: 
+      - Trả về JSON Array: [ { "type": "multiple_choice", "question": "...", "options": ["..."], "correctAnswer": 0, "explanation": "..." } ]
+      - KHÔNG DÙNG dấu xuống dòng trong nội dung. 
+      - CÁC LỆNH LATEX PHẢI ĐƯỢC NHÂN ĐÔI DẤU GẠCH CHÉO (ví dụ: \\\\sqrt, \\\\frac).
     `;
 
     const raw = await generate(prompt, 0.7);
