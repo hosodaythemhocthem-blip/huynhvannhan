@@ -18,15 +18,16 @@ const API_KEY = getApiKey();
 // Khởi tạo model 
 const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
-  model: "gemini-pro", // <--- ĐÃ SỬA THÀNH 'gemini-pro' Ở ĐÂY ĐỂ VERCEL KHÔNG BÁO LỖI 404 NỮA
+  model: "gemini-1.5-flash", // <--- ĐÃ KHẮC PHỤC: Chuyển sang model 1.5 mới nhất để hết lỗi 404
   generationConfig: {
-    temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc, không sáng tạo bậy bạ
+    temperature: 0.1, // Giảm xuống 0.1 để AI cực kỳ nghiêm túc
     topP: 0.8,
-    topK: 40
+    topK: 40,
+    responseMimeType: "application/json", // <--- NÂNG CẤP SIÊU ĐỈNH: Ép AI luôn trả về chuẩn JSON 100%
   } 
 });
 
-// --- HELPER: Làm sạch chuỗi JSON an toàn ---
+// --- HELPER: Làm sạch chuỗi JSON an toàn (vẫn giữ lại để backup) ---
 const cleanJsonString = (text: string): string => {
   return text.replace(/```json/gi, "").replace(/```/g, "").trim();
 };
@@ -36,7 +37,6 @@ export const geminiService = {
    * CỰC ĐỈNH: Phân tích văn bản thô (từ PDF/Word) thành cấu trúc JSON chuẩn xác
    */
   async parseExamWithAI(text: string) {
-    // 1. Kiểm tra API Key đầu tiên
     if (!API_KEY || API_KEY === "dummy-key") {
       throw new Error("CHƯA CẤU HÌNH API KEY! Thầy vui lòng kiểm tra lại file .env (biến VITE_GEMINI_API_KEY) nhé.");
     }
@@ -151,7 +151,7 @@ export const geminiService = {
       return JSON.parse(cleanedJson);
     } catch (error: any) {
       console.error("Gemini Grade Error:", error);
-      return { score: 0, feedback: `Lỗi chấm bài AI: ${error?.message}`, suggestions: "" };
+      return { score: 0, feedback: \`Lỗi chấm bài AI: \${error?.message}\`, suggestions: "" };
     }
   },
 };
