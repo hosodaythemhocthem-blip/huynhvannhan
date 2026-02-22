@@ -20,15 +20,25 @@ const getApiKey = (): string => {
 
 const API_KEY = getApiKey();
 
-// --- KHỞI TẠO MODEL GEMINI (Đã update bản mới nhất và ép trả về JSON) ---
+// --- KHỞI TẠO MODEL GEMINI CHUNG ---
 const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
-const model = genAI.getGenerativeModel({
+
+// Model 1: Chuyên dùng để tạo đề thi (Ép trả về JSON)
+const jsonModel = genAI.getGenerativeModel({
   model: "gemini-1.5-flash",
   generationConfig: {
     temperature: 0.1, 
     topP: 0.8,
     topK: 40,
     responseMimeType: "application/json", 
+  }
+});
+
+// Model 2: Chuyên dùng để Chat tự do (Trả về Text bình thường)
+const chatModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    temperature: 0.7, // Tăng nhiệt độ một chút để AI chat tự nhiên, sáng tạo hơn
   }
 });
 
@@ -45,7 +55,7 @@ const cleanAndParseJSON = (text: string): any => {
 
 export const geminiService = {
   
-  // Dùng Promise<any> để Vercel không bao giờ báo lỗi TS2345 nữa
+  // 1. Chuyển đổi đề thi thô thành JSON
   async parseExamWithAI(text: string): Promise<any> {
     if (!API_KEY || API_KEY === "dummy-key") {
       throw new Error("CHƯA CẤU HÌNH API KEY! Vui lòng kiểm tra lại file .env");
@@ -84,7 +94,7 @@ ${text}
 """`;
 
     try {
-      const result = await model.generateContent(prompt);
+      const result = await jsonModel.generateContent(prompt);
       return cleanAndParseJSON(result.response.text());
     } catch (error: any) {
       console.error("Gemini Parse Error:", error);
@@ -92,7 +102,7 @@ ${text}
     }
   },
 
-  // Dùng Promise<any> để Vercel pass lỗi
+  // 2. Tự động sinh đề thi mới (JSON)
   async generateExam(topic: string, grade: string, questionCount: number = 10): Promise<any> {
     if (!API_KEY || API_KEY === "dummy-key") {
       throw new Error("Chưa cấu hình API Key của Gemini.");
@@ -114,7 +124,7 @@ Yêu cầu Output JSON là một MẢNG các câu hỏi:
 ]`;
 
     try {
-      const result = await model.generateContent(prompt);
+      const result = await jsonModel.generateContent(prompt);
       return cleanAndParseJSON(result.response.text());
     } catch (error: any) {
       console.error("Gemini Generate Error:", error);
@@ -122,6 +132,7 @@ Yêu cầu Output JSON là một MẢNG các câu hỏi:
     }
   },
 
+  // 3. Chấm điểm bài luận (JSON)
   async gradeEssay(question: string, userAnswer: string): Promise<GradeResult> {
     if (!API_KEY || API_KEY === "dummy-key") {
       return { score: 0, feedback: "Chưa cấu hình API Key", suggestions: "" };
@@ -139,7 +150,7 @@ Output JSON:
 }`;
 
     try {
-      const result = await model.generateContent(prompt);
+      const result = await jsonModel.generateContent(prompt);
       return cleanAndParseJSON(result.response.text());
     } catch (error: any) {
       console.error("Gemini Grade Error:", error);
@@ -150,4 +161,19 @@ Output JSON:
       };
     }
   },
+
+  // 4. Chat tự do với Trợ lý AI (Text thường)
+  async chatWithAI(prompt: string): Promise<string> {
+    if (!API_KEY || API_KEY === "dummy-key") {
+      return "Hệ thống chưa cấu hình API Key. Vui lòng liên hệ quản trị viên.";
+    }
+
+    try {
+      const result = await chatModel.generateContent(prompt);
+      return result.response.text();
+    } catch (error: any) {
+      console.error("Gemini Chat Error:", error);
+      return "Xin lỗi, tôi đang gặp sự cố kết nối. Bạn vui lòng thử lại sau nhé!";
+    }
+  }
 };
