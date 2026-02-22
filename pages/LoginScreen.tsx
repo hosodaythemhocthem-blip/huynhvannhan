@@ -11,7 +11,8 @@ import {
   Sparkles,
   CheckCircle2,
   Eye,
-  EyeOff
+  EyeOff,
+  BookOpen // Đã import thêm icon BookOpen cho trường chọn Lớp
 } from "lucide-react";
 import { User } from "../types";
 // import { authService } from "../services/authService";
@@ -27,6 +28,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  // 1. Thêm state để lưu Lớp được chọn
+  const [selectedClass, setSelectedClass] = useState(""); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,7 +46,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       // 1. LUỒNG GIÁO VIÊN
       if (mode === "teacher") {
         if (email.trim().toLowerCase() === "huynhvannhan@gmail.com" && password === "huynhvannhan2020") {
-          // Chuẩn hóa Object User khớp 100% với types.ts
           const teacherUser: User = {
             id: "teacher-admin-nhan",
             email: email,
@@ -63,7 +65,6 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       else if (mode === "student-login") {
         if (!email || !password) throw new Error("Vui lòng nhập đầy đủ Email và Mật khẩu.");
         
-        // Chuẩn hóa Object User khớp 100% với types.ts
         const studentUser: User = {
           id: `student-${Date.now()}`,
           email: email,
@@ -78,13 +79,15 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       } 
       // 3. LUỒNG HỌC SINH ĐĂNG KÝ
       else if (mode === "student-register") {
-        if (!email || !password || !fullName) {
-          throw new Error("Vui lòng điền đủ Họ tên, Email và Mật khẩu.");
+        // Cập nhật validation bắt buộc chọn lớp
+        if (!email || !password || !fullName || !selectedClass) {
+          throw new Error("Vui lòng điền đủ Họ tên, Lớp, Email và Mật khẩu.");
         }
-        alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName}.\nHãy chờ Thầy Nhẫn duyệt nhé!`);
+        alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName} (Lớp ${selectedClass}).\nHãy chờ Thầy Nhẫn duyệt nhé!`);
         setMode("student-login");
         setFullName("");
         setPassword("");
+        setSelectedClass(""); // Reset class sau khi đăng ký
       }
 
     } catch (err: unknown) {
@@ -104,6 +107,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     setEmail("");
     setPassword("");
     setFullName("");
+    setSelectedClass(""); // Reset class khi chuyển tab
     setShowPassword(false);
   };
 
@@ -198,19 +202,43 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
 
                 {/* Full Name Input (Register only) */}
                 {mode === "student-register" && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wide">Họ và tên</label>
-                    <div className="relative group">
-                      <UserIcon className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
-                        placeholder="Nguyễn Văn A"
-                      />
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wide">Họ và tên</label>
+                      <div className="relative group">
+                        <UserIcon className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                        <input
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
+                          placeholder="Nguyễn Văn A"
+                        />
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Class Selection Input (Register only) */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wide">Chọn Lớp</label>
+                      <div className="relative group">
+                        <BookOpen className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors z-10" />
+                        <select
+                          value={selectedClass}
+                          onChange={(e) => setSelectedClass(e.target.value)}
+                          className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-10 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all appearance-none cursor-pointer"
+                        >
+                          <option value="" disabled>-- Chọn khối lớp --</option>
+                          <option value="10">Lớp 10</option>
+                          <option value="11">Lớp 11</option>
+                          <option value="12">Lớp 12</option>
+                        </select>
+                        {/* Custom Dropdown Arrow */}
+                        <div className="absolute right-4 top-4 pointer-events-none text-slate-500">
+                          <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Email Input */}
