@@ -13,7 +13,7 @@ interface UserInfo {
 interface Props {
   user: UserInfo;
   context?: string;
-  children?: React.ReactNode; // Thêm dòng này để fix lỗi bên Layout.tsx
+  children?: React.ReactNode; 
 }
 
 interface ChatMessage {
@@ -41,7 +41,7 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
         {
           id: Date.now().toString(),
           role: "ai",
-          content: `Chào thầy/cô **${user.full_name}**! Tôi là Trợ lý AI của NhanLMS. Tôi có thể giúp gì cho thầy/cô hôm nay?`,
+          content: `Chào **${user.full_name}**! Tôi là Trợ lý AI của NhanLMS. Tôi có thể giúp gì cho bạn hôm nay?`,
           timestamp: Date.now(),
         }
       ]);
@@ -73,19 +73,8 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
     try {
       const prompt = `[Context: ${context}]\n\nNgười dùng hỏi: ${newUserMsg.content}`;
       
-      // Fix lỗi gọi sai tên hàm: Ép kiểu any tạm thời nếu file service chưa chuẩn
-      // hoặc dùng cách gọi an toàn bằng cách kiểm tra function tồn tại
-      let aiResponseText = "Xin lỗi, tính năng chat đang được bảo trì.";
-      
-      const service = geminiService as any; // Ép kiểu để vượt qua kiểm tra TS gắt gao
-      
-      if (typeof service.generateText === 'function') {
-         aiResponseText = await service.generateText(prompt);
-      } else if (typeof service.generateContent === 'function') {
-         aiResponseText = await service.generateContent(prompt);
-      } else if (typeof service.askAI === 'function') {
-         aiResponseText = await service.askAI(prompt);
-      }
+      // Gọi trực tiếp hàm chatWithAI từ service (Đã chuẩn hóa, không cần ép kiểu any nữa)
+      const aiResponseText = await geminiService.chatWithAI(prompt);
 
       const newAiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -95,7 +84,7 @@ const AiAssistant: React.FC<Props> = ({ user, context = "" }) => {
       };
       setMessages((prev) => [...prev, newAiMsg]);
     } catch (error) {
-      showToast("Lỗi kết nối tới Trợ lý AI", "error");
+      showToast("Lỗi kết nối tới Trợ lý AI. Vui lòng thử lại.", "error");
     } finally {
       setIsLoading(false);
     }
