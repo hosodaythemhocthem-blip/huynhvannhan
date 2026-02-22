@@ -10,7 +10,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dis
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onImportSuccess: (examData: any) => void; // Trả về object JSON của đề thi thay vì text thô
+  onImportSuccess: (examData: any) => void; 
 }
 
 const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess }) => {
@@ -31,12 +31,14 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
       const buffer = await file.arrayBuffer();
       let fullText = "";
 
-      // 1. XỬ LÝ ĐỌC FILE (Giữ nguyên logic chuẩn của Thầy)
+      // 1. XỬ LÝ ĐỌC FILE
       if (file.name.toLowerCase().endsWith(".docx")) {
         const result = await mammoth.extractRawText({ arrayBuffer: buffer });
         fullText = result.value.trim();
       } else if (file.name.toLowerCase().endsWith(".pdf")) {
-        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        // 🔥 FIX: Ép kiểu sang Uint8Array để pdf.js phiên bản mới đọc được mà không báo lỗi
+        const uint8Array = new Uint8Array(buffer);
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
         const pdf = await loadingTask.promise;
 
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -55,7 +57,7 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
         return;
       }
 
-      if (!fullText) throw new Error("File rỗng hoặc không đọc được nội dung.");
+      if (!fullText) throw new Error("File rỗng hoặc thư viện không rút trích được chữ từ file này (có thể là file scan/ảnh).");
 
       // 2. CHUYỂN QUA AI XỬ LÝ
       setLoadingStep("analyzing");
@@ -69,9 +71,10 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
       setFileName(null);
       onClose();
 
-    } catch (error) {
-      console.error("Lỗi xử lý file:", error);
-      alert("Có lỗi xảy ra trong quá trình bóc tách đề thi. Vui lòng kiểm tra lại file.");
+    } catch (error: any) {
+      console.error("Lỗi xử lý file chi tiết:", error);
+      // 🔥 FIX: Báo thẳng lỗi thật ra màn hình để biết đường bắt bệnh
+      alert(`Báo lỗi: ${error?.message || "Lỗi không xác định"}\n\n(Nếu lỗi liên quan đến API Key hoặc JSON, Thầy hãy gửi code file services/geminiService.ts lên cho em nhé!)`);
       setLoadingStep("idle");
       setFileName(null);
     }
