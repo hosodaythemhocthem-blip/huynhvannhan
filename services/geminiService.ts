@@ -1,13 +1,32 @@
-// @ts-nocheck
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
 
+/* =========================================================
+   📦 KHO INTERFACE (Định nghĩa kiểu dữ liệu chuẩn)
+========================================================= */
 export interface GradeResult {
   score: number;
   feedback: string;
   suggestions: string;
 }
 
-// --- HELPER LẤY API KEY AN TOÀN ---
+export interface ExamQuestion {
+  text: string;
+  type: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string | null;
+  points: number;
+}
+
+export interface ParsedExam {
+  title: string;
+  description: string;
+  questions: ExamQuestion[];
+}
+
+/* =========================================================
+   🔐 LẤY API KEY AN TOÀN (Hỗ trợ cả Vite & Next.js)
+========================================================= */
 const getApiKey = (): string => {
   if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_GEMINI_API_KEY) {
     return process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -18,38 +37,97 @@ const getApiKey = (): string => {
   return "";
 };
 
-// --- HELPER LÀM SẠCH CHUỖI JSON ---
-const cleanAndParseJSON = (text: string): any => {
+/* =========================================================
+   🧠 FACTORY & CACHE MODEL (Tối ưu RAM, tái sử dụng Model)
+========================================================= */
+// Dùng Map để lưu lại các model đã khởi tạo theo cấu hình
+const modelCache = new Map<string, GenerativeModel>();
+
+const getModel = (isJson: boolean = false, temperature: number = 0.7): GenerativeModel => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("❌ Chưa cấu hình GEMINI API KEY trong file .env");
+  }
+
+  // Tạo khóa cache (VD: "json-0.1" hoặc "text-0.7")
+  const cacheKey = `${isJson ? "json" : "text"}-${temperature}`;
+  
+  // Nếu đã khởi tạo model này rồi thì lấy ra dùng luôn (Siêu nhanh)
+  if (modelCache.has(cacheKey)) {
+    return modelCache.get(cacheKey)!;
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
+  // Cấu hình linh hoạt
+  const config: any = { temperature };
+  if (isJson) config.responseMimeType = "application/json";
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash", // Bản chuẩn ổn định nhất, không bị lỗi 404
+    generationConfig: config,
+  });
+
+  // Lưu vào cache để dùng cho lần sau
+  modelCache.set(cacheKey, model);
+  return model;
+};
+
+/* =========================================================
+   🧹 LÀM SẠCH VÀ ÉP KIỂU JSON CHỐNG LỖI
+========================================================= */
+const cleanAndParseJSON = <T>(text: string): T => {
   try {
-    const cleanedText = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-    return JSON.parse(cleanedText);
+    // Quét sạch mọi thẻ markdown (```json, ```html, ```) bao quanh
+    const cleaned = text
+      .replace(/```(?:json)?/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    return JSON.parse(cleaned) as T;
   } catch (error) {
-    console.error("Lỗi parse JSON từ chuỗi:", text);
-    throw new Error("Dữ liệu AI trả về không đúng định dạng JSON.");
+    console.error("❌ Lỗi parse JSON từ chuỗi AI trả về:\n", text);
+    throw new Error("AI trả về dữ liệu không đúng định dạng JSON chuẩn.");
   }
 };
 
+/* =========================================================
+   🔁 AUTO RETRY VỚI EXPONENTIAL BACKOFF (Chống lag/Chống spam)
+========================================================= */
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  retries = 2,
+  delayMs = 1000 // Chờ 1s rồi mới thử lại
+): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err: any) {
+    if (retries <= 0) throw err;
+    console.warn(`⚠️ Mạng lỗi hoặc AI quá tải. Đang thử lại... (Còn ${retries} lần)`);
+    await delay(delayMs);
+    // Lần thử lại tiếp theo sẽ đợi lâu hơn (2s, 4s...) để server Google kịp thở
+    return await withRetry(fn, retries - 1, delayMs * 2); 
+  }
+};
+
+/* =========================================================
+   🚀 GEMINI MAIN SERVICE
+========================================================= */
 export const geminiService = {
   
-  // 1. Chuyển đổi đề thi thô thành JSON
-  async parseExamWithAI(text: string): Promise<any> {
-    const key = getApiKey();
-    if (!key) throw new Error("CHƯA CẤU HÌNH API KEY! Vui lòng kiểm tra lại file .env");
+  /* =============================
+     1️⃣ Đọc hiểu & Parse đề thi
+  ============================== */
+  async parseExamWithAI(text: string): Promise<ParsedExam | null> {
     if (!text.trim()) return null;
 
-    // Khởi tạo model bên TRONG hàm để đảm bảo nhận đúng API Key
-    const genAI = new GoogleGenerativeAI(key);
-    const jsonModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash", // Bắt buộc dùng model này để tránh 404
-      generationConfig: {
-        temperature: 0.1, 
-        topP: 0.8,
-        topK: 40,
-        responseMimeType: "application/json", 
-      }
-    } as any); // "as any" để Vercel không báo lỗi TypeScript
+    // Lấy model cấu hình JSON, temperature thấp (0.1) để AI cực kỳ chuẩn xác
+    const model = getModel(true, 0.1);
 
-    const prompt = `Bạn là chuyên gia giáo dục. Chuyển đổi văn bản thô sau thành JSON chuẩn xác.
+    const prompt = `
+Bạn là chuyên gia giáo dục. Chuyển đổi văn bản thô sau thành JSON chuẩn xác.
 
 Yêu cầu Output JSON:
 {
@@ -57,132 +135,104 @@ Yêu cầu Output JSON:
   "description": "Mô tả ngắn gọn (nếu có)",
   "questions": [
     {
-      "text": "Nội dung câu hỏi", 
-      "type": "multiple_choice", 
+      "text": "Nội dung câu hỏi",
+      "type": "multiple_choice",
       "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
       "correctAnswer": "Nội dung đáp án đúng",
-      "explanation": "Lời giải chi tiết (nếu có, không thì null)",
+      "explanation": "Lời giải chi tiết (nếu có, nếu không ghi null)",
       "points": 1
     }
   ]
 }
 
-QUY TẮC:
-1. Xóa các tiền tố câu hỏi (Câu 1:, Bài 2:).
-2. Xóa các tiền tố đáp án (A., B., C., D.).
-3. Giữ nguyên vẹn công thức LaTeX ($...$ hoặc $$...$$).
-4. Chỉ lấy thông tin có trong văn bản, KHÔNG BỊA ĐẶT.
-5. Chỉ trả về JSON thuần túy.
+QUY TẮC NGHIÊM NGẶT:
+1. Xóa tiền tố thừa ở câu hỏi (VD: "Câu 1:", "Bài 2:").
+2. Xóa tiền tố thừa ở đáp án (VD: "A.", "B.", "C.").
+3. Giữ nguyên công thức toán học LaTeX trong cặp $...$ hoặc $$...$$.
+4. Chỉ lấy thông tin có trong văn bản, KHÔNG TỰ BỊA ĐẶT.
+5. Chỉ trả về JSON thuần túy, không kèm lời chào.
 
 Văn bản:
 """
 ${text}
 """`;
 
-    try {
-      const result = await jsonModel.generateContent(prompt);
-      return cleanAndParseJSON(result.response.text());
-    } catch (error: any) {
-      console.error("Gemini Parse Error:", error);
-      throw new Error(error?.message || "Lỗi đọc dữ liệu từ AI.");
-    }
+    const result = await withRetry(() => model.generateContent(prompt));
+    return cleanAndParseJSON<ParsedExam>(result.response.text());
   },
 
-  // 2. Tự động sinh đề thi mới (JSON)
-  async generateExam(topic: string, grade: string, questionCount: number = 10): Promise<any> {
-    const key = getApiKey();
-    if (!key) throw new Error("Chưa cấu hình API Key của Gemini.");
+  /* =============================
+     2️⃣ Sinh đề thi mới ngẫu nhiên
+  ============================== */
+  async generateExam(topic: string, grade: string, questionCount = 10): Promise<ExamQuestion[]> {
+    // Lấy model cấu hình JSON, temperature cao (0.7) để AI sáng tạo
+    const model = getModel(true, 0.7);
 
-    const genAI = new GoogleGenerativeAI(key);
-    const jsonModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        temperature: 0.7, 
-        responseMimeType: "application/json",
-      }
-    } as any);
+    const prompt = `
+Đóng vai giáo viên giỏi, tạo một đề thi trắc nghiệm môn Toán lớp ${grade} về chủ đề: "${topic}".
+Số lượng: ${questionCount} câu. Yêu cầu độ khó tăng dần.
 
-    const prompt = `Tạo một đề thi trắc nghiệm môn Toán lớp ${grade} về chủ đề: "${topic}".
-Số lượng: ${questionCount} câu. Độ khó tăng dần.
-
-Yêu cầu Output JSON là một MẢNG các câu hỏi:
+Output JSON là MẢNG câu hỏi:
 [
   {
-    "text": "Nội dung câu hỏi (dùng LaTeX trong cặp $...$)",
+    "text": "Nội dung câu (dùng LaTeX trong $...$ cho công thức)",
     "type": "multiple_choice",
     "options": ["Tùy chọn 1", "Tùy chọn 2", "Tùy chọn 3", "Tùy chọn 4"],
-    "correctAnswer": "Text của tùy chọn đúng",
-    "explanation": "Giải thích chi tiết",
+    "correctAnswer": "Tùy chọn đúng (ghi lại toàn bộ text đáp án đúng)",
+    "explanation": "Giải thích bước giải chi tiết",
     "points": 1
   }
 ]`;
 
-    try {
-      const result = await jsonModel.generateContent(prompt);
-      return cleanAndParseJSON(result.response.text());
-    } catch (error: any) {
-      console.error("Gemini Generate Error:", error);
-      throw new Error(error?.message || "Lỗi khi tạo đề thi mới bằng AI.");
-    }
+    const result = await withRetry(() => model.generateContent(prompt));
+    return cleanAndParseJSON<ExamQuestion[]>(result.response.text());
   },
 
-  // 3. Chấm điểm bài luận (JSON)
+  /* =============================
+     3️⃣ Chấm điểm bài luận/tự luận
+  ============================== */
   async gradeEssay(question: string, userAnswer: string): Promise<GradeResult> {
-    const key = getApiKey();
-    if (!key) return { score: 0, feedback: "Chưa cấu hình API Key", suggestions: "" };
+    const model = getModel(true, 0.2);
 
-    const genAI = new GoogleGenerativeAI(key);
-    const jsonModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        temperature: 0.2, 
-        responseMimeType: "application/json",
-      }
-    } as any);
+    const prompt = `
+Bạn là giám khảo chấm thi.
+Câu hỏi/Đề bài: "${question}"
+Bài làm của học sinh: "${userAnswer}"
 
-    const prompt = `Câu hỏi: ${question}
-Bài làm của học sinh: ${userAnswer}
-
-Chấm điểm trên thang 10 và đưa ra nhận xét.
+Hãy chấm điểm công tâm trên thang 10.
 Output JSON:
 {
   "score": 8.5,
-  "feedback": "Nhận xét...",
-  "suggestions": "Gợi ý..."
+  "feedback": "Nhận xét chi tiết ưu/khuyết điểm",
+  "suggestions": "Gợi ý cách làm bài tốt hơn"
 }`;
 
     try {
-      const result = await jsonModel.generateContent(prompt);
-      return cleanAndParseJSON(result.response.text());
+      const result = await withRetry(() => model.generateContent(prompt));
+      return cleanAndParseJSON<GradeResult>(result.response.text());
     } catch (error: any) {
       console.error("Gemini Grade Error:", error);
-      return { 
-        score: 0, 
-        feedback: `Lỗi chấm bài AI: ${error?.message || "Không xác định"}`, 
-        suggestions: "Vui lòng thử lại sau." 
+      return {
+        score: 0,
+        feedback: "Hệ thống AI đang quá tải, không thể chấm bài lúc này.",
+        suggestions: "Vui lòng tải lại trang hoặc thử lại sau ít phút."
       };
     }
   },
 
-  // 4. Chat tự do với Trợ lý AI (Text thường)
+  /* =============================
+     4️⃣ Chat tự do với Trợ lý
+  ============================== */
   async chatWithAI(prompt: string): Promise<string> {
-    const key = getApiKey();
-    if (!key) return "Hệ thống chưa cấu hình API Key. Vui lòng liên hệ quản trị viên.";
-
-    const genAI = new GoogleGenerativeAI(key);
-    const chatModel = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        temperature: 0.7, 
-      }
-    } as any);
+    // Chat thường thì không dùng JSON, temperature = 0.7 để giao tiếp tự nhiên
+    const model = getModel(false, 0.7);
 
     try {
-      const result = await chatModel.generateContent(prompt);
+      const result = await withRetry(() => model.generateContent(prompt));
       return result.response.text();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Gemini Chat Error:", error);
-      return "Xin lỗi, tôi đang gặp sự cố kết nối. Bạn vui lòng thử lại sau nhé!";
+      return "Xin lỗi bạn, đường truyền đến máy chủ đang gặp sự cố. Bạn nhắn lại sau một lát nhé!";
     }
   }
 };
