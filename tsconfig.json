@@ -19,12 +19,15 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
+    /* Khai báo types cho Vite để sửa lỗi import.meta.env */
+    "types": ["vite/client"],
+
     /* PATHS: Quan trọng để map với vite.config.ts */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"] 
     }
   },
-  "include": ["**/*.ts", "**/*.tsx"], // Quét tất cả file ts/tsx ở mọi nơi
+  "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }
