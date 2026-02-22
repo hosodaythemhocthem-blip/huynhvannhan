@@ -62,6 +62,9 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       }
       if (classError) throw classError;
       
+      // 🚀 LOG BẮT BỆNH: F12 lên xem có danh sách học sinh ở đây không nhé!
+      console.log("📦 Dữ liệu Users từ Database:", userData);
+      
       setUsers((userData as ExtendedUser[]) || []);
       setClasses((classData as ClassItem[]) || []);
     } catch (err) {
@@ -113,14 +116,10 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     }
   };
 
-  // 🚀 ĐÃ NÂNG CẤP: Logic duyệt học sinh thông minh
-  const approveUser = async (user: ExtendedUser) => {
+  const approveUser = async (targetUser: ExtendedUser) => {
     try {
-      // Lấy tên lớp đang chọn bên trái
       const targetClass = classes.find(c => c.id === selectedClassId)?.name;
-      
-      // Ưu tiên: Lớp thầy chọn -> Lớp học sinh tự nhập lúc đky -> Không có
-      const finalClassName = targetClass || user.class_name || null;
+      const finalClassName = targetClass || targetUser.class_name || null;
 
       if (!finalClassName) {
         alert("⚠️ Thầy vui lòng click chọn một lớp ở danh mục bên trái trước để hệ thống biết xếp em này vào lớp nào nhé!");
@@ -133,11 +132,11 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
             status: 'active', 
             class_name: finalClassName 
         })
-        .eq('id', user.id);
+        .eq('id', targetUser.id);
 
       if (error) throw error;
       
-      showToast(`Đã duyệt em ${user.full_name} vào lớp ${finalClassName}!`, "success");
+      showToast(`Đã duyệt em ${targetUser.full_name} vào lớp ${finalClassName}!`, "success");
       await loadAllData();
     } catch (err) {
       console.error(err);
@@ -160,7 +159,12 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     }
   };
 
-  const studentList = users.filter(u => u.role === 'student');
+  // 🚀 ĐÃ SỬA: Lọc cực chuẩn không sợ sai hoa/thường hay khoảng trắng
+  const studentList = users.filter(u => 
+    u.role?.trim().toLowerCase() === 'student' || 
+    u.role?.trim().toLowerCase() === 'hocsinh'
+  );
+  
   const selectedClassData = classes.find(c => c.id === selectedClassId);
   const selectedClassName = selectedClassData?.name || null;
 
@@ -169,12 +173,13 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     : studentList;
 
   const filteredStudents = classStudents.filter(u => 
-    (u.full_name ?? "").toLowerCase().includes(search.toLowerCase()) || 
-    (u.email ?? "").toLowerCase().includes(search.toLowerCase())
+    (u.full_name || "").toLowerCase().includes(search.toLowerCase()) || 
+    (u.email || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const pendingList = studentList.filter(u => u.status === 'pending');
-  const activeList = filteredStudents.filter(u => u.status === 'active');
+  // 🚀 ĐÃ SỬA: Lấy chính xác status pending để hiển thị khu vực cần duyệt
+  const pendingList = studentList.filter(u => u.status?.trim().toLowerCase() === 'pending');
+  const activeList = filteredStudents.filter(u => u.status?.trim().toLowerCase() === 'active');
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-40 space-y-4">
@@ -295,7 +300,6 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
               />
            </div>
 
-           {/* 🚀 ĐÃ SỬA: Luôn hiện danh sách chờ duyệt kể cả khi đang chọn lớp */}
            {pendingList.length > 0 && (
              <div className="bg-rose-50/50 border border-rose-100 rounded-[2.5rem] p-8 space-y-6">
                 <div className="flex items-center gap-3 text-rose-600 px-2">
@@ -304,22 +308,22 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {pendingList.map(user => (
-                      <div key={user.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
+                   {pendingList.map(u => (
+                      <div key={u.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-rose-500 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg shadow-rose-200">
-                               {(user.full_name || 'U').charAt(0)}
+                               {(u.full_name || 'U').charAt(0)}
                             </div>
                             <div className="overflow-hidden">
-                               <h5 className="font-bold text-slate-800 truncate">{user.full_name || 'Học sinh mới'}</h5>
-                               <p className="text-xs text-slate-400 font-medium truncate">{user.email}</p>
+                               <h5 className="font-bold text-slate-800 truncate">{u.full_name || 'Học sinh mới'}</h5>
+                               <p className="text-xs text-slate-400 font-medium truncate">{u.email}</p>
                             </div>
                          </div>
                          <div className="flex gap-2 mt-auto">
-                            <button onClick={() => approveUser(user)} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2">
+                            <button onClick={() => approveUser(u)} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2">
                                <CheckCircle2 size={16} /> Duyệt Ngay
                             </button>
-                            <button onClick={() => deleteUser(user.id)} className="p-3 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all">
+                            <button onClick={() => deleteUser(u.id)} className="p-3 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all">
                                <UserMinus size={18} />
                             </button>
                          </div>
@@ -348,27 +352,27 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                       {activeList.length > 0 ? activeList.map(user => (
-                          <tr key={user.id} className="group hover:bg-indigo-50/30 transition-all">
+                       {activeList.length > 0 ? activeList.map(u => (
+                          <tr key={u.id} className="group hover:bg-indigo-50/30 transition-all">
                              <td className="px-8 py-5">
                                 <div className="flex items-center gap-4">
                                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">
-                                      {(user.full_name || 'U').charAt(0)}
+                                      {(u.full_name || 'U').charAt(0)}
                                    </div>
                                    <div>
-                                      <span className="font-bold text-slate-800 block text-sm">{user.full_name || 'Chưa cập nhật tên'}</span>
-                                      <span className="text-[11px] text-slate-400 font-medium">{user.email}</span>
+                                      <span className="font-bold text-slate-800 block text-sm">{u.full_name || 'Chưa cập nhật tên'}</span>
+                                      <span className="text-[11px] text-slate-400 font-medium">{u.email}</span>
                                    </div>
                                 </div>
                              </td>
                              <td className="px-8 py-5">
-                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${user.class_name ? 'bg-white border-slate-200 text-slate-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
-                                   {user.class_name || 'Chưa xếp lớp'}
+                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${u.class_name ? 'bg-white border-slate-200 text-slate-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
+                                   {u.class_name || 'Chưa xếp lớp'}
                                 </span>
                              </td>
                              <td className="px-8 py-5 text-right">
                                 <button 
-                                  onClick={() => deleteUser(user.id)} 
+                                  onClick={() => deleteUser(u.id)} 
                                   className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
                                   title="Xóa học sinh này"
                                 >
