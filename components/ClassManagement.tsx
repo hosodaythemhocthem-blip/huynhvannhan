@@ -22,7 +22,6 @@ interface ClassItem {
   teacher_id?: string;
 }
 
-// 1. THÊM PROPS ĐỂ NHẬN THÔNG TIN USER TỪ TEACHER PORTAL
 interface Props {
   user: User;
 }
@@ -47,13 +46,11 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // Tải danh sách học sinh
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: false });
       
-      // 2. CHỈ TẢI LỚP CỦA GIÁO VIÊN ĐANG ĐĂNG NHẬP
       const { data: classData, error: classError } = await supabase
         .from('classes')
         .select('*')
@@ -62,7 +59,6 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       
       if (userError) {
         console.error("Lỗi tải users:", userError);
-        // Không throw error ở đây để phần classes vẫn load được nếu users bị lỗi
       }
       if (classError) throw classError;
       
@@ -81,7 +77,6 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     if (!newClassName.trim()) return;
 
     try {
-      // 3. THÊM TEACHER_ID VÀO LỆNH TẠO LỚP
       const { error } = await supabase.from('classes').insert({ 
         name: newClassName.trim(),
         teacher_id: user.id, 
@@ -118,21 +113,31 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     }
   };
 
+  // 🚀 ĐÃ NÂNG CẤP: Logic duyệt học sinh thông minh
   const approveUser = async (user: ExtendedUser) => {
     try {
-      const targetClass = classes.find(c => c.id === selectedClassId)?.name || null;
+      // Lấy tên lớp đang chọn bên trái
+      const targetClass = classes.find(c => c.id === selectedClassId)?.name;
+      
+      // Ưu tiên: Lớp thầy chọn -> Lớp học sinh tự nhập lúc đky -> Không có
+      const finalClassName = targetClass || user.class_name || null;
+
+      if (!finalClassName) {
+        alert("⚠️ Thầy vui lòng click chọn một lớp ở danh mục bên trái trước để hệ thống biết xếp em này vào lớp nào nhé!");
+        return;
+      }
 
       const { error } = await supabase
         .from('users')
         .update({ 
             status: 'active', 
-            class_name: targetClass
+            class_name: finalClassName 
         })
         .eq('id', user.id);
 
       if (error) throw error;
       
-      showToast(`Đã duyệt em ${user.full_name} chính thức!`, "success");
+      showToast(`Đã duyệt em ${user.full_name} vào lớp ${finalClassName}!`, "success");
       await loadAllData();
     } catch (err) {
       console.error(err);
@@ -290,7 +295,8 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
               />
            </div>
 
-           {pendingList.length > 0 && !selectedClassId && (
+           {/* 🚀 ĐÃ SỬA: Luôn hiện danh sách chờ duyệt kể cả khi đang chọn lớp */}
+           {pendingList.length > 0 && (
              <div className="bg-rose-50/50 border border-rose-100 rounded-[2.5rem] p-8 space-y-6">
                 <div className="flex items-center gap-3 text-rose-600 px-2">
                    <ShieldAlert size={24} className="animate-pulse" />
