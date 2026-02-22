@@ -279,8 +279,8 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const renderContent = () => {
     switch (activeTab) {
       case "classes":
-        // CHÍNH LÀ CHỖ NÀY! Bấm Quản lý Lớp sẽ gọi Component này ra
-        return <div className="p-8"><ClassManagement /></div>; 
+        // CHÍNH LÀ CHỖ NÀY! Đã thêm user={user} vào Component
+        return <div className="p-8"><ClassManagement user={user} /></div>; 
       
       case "dashboard":
       case "exams":
