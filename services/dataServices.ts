@@ -10,7 +10,7 @@ export const dataServices = {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(error);
+      console.error("Lỗi getExamsByTeacher:", error);
       return [];
     }
 
