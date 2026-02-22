@@ -9,7 +9,7 @@ const API_KEY = import.meta.env?.VITE_GEMINI_API_KEY || "";
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /* =========================================================
-    🧠 HELPER: GỌI MODEL (FIXED MODEL ID & CONFIG)
+    🧠 HELPER: GỌI MODEL
 ========================================================= */
 const generate = async (
   prompt: string,
@@ -46,7 +46,7 @@ const generate = async (
 };
 
 /* =========================================================
-    🧹 HELPER: PARSE JSON CHUẨN (ĐÃ FIX LỖI SYNTAX)
+    🛡️ ÁO GIÁP THÉP: PARSE JSON CHỐNG SẬP (ANTI-CRASH)
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
@@ -54,19 +54,25 @@ const parseSafeJSON = (rawText: string | undefined) => {
   try {
     let cleaned = rawText.trim();
     
-    // 1. Dọn dẹp Markdown rác nếu AI lỡ tay bọc thêm vào
+    // 1. Dọn dẹp Markdown rác
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
-    // 2. Phân tích thẳng JSON (vì Gemini application/json đã xuất định dạng chuẩn 100%)
+    // 2. CHỐNG SẬP LATEX: Đảm bảo mọi dấu gạch chéo đơn (\) đều trở thành gạch chéo kép (\\)
+    // Ngoại trừ trường hợp nó đang dùng để escape dấu nháy kép (\")
+    cleaned = cleaned.replace(/\\(?!["])/g, "\\\\");
+    
+    // 3. Xóa các ký tự ẩn (control characters) gây rách file JSON
+    cleaned = cleaned.replace(/[\u0000-\u001F]+/g, "");
+
     const parsed = JSON.parse(cleaned);
 
-    // 3. Chuẩn hóa về mảng câu hỏi
+    // 4. Chuẩn hóa về mảng câu hỏi
     let rawArray: any[] = [];
     if (Array.isArray(parsed)) rawArray = parsed;
     else if (parsed.questions && Array.isArray(parsed.questions)) rawArray = parsed.questions;
     else rawArray = Object.values(parsed).find(v => Array.isArray(v)) || [];
 
-    // 4. Map dữ liệu về Schema chuẩn của App
+    // 5. Map dữ liệu
     return rawArray.map((item: any) => ({
       type: item.type || "multiple_choice",
       question: item.question || "Nội dung trống",
@@ -76,7 +82,7 @@ const parseSafeJSON = (rawText: string | undefined) => {
     }));
 
   } catch (error: any) {
-    console.error("❌ Lỗi Parse JSON:", error, "\nRaw:", rawText);
+    console.error("❌ Lỗi Parse JSON:", error, "\nChuỗi gốc AI trả về:", rawText);
     throw new Error("Dữ liệu AI không đúng định dạng. Vui lòng thử lại.");
   }
 };
@@ -91,15 +97,15 @@ export const geminiService = {
     const prompt = `
       Nhiệm vụ: Trích xuất câu hỏi từ đề thi sang JSON Array.
       
-      QUY TẮC CÔNG THỨC TOÁN (BẮT BUỘC):
-      - Sử dụng chuẩn LaTeX cho mọi ký hiệu toán học.
-      - Bọc LaTeX trong cặp dấu $...$. Ví dụ: $x^2 + \\sqrt{y} = 0$.
-      - Không cần giải thích thêm, chỉ xuất data.
+      QUY TẮC TOÁN HỌC & JSON (BẮT BUỘC BẢO VỆ MẠNG SỐNG):
+      - Mọi công thức Toán phải bọc trong $...$.
+      - Vì output là JSON, MỌI dấu gạch chéo ngược (\\) của lệnh LaTeX BẮT BUỘC phải viết thành hai dấu (\\\\).
+      - Ví dụ SAI (sẽ làm sập hệ thống): $\\sqrt{x}$, $\\begin{cases}$
+      - Ví dụ ĐÚNG (phải làm theo): $\\\\sqrt{x}$, $\\\\begin{cases}$
+      - Không cần giải thích thêm, chỉ xuất Data JSON.
 
       CẤU TRÚC JSON:
-      Trả về một mảng [ { "type": "...", "question": "...", "options": [...], "correctAnswer": ..., "explanation": "..." } ]
-      - type: "multiple_choice" | "true_false" | "short_answer"
-      - correctAnswer: Index (0-3) cho trắc nghiệm, hoặc chuỗi đáp án cho câu hỏi ngắn.
+      [ { "type": "multiple_choice", "question": "...", "options": [...], "correctAnswer": 0, "explanation": "..." } ]
 
       VĂN BẢN ĐỀ THI:
       ${text}
@@ -112,8 +118,8 @@ export const geminiService = {
   async generateExam(topic: string, grade: string, count = 10) {
     const prompt = `
       Hãy tạo ${count} câu hỏi môn Toán lớp ${grade}, chủ đề "${topic}".
-      Sử dụng LaTeX chuẩn nằm trong dấu $...$ cho công thức.
-      Trả về JSON Array câu hỏi gồm: type, question, options, correctAnswer (index hoặc string), explanation.
+      TUYỆT ĐỐI tuân thủ: Dùng LaTeX trong $...$, và MỌI dấu (\\) phải viết thành (\\\\) (ví dụ: $\\\\frac{1}{2}$).
+      Trả về JSON Array câu hỏi gồm: type, question, options, correctAnswer (index), explanation.
     `;
 
     const raw = await generate(prompt, { isJson: true, temperature: 0.7 });
