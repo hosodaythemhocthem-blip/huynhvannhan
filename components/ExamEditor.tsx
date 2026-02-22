@@ -1,3 +1,4 @@
+// components/ExamEditor.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, 
@@ -12,10 +13,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface Props {
   user: User;
   exam: Exam | null;
+  aiGeneratedData?: any | null; // NÂNG CẤP: Thêm prop để nhận data từ AI
   onClose: () => void;
 }
 
-// Đổi tên thành EditorQuestion để không đụng độ với type Question trong types.ts
 interface EditorQuestion {
   id: string;
   text: string;
@@ -25,20 +26,60 @@ interface EditorQuestion {
   score: number;
 }
 
-const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
+// --- HELPER FUNC: Map data AI sang EditorQuestion ---
+const mapAiDataToEditor = (aiData: any): EditorQuestion[] => {
+  if (!aiData || !Array.isArray(aiData.questions)) return [];
+  
+  return aiData.questions.map((q: any) => {
+    // Tìm index của đáp án đúng trong mảng options AI trả về
+    let answerLabel = 'A';
+    if (q.options && Array.isArray(q.options) && q.correct_answer) {
+      const foundIndex = q.options.findIndex(
+        (opt: string) => opt.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
+      );
+      if (foundIndex >= 0 && foundIndex < 4) {
+        answerLabel = ['A', 'B', 'C', 'D'][foundIndex];
+      }
+    }
+
+    // Đảm bảo options luôn có 4 phần tử (Thêm rỗng nếu AI trả về thiếu)
+    const safeOptions = ["", "", "", ""];
+    if (q.options && Array.isArray(q.options)) {
+      for(let i=0; i<4; i++){
+         if(q.options[i]) safeOptions[i] = q.options[i];
+      }
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      text: q.content || "",
+      options: safeOptions,
+      answer: answerLabel,
+      type: q.type === 'essay' ? 'essay' : 'multiple_choice',
+      score: q.points || 1
+    };
+  });
+};
+
+const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) => {
   const { showToast } = useToast();
   
   // --- STATE MANAGEMENT ---
-  const [title, setTitle] = useState(exam?.title || "Đề thi mới");
+  // Ưu tiên: AI Data -> Exam Data (Edit) -> Default
+  const [title, setTitle] = useState(() => {
+    if (aiGeneratedData?.title) return aiGeneratedData.title;
+    return exam?.title || "Đề thi mới";
+  });
+
   const [questions, setQuestions] = useState<EditorQuestion[]>(() => {
-    // Ép kiểu an toàn từ database
+    if (aiGeneratedData) return mapAiDataToEditor(aiGeneratedData);
     return Array.isArray(exam?.questions) ? (exam?.questions as EditorQuestion[]) : [];
   });
+  
   const [saving, setSaving] = useState(false);
   const [activeQId, setActiveQId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
 
-  // Auto Select câu hỏi đầu tiên khi mở
   useEffect(() => {
     if (questions.length > 0 && !activeQId) {
       setActiveQId(questions[0].id);
@@ -46,9 +87,18 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Nếu AI trả về data mới khi Component đang mount
+  useEffect(() => {
+    if (aiGeneratedData) {
+      const mapped = mapAiDataToEditor(aiGeneratedData);
+      setQuestions(mapped);
+      setTitle(aiGeneratedData.title || "Đề thi mới (Tạo từ File)");
+      if(mapped.length > 0) setActiveQId(mapped[0].id);
+    }
+  }, [aiGeneratedData]);
+
   // --- CORE FUNCTIONS ---
 
-  // 1. Lưu đề thi (Upsert)
   const handleSave = async () => {
     if (!title.trim()) return showToast("Vui lòng nhập tên đề thi!", "error");
     if (questions.length === 0) return showToast("Đề thi cần ít nhất 1 câu hỏi!", "warning");
@@ -59,7 +109,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
         title,
         questions, 
         updated_at: new Date().toISOString(),
-        teacher_id: user.id, // Sửa lại thành teacher_id cho khớp types.ts
+        teacher_id: user.id,
         is_locked: true,
       };
 
@@ -75,7 +125,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
       if (error) throw error;
       showToast("Đã lưu đề thi thành công!", "success");
       
-      if (!exam?.id) onClose(); 
+      // Đóng modal sau khi lưu thành công (dù là tạo mới hay update)
+      onClose(); 
 
     } catch (err) {
       console.error(err);
@@ -85,7 +136,6 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     }
   };
 
-  // 2. Thêm câu hỏi mới
   const addQuestion = () => {
     const newId = crypto.randomUUID();
     const newQ: EditorQuestion = {
@@ -105,19 +155,16 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     }, 100);
   };
 
-  // 3. Xóa câu hỏi
   const deleteQuestion = (id: string) => {
     if (questions.length <= 1 && !window.confirm("Xóa câu hỏi cuối cùng?")) return;
     setQuestions(questions.filter(q => q.id !== id));
     if (activeQId === id) setActiveQId(null);
   };
 
-  // 4. Update dữ liệu câu hỏi (Dùng Generics K để loại bỏ lỗi 'any')
   const updateQuestion = <K extends keyof EditorQuestion>(id: string, field: K, value: EditorQuestion[K]) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
   };
 
-  // 5. Update nội dung đáp án (Options)
   const updateOption = (qId: string, index: number, val: string) => {
     setQuestions(prev => prev.map(q => {
       if (q.id !== qId) return q;
@@ -127,9 +174,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     }));
   };
 
-  // --- SMART PASTE IMAGE (CTRL + V) ---
   const handlePaste = async (e: React.ClipboardEvent, qId: string) => {
-    // Chuyển DataTransferItemList thành Array để tránh lỗi iterability của TypeScript
     const items = Array.from(e.clipboardData.items);
     
     for (const item of items) {
@@ -169,7 +214,6 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
     }
   };
 
-  // --- RENDER ---
   const activeQuestion = questions.find(q => q.id === activeQId);
 
   return (
@@ -217,7 +261,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
       {/* 2. MAIN WORKSPACE */}
       <div className="flex flex-1 overflow-hidden">
         
-        {/* A. SIDEBAR LIST (Danh sách câu hỏi) */}
+        {/* A. SIDEBAR LIST */}
         <div className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
            <div className="p-4 overflow-y-auto flex-1 space-y-2 custom-scrollbar">
               {questions.map((q, idx) => (
@@ -256,7 +300,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
            </div>
         </div>
 
-        {/* B. EDITOR AREA (Khu vực soạn thảo chính) */}
+        {/* B. EDITOR AREA */}
         <div className="flex-1 flex flex-col bg-slate-50 relative overflow-hidden">
            {activeQuestion ? (
              <div className="flex h-full">
@@ -322,7 +366,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, onClose }) => {
                    </div>
                 </div>
 
-                {/* B2. PREVIEW COLUMN (Cột bên phải) */}
+                {/* B2. PREVIEW COLUMN */}
                 <AnimatePresence>
                   {showPreview && (
                     <motion.div 
