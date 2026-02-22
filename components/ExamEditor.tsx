@@ -1,8 +1,7 @@
-// components/ExamEditor.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, 
-  Check, Loader2, Layout, Eye, EyeOff, Settings 
+  Loader2, Layout, EyeOff, Settings 
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { Exam, User } from '../types';
@@ -10,14 +9,20 @@ import MathPreview from './MathPreview';
 import { useToast } from './Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// --- CONSTANTS ---
+const ANSWER_LABELS = ['A', 'B', 'C', 'D'];
+const DEFAULT_TITLE = "Đề thi mới";
+const DEFAULT_AI_TITLE = "Đề thi mới (Tạo từ File)";
+
+// --- TYPES ---
 interface Props {
   user: User;
   exam: Exam | null;
-  aiGeneratedData?: any | null; // NÂNG CẤP: Thêm prop để nhận data từ AI
+  aiGeneratedData?: any | null; 
   onClose: () => void;
 }
 
-interface EditorQuestion {
+export interface EditorQuestion {
   id: string;
   text: string;
   options: string[]; 
@@ -26,47 +31,37 @@ interface EditorQuestion {
   score: number;
 }
 
-// --- HELPER FUNC: Map data AI sang EditorQuestion ---
-// ĐÃ FIX: Khớp 100% với cấu trúc dữ liệu trả về từ geminiService.ts
+// --- HELPER FUNCTIONS ---
 const mapAiDataToEditor = (aiData: any): EditorQuestion[] => {
-  // AI có thể trả thẳng về mảng, hoặc một object chứa mảng
-  let rawQuestions = [];
-  
-  if (Array.isArray(aiData)) {
-     rawQuestions = aiData;
-  } else if (aiData && Array.isArray(aiData.questions)) {
-     rawQuestions = aiData.questions;
-  } else {
-     return [];
-  }
-  
+  // Lấy mảng câu hỏi an toàn
+  const rawQuestions = Array.isArray(aiData) 
+    ? aiData 
+    : (aiData?.questions && Array.isArray(aiData.questions) ? aiData.questions : []);
+
   return rawQuestions.map((q: any) => {
-    // 1. Chuyển đổi correctAnswer (số 0-3) sang label (A, B, C, D)
+    // 1. Chuyển đổi correctAnswer sang label (A, B, C, D)
     let answerLabel = 'A';
     if (typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 3) {
-        answerLabel = ['A', 'B', 'C', 'D'][q.correctAnswer];
+      answerLabel = ANSWER_LABELS[q.correctAnswer];
     } else if (q.correct_answer) {
-        // Fallback cho trường hợp dữ liệu cũ
-        const foundIndex = q.options?.findIndex(
-          (opt: string) => opt.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
-        );
-        if (foundIndex >= 0 && foundIndex < 4) {
-          answerLabel = ['A', 'B', 'C', 'D'][foundIndex];
-        }
-    }
-
-    // 2. Đảm bảo options luôn có 4 phần tử
-    const safeOptions = ["", "", "", ""];
-    if (q.options && Array.isArray(q.options)) {
-      for(let i=0; i<4; i++){
-         if(q.options[i] !== undefined) safeOptions[i] = String(q.options[i]);
+      const foundIndex = q.options?.findIndex(
+        (opt: string) => opt?.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
+      );
+      if (foundIndex >= 0 && foundIndex < 4) {
+        answerLabel = ANSWER_LABELS[foundIndex];
       }
     }
 
-    // 3. Lấy nội dung câu hỏi (hỗ trợ cả q.question và q.content)
-    const questionText = q.question || q.content || "Lỗi đọc nội dung câu hỏi...";
+    // 2. Đảm bảo options luôn có 4 phần tử an toàn
+    const safeOptions = ["", "", "", ""];
+    if (Array.isArray(q.options)) {
+      q.options.slice(0, 4).forEach((opt, idx) => {
+        if (opt !== undefined && opt !== null) safeOptions[idx] = String(opt);
+      });
+    }
 
-    // 4. Lấy giải thích (nếu có) ghép luôn vào cuối câu hỏi cho giáo viên dễ thấy
+    // 3. Xử lý nội dung & giải thích
+    const questionText = q.question || q.content || "Lỗi đọc nội dung câu hỏi...";
     const finalQuestionText = q.explanation 
         ? `${questionText}\n\n*Giải thích: ${q.explanation}*`
         : questionText;
@@ -85,11 +80,10 @@ const mapAiDataToEditor = (aiData: any): EditorQuestion[] => {
 const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) => {
   const { showToast } = useToast();
   
-  // --- STATE MANAGEMENT ---
-  // Ưu tiên: AI Data -> Exam Data (Edit) -> Default
-  const [title, setTitle] = useState(() => {
+  // --- STATE ---
+  const [title, setTitle] = useState<string>(() => {
     if (aiGeneratedData?.title) return aiGeneratedData.title;
-    return exam?.title || "Đề thi mới";
+    return exam?.title || DEFAULT_TITLE;
   });
 
   const [questions, setQuestions] = useState<EditorQuestion[]>(() => {
@@ -101,6 +95,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   const [activeQId, setActiveQId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(true);
 
+  // --- EFFECTS ---
   useEffect(() => {
     if (questions.length > 0 && !activeQId) {
       setActiveQId(questions[0].id);
@@ -108,19 +103,19 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Nếu AI trả về data mới khi Component đang mount
   useEffect(() => {
     if (aiGeneratedData) {
       const mapped = mapAiDataToEditor(aiGeneratedData);
       setQuestions(mapped);
-      // Giữ nguyên title nếu user đã nhập, hoặc set default
-      setTitle(prev => prev === "Đề thi mới" ? (aiGeneratedData.title || "Đề thi mới (Tạo từ File)") : prev);
+      
+      // ĐÃ FIX: Ép kiểu prev là string để tránh lỗi TS7006 của TypeScript
+      setTitle((prev: string) => prev === DEFAULT_TITLE ? (aiGeneratedData.title || DEFAULT_AI_TITLE) : prev);
+      
       if(mapped.length > 0) setActiveQId(mapped[0].id);
     }
   }, [aiGeneratedData]);
 
-  // --- CORE FUNCTIONS ---
-
+  // --- HANDLERS ---
   const handleSave = async () => {
     if (!title.trim()) return showToast("Vui lòng nhập tên đề thi!", "error");
     if (questions.length === 0) return showToast("Đề thi cần ít nhất 1 câu hỏi!", "warning");
@@ -135,19 +130,13 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
         is_locked: true,
       };
 
-      let error;
-      if (exam?.id) {
-        const res = await supabase.from('exams').update(payload).eq('id', exam.id);
-        error = res.error;
-      } else {
-        const res = await supabase.from('exams').insert(payload);
-        error = res.error;
-      }
+      const { error } = exam?.id 
+        ? await supabase.from('exams').update(payload).eq('id', exam.id)
+        : await supabase.from('exams').insert(payload);
 
       if (error) throw error;
-      showToast("Đã lưu đề thi thành công!", "success");
       
-      // Đóng modal sau khi lưu thành công (dù là tạo mới hay update)
+      showToast("Đã lưu đề thi thành công!", "success");
       onClose(); 
 
     } catch (err) {
@@ -168,22 +157,25 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
       answer: "A",
       score: 1
     };
-    setQuestions([...questions, newQ]);
+    
+    setQuestions(prev => [...prev, newQ]);
     setActiveQId(newId);
     
     setTimeout(() => {
-        const el = document.getElementById(`q-${newId}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById(`q-${newId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
   };
 
   const deleteQuestion = (id: string) => {
     if (questions.length <= 1 && !window.confirm("Xóa câu hỏi cuối cùng?")) return;
-    setQuestions(questions.filter(q => q.id !== id));
-    if (activeQId === id) {
-        const remaining = questions.filter(q => q.id !== id);
+    
+    setQuestions(prev => {
+      const remaining = prev.filter(q => q.id !== id);
+      if (activeQId === id) {
         setActiveQId(remaining.length > 0 ? remaining[0].id : null);
-    }
+      }
+      return remaining;
+    });
   };
 
   const updateQuestion = <K extends keyof EditorQuestion>(id: string, field: K, value: EditorQuestion[K]) => {
@@ -201,46 +193,45 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
 
   const handlePaste = async (e: React.ClipboardEvent, qId: string) => {
     const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.indexOf("image") !== -1);
     
-    for (const item of items) {
-      if (item.type.indexOf("image") !== -1) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (!file) return;
+    if (!imageItem) return;
+    
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
 
-        showToast("Đang tải ảnh lên...", "info");
-        
-        try {
-          const fileName = `questions/${user.id}/${Date.now()}.png`;
-          const { error: uploadError } = await supabase.storage
-            .from('exam_assets')
-            .upload(fileName, file);
+    showToast("Đang tải ảnh lên...", "info");
+    
+    try {
+      const fileName = `questions/${user.id}/${Date.now()}.png`;
+      const { error: uploadError } = await supabase.storage
+        .from('exam_assets')
+        .upload(fileName, file);
 
-          if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-          const { data: { publicUrl } } = supabase.storage
-            .from('exam_assets')
-            .getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage
+        .from('exam_assets')
+        .getPublicUrl(fileName);
 
-          const qIndex = questions.findIndex(q => q.id === qId);
-          if (qIndex === -1) return;
-          
-          const currentText = questions[qIndex].text;
-          const newText = `${currentText}\n\n![Minh họa](${publicUrl})\n`;
-          
-          updateQuestion(qId, 'text', newText);
-          showToast("Đã dán ảnh thành công!", "success");
-
-        } catch (err) {
-          console.error(err);
-          showToast("Lỗi upload ảnh. Kiểm tra lại Storage.", "error");
+      setQuestions(prev => prev.map(q => {
+        if (q.id === qId) {
+          return { ...q, text: `${q.text}\n\n![Minh họa](${publicUrl})\n` };
         }
-      }
+        return q;
+      }));
+      
+      showToast("Đã dán ảnh thành công!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Lỗi upload ảnh. Kiểm tra lại Storage.", "error");
     }
   };
 
   const activeQuestion = questions.find(q => q.id === activeQId);
 
+  // --- RENDER ---
   return (
     <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden font-sans">
       {/* 1. HEADER TOOLBAR */}
@@ -362,7 +353,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
                          <h3 className="font-bold text-slate-700 mb-4">Đáp án trắc nghiệm</h3>
                          <div className="space-y-3">
                            {activeQuestion.options.map((opt, i) => {
-                             const label = ['A', 'B', 'C', 'D'][i];
+                             const label = ANSWER_LABELS[i];
                              const isCorrect = activeQuestion.answer === label;
                              return (
                                <div key={i} className="flex gap-3 items-start">
@@ -416,7 +407,7 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
                              <div className="grid grid-cols-1 gap-4">
                                 {activeQuestion.options.map((opt, i) => (
                                   <div key={i} className="flex gap-3">
-                                     <span className="font-bold text-slate-500 text-sm mt-1">{['A','B','C','D'][i]}.</span>
+                                     <span className="font-bold text-slate-500 text-sm mt-1">{ANSWER_LABELS[i]}.</span>
                                      <div className="text-slate-700 text-sm bg-slate-50 px-3 py-1 rounded border border-slate-100 w-full">
                                         <MathPreview content={opt || "..."} />
                                      </div>
