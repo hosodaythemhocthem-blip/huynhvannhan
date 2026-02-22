@@ -80,12 +80,14 @@ const App: React.FC = () => {
                   <Route path="/admin" element={<AdminDashboard />} />
                   <Route
                     path="*"
-                    element={<TeacherPortal user={user} />}
+                    // CHÍNH LÀ CHỖ NÀY: Đã truyền thêm activeTab vào TeacherPortal
+                    element={<TeacherPortal user={user} activeTab={activeTab} />}
                   />
                 </>
-             ) : (
+              ) : (
                 <Route
                   path="*"
+                  // Tương tự, nếu sau này StudentDashboard cần chia Tab, bạn cũng thêm activeTab={activeTab} vào đây
                   element={<StudentDashboard user={user} />}
                 />
               )}
