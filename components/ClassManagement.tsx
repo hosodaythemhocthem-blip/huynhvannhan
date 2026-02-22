@@ -19,9 +19,15 @@ interface ClassItem {
   id: string;
   name: string;
   created_at?: string;
+  teacher_id?: string;
 }
 
-const ClassManagement: React.FC = () => {
+// 1. THÊM PROPS ĐỂ NHẬN THÔNG TIN USER TỪ TEACHER PORTAL
+interface Props {
+  user: User;
+}
+
+const ClassManagement: React.FC<Props> = ({ user }) => {
   const { showToast } = useToast();
   const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -33,23 +39,31 @@ const ClassManagement: React.FC = () => {
   const [newClassName, setNewClassName] = useState("");
 
   useEffect(() => {
-    loadAllData();
-  }, []);
+    if (user && user.id) {
+      loadAllData();
+    }
+  }, [user]);
 
   const loadAllData = async () => {
     setLoading(true);
     try {
+      // Tải danh sách học sinh
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: false });
       
+      // 2. CHỈ TẢI LỚP CỦA GIÁO VIÊN ĐANG ĐĂNG NHẬP
       const { data: classData, error: classError } = await supabase
         .from('classes')
         .select('*')
+        .eq('teacher_id', user.id) 
         .order('name', { ascending: true });
       
-      if (userError) throw userError;
+      if (userError) {
+        console.error("Lỗi tải users:", userError);
+        // Không throw error ở đây để phần classes vẫn load được nếu users bị lỗi
+      }
       if (classError) throw classError;
       
       setUsers((userData as ExtendedUser[]) || []);
@@ -67,8 +81,10 @@ const ClassManagement: React.FC = () => {
     if (!newClassName.trim()) return;
 
     try {
+      // 3. THÊM TEACHER_ID VÀO LỆNH TẠO LỚP
       const { error } = await supabase.from('classes').insert({ 
         name: newClassName.trim(),
+        teacher_id: user.id, 
         created_at: new Date().toISOString()
       });
 
@@ -344,7 +360,6 @@ const ClassManagement: React.FC = () => {
                                    {user.class_name || 'Chưa xếp lớp'}
                                 </span>
                              </td>
-                             {/* ĐÂY LÀ PHẦN CODE ĐÃ ĐƯỢC BỔ SUNG ĐỂ SỬA LỖI CẮT NGANG */}
                              <td className="px-8 py-5 text-right">
                                 <button 
                                   onClick={() => deleteUser(user.id)} 
@@ -367,7 +382,7 @@ const ClassManagement: React.FC = () => {
               </div>
            </div>
         </main>
-     </div>
+      </div>
     </div>
   );
 };
