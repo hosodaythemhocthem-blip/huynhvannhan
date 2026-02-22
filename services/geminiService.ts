@@ -23,22 +23,22 @@ const API_KEY = getApiKey();
 // --- KHỞI TẠO MODEL GEMINI CHUNG ---
 const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 
-// Model 1: Chuyên dùng để tạo đề thi (Ép trả về JSON)
+// Model 1: Chuyên dùng để tạo đề thi
 const jsonModel = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-pro", // ĐÃ ĐỔI THÀNH gemini-pro ĐỂ FIX LỖI 404
   generationConfig: {
     temperature: 0.1, 
     topP: 0.8,
     topK: 40,
-    responseMimeType: "application/json", 
+    // ĐÃ XÓA responseMimeType ĐỂ FIX LỖI BUILD TRÊN VERCEL
   }
 });
 
-// Model 2: Chuyên dùng để Chat tự do (Trả về Text bình thường)
+// Model 2: Chuyên dùng để Chat tự do
 const chatModel = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-pro", // ĐÃ ĐỔI THÀNH gemini-pro
   generationConfig: {
-    temperature: 0.7, // Tăng nhiệt độ một chút để AI chat tự nhiên, sáng tạo hơn
+    temperature: 0.7, 
   }
 });
 
