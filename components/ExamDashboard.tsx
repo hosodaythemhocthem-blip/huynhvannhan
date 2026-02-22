@@ -1,16 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Loader2, Upload, FileText } from "lucide-react";
+import { Plus, Search, Loader2, FileText, Sparkles } from "lucide-react";
 import { supabase } from "../supabase";
-import { geminiService } from "../services/geminiService";
 import ExamCard from "./ExamCard";
 import ExamEditor from "./ExamEditor"; 
 import { useToast } from "./Toast";
-import * as pdfjsLib from "pdfjs-dist";
-import mammoth from "mammoth";
 import { User, Exam } from "../types";
-
-// Cấu hình Worker cho PDF
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+import ImportExamFromFile from "./ImportExamFromFile"; // Thêm dòng này
 
 interface Props {
   user: User;
@@ -20,12 +15,15 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   const { showToast } = useToast();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
   // State quản lý việc Edit/Tạo mới
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  // State quản lý Modal AI Import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [parsedExamData, setParsedExamData] = useState<any>(null);
 
   const isTeacher = user.role === 'teacher' || user.role === 'admin';
 
@@ -51,66 +49,6 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     }
   };
 
-  // Xử lý Upload file đề thi (Word/PDF)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessingFile(true);
-    try {
-      let text = "";
-      // 1. Extract Text
-      if (file.type === "application/pdf") {
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          text += content.items.map((item: any) => item.str).join(" ");
-        }
-      } else {
-        const buffer = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-        text = result.value;
-      }
-
-      // 2. Parse with Gemini
-      const aiResponse = await geminiService.parseExamWithAI(text);
-      
-      if (!aiResponse || !aiResponse.questions) {
-        throw new Error("Không nhận diện được câu hỏi");
-      }
-
-      // 3. Create Exam in DB 
-      // FIX: Đổi Partial<Exam> thành any để tránh lỗi TS2561 do thiếu key trong types
-      const newExam: any = {
-        title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
-        description: "Được tạo tự động từ file tải lên",
-        created_by: user.id,
-        is_locked: true, // Mặc định khóa để GV sửa trước
-        questions: aiResponse.questions // Lưu JSON câu hỏi vào cột questions
-      };
-
-      const { data, error } = await supabase.from('exams').insert(newExam).select().single();
-      if (error) throw error;
-
-      showToast(`Đã tạo đề: ${newExam.title}`, "success");
-      fetchExams();
-      
-      // Mở Editor ngay để chỉnh sửa
-      setEditingExam(data);
-      setIsEditorOpen(true);
-
-    } catch (err) {
-      console.error(err);
-      showToast("Lỗi xử lý file đề thi", "error");
-    } finally {
-      setIsProcessingFile(false);
-      e.target.value = ""; // Reset input
-    }
-  };
-
-  // FIX: Chấp nhận string hoặc object để tránh lỗi type mismatch khi truyền xuống ExamCard
   const handleDelete = async (examOrId: any) => {
     const id = typeof examOrId === 'string' ? examOrId : examOrId?.id;
     if (!id) return;
@@ -129,7 +67,6 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     try {
       const { error } = await supabase
         .from('exams')
-        // FIX: Ép kiểu as any để bypass lỗi TS2561
         .update({ is_locked: !exam.is_locked } as any)
         .eq('id', exam.id);
       
@@ -141,10 +78,20 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     }
   };
 
-  // Mở Editor
+  // Mở Editor tạo thủ công hoặc sửa đề cũ
   const openEditor = (exam?: Exam) => {
     setEditingExam(exam || null);
+    setParsedExamData(null); // Reset data AI nếu có
     setIsEditorOpen(true);
+  };
+
+  // Xử lý khi Modal AI bóc tách file thành công
+  const handleImportSuccess = (aiData: any) => {
+    console.log("Data từ AI:", aiData);
+    setParsedExamData(aiData); // Lưu data AI vào state
+    setIsImportModalOpen(false); // Đóng modal
+    setEditingExam(null); // Đảm bảo là tạo mới
+    setIsEditorOpen(true); // Mở thẳng Editor lên để nạp data
   };
 
   if (isEditorOpen) {
@@ -152,12 +99,16 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
       <ExamEditor 
         user={user}
         exam={editingExam} 
-        onClose={() => { setIsEditorOpen(false); fetchExams(); }} 
+        aiGeneratedData={parsedExamData} // Truyền data AI vào Editor (nếu có)
+        onClose={() => { 
+          setIsEditorOpen(false); 
+          setParsedExamData(null); 
+          fetchExams(); 
+        }} 
       />
     );
   }
 
-  // FIX: Thêm fallback fallback (e.title || "") để đảm bảo không lỗi crash runtime
   const filteredExams = exams.filter(e => (e.title || "").toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
@@ -169,7 +120,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
            <p className="text-sm text-slate-500">Quản lý và tổ chức thi trực tuyến</p>
         </div>
 
-        <div className="flex gap-3 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-3.5 text-slate-400" size={18}/>
             <input 
@@ -183,19 +134,21 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
 
           {isTeacher && (
             <div className="flex gap-2">
-               {/* Upload Button */}
-               <label className={`flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer hover:bg-slate-50 hover:text-indigo-600 transition-all ${isProcessingFile ? 'opacity-50 pointer-events-none' : ''}`}>
-                 {isProcessingFile ? <Loader2 className="animate-spin" size={18}/> : <Upload size={18}/>}
-                 <span className="hidden sm:inline">Upload Word/PDF</span>
-                 <input type="file" hidden accept=".pdf,.docx,.doc" onChange={handleFileUpload}/>
-               </label>
+               {/* Nút Mở Modal AI Import */}
+               <button 
+                 onClick={() => setIsImportModalOpen(true)}
+                 className="flex items-center gap-2 px-4 py-3 bg-white border border-indigo-200 text-indigo-600 font-bold rounded-xl cursor-pointer hover:bg-indigo-50 transition-all shadow-sm"
+               >
+                 <Sparkles size={18} className="text-indigo-500"/>
+                 <span className="hidden sm:inline">Tạo bằng AI (File)</span>
+               </button>
 
-               {/* Create Button */}
+               {/* Nút Tạo Đề Thủ Công */}
                <button 
                  onClick={() => openEditor()}
                  className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all"
                >
-                 <Plus size={18}/> <span className="hidden sm:inline">Tạo Đề Mới</span>
+                 <Plus size={18}/> <span className="hidden sm:inline">Tạo Thủ Công</span>
                </button>
             </div>
           )}
@@ -213,7 +166,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
               exam={exam}
               role={user.role}
               questionCount={Array.isArray((exam as any).questions) ? (exam as any).questions.length : 0}
-              onView={() => { /* Logic làm bài thi - sẽ tích hợp StudentQuiz sau */ }}
+              onView={() => { /* Logic làm bài thi */ }}
               onEdit={() => openEditor(exam)}
               onDelete={handleDelete}
               onToggleLock={handleToggleLock}
@@ -230,6 +183,13 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
           )}
         </div>
       )}
+
+      {/* Bảng Modal AI Import lơ lửng */}
+      <ImportExamFromFile
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={handleImportSuccess}
+      />
     </div>
   );
 };
