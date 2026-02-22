@@ -15,15 +15,17 @@ import {
   Sparkles
 } from "lucide-react";
 
-// GỌI 2 COMPONENT CẦN THIẾT VÀO ĐÂY
+// GỌI CÁC COMPONENT CẦN THIẾT
 import ImportExamFromFile from "../components/ImportExamFromFile";
 import ExamEditor from "../components/ExamEditor";
+import ClassManagement from "../components/ClassManagement"; // COMPONENT QUẢN LÝ LỚP
 
 interface Props {
   user: User;
+  activeTab: string; // THÊM PROP NÀY ĐỂ NHẬN BIẾT ĐANG CHỌN TAB NÀO
 }
 
-const TeacherPortal: React.FC<Props> = ({ user }) => {
+const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,8 +38,10 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
   const [parsedExamData, setParsedExamData] = useState<any>(null);
 
   useEffect(() => {
-    loadExams();
-  }, [user.id]);
+    if (activeTab === "exams" || activeTab === "dashboard") {
+      loadExams();
+    }
+  }, [user.id, activeTab]);
 
   const loadExams = async () => {
     setLoading(true);
@@ -53,11 +57,10 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
     setLoading(false);
   };
 
-  // Hàm tạo đề thủ công (Giữ nguyên của Thầy)
+  // Hàm tạo đề thủ công
   const createExam = async () => {
     try {
       setLoading(true);
-      
       const now = new Date().toISOString();
       const { data, error } = await supabase
         .from("exams")
@@ -102,26 +105,24 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
     setExams(prev => prev.filter(e => e.id !== id));
   };
 
-  // Mở Trình soạn thảo (Editor) để sửa đề
   const openEditor = (exam: Exam | null = null) => {
     setEditingExam(exam);
     setParsedExamData(null);
     setIsEditorOpen(true);
   };
 
-  // Xử lý khi AI đọc file thành công
   const handleImportSuccess = (aiData: any) => {
     setParsedExamData(aiData);
-    setIsImportModalOpen(false); // Đóng modal AI
-    setEditingExam(null); // Báo là đề mới
-    setIsEditorOpen(true); // Mở Editor lên để xem trước
+    setIsImportModalOpen(false);
+    setEditingExam(null);
+    setIsEditorOpen(true);
   };
 
   const filteredExams = exams.filter(e => 
     e.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // NẾU ĐANG BẬT EDITOR THÌ HIỂN THỊ MÀN HÌNH SOẠN THẢO
+  // NẾU ĐANG BẬT EDITOR THÌ HIỂN THỊ MÀN HÌNH SOẠN THẢO (Phủ toàn màn hình)
   if (isEditorOpen) {
     return (
       <ExamEditor 
@@ -131,14 +132,15 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
         onClose={() => { 
           setIsEditorOpen(false); 
           setParsedExamData(null);
-          loadExams(); // Tắt editor thì load lại danh sách
+          loadExams(); 
         }} 
       />
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-8 text-slate-800">
+  // --- TÁCH GIAO DIỆN QUẢN LÝ ĐỀ THI RA MỘT HÀM RIÊNG CHO SẠCH SẼ ---
+  const renderExamDashboard = () => (
+    <div className="p-8">
       <div className="max-w-7xl mx-auto mb-10">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
           <div>
@@ -148,7 +150,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
             <p className="text-slate-500">Quản lý kho đề thi và lớp học của thầy.</p>
           </div>
           
-          {/* CỤM NÚT TẠO ĐỀ THI MỚI */}
           <div className="flex gap-3">
             <button
               onClick={() => setIsImportModalOpen(true)}
@@ -167,7 +168,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           </div>
         </div>
 
-        {/* CÁC THẺ THỐNG KÊ (Giữ nguyên) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
@@ -234,7 +234,6 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
                     <FileText size={20} />
                   </div>
                   <div className="flex gap-1">
-                    {/* ĐÃ GẮN SỰ KIỆN MỞ EDITOR VÀO NÚT CHỈNH SỬA NÀY */}
                     <button 
                       onClick={() => openEditor(e)}
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors z-10 relative"
@@ -273,8 +272,30 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           </div>
         )}
       </div>
+    </div>
+  );
 
-      {/* GỌI MODAL IMPORT AI LÊN ĐÂY */}
+  // --- LOGIC CHỌN GIAO DIỆN HIỂN THỊ THEO TAB ---
+  const renderContent = () => {
+    switch (activeTab) {
+      case "classes":
+        // CHÍNH LÀ CHỖ NÀY! Bấm Quản lý Lớp sẽ gọi Component này ra
+        return <div className="p-8"><ClassManagement /></div>; 
+      
+      case "dashboard":
+      case "exams":
+      default:
+        // Mặc định hoặc chọn Đề thi sẽ gọi giao diện Đề thi
+        return renderExamDashboard(); 
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Vùng chứa nội dung chính */}
+      {renderContent()}
+
+      {/* MODAL IMPORT LUÔN ĐỂ Ở NGOÀI CÙNG ĐỂ KHÔNG BỊ LỖI HIỂN THỊ */}
       <ImportExamFromFile
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
