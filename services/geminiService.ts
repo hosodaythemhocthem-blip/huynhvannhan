@@ -25,7 +25,6 @@ const generate = async (
   const { temperature = 0.1, isJson = false } = options || {};
 
   try {
-    // ĐÃ SỬA: Sử dụng gemini-2.5-flash thay cho 1.5-flash đã bị khai tử
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash",
       generationConfig: {
@@ -47,7 +46,7 @@ const generate = async (
 };
 
 /* =========================================================
-    🧹 HELPER: PARSE JSON CHỐNG SẬP (SMART CLEANER)
+    🧹 HELPER: PARSE JSON CHUẨN (ĐÃ FIX LỖI SYNTAX)
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
@@ -55,28 +54,19 @@ const parseSafeJSON = (rawText: string | undefined) => {
   try {
     let cleaned = rawText.trim();
     
-    // 1. Xử lý triệt để Markdown Code Blocks
+    // 1. Dọn dẹp Markdown rác nếu AI lỡ tay bọc thêm vào
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
 
-    // 2. Tìm kiếm ranh giới JSON thực sự (phòng trường hợp AI nói nhảm ở đầu/cuối)
-    const firstBracket = cleaned.indexOf('[');
-    const lastBracket = cleaned.lastIndexOf(']');
-    if (firstBracket !== -1 && lastBracket !== -1) {
-      cleaned = cleaned.substring(firstBracket, lastBracket + 1);
-    }
+    // 2. Phân tích thẳng JSON (vì Gemini application/json đã xuất định dạng chuẩn 100%)
+    const parsed = JSON.parse(cleaned);
 
-    // 3. Xử lý lỗi "Escaped Backslash" thường gặp trong LaTeX khi parse JSON
-    const fixedJsonText = cleaned.replace(/\\(?![bfnrtu"\\\/])/g, "\\\\");
-
-    const parsed = JSON.parse(fixedJsonText);
-
-    // 4. Chuẩn hóa về mảng câu hỏi
+    // 3. Chuẩn hóa về mảng câu hỏi
     let rawArray: any[] = [];
     if (Array.isArray(parsed)) rawArray = parsed;
     else if (parsed.questions && Array.isArray(parsed.questions)) rawArray = parsed.questions;
     else rawArray = Object.values(parsed).find(v => Array.isArray(v)) || [];
 
-    // 5. Map dữ liệu về Schema chuẩn của App
+    // 4. Map dữ liệu về Schema chuẩn của App
     return rawArray.map((item: any) => ({
       type: item.type || "multiple_choice",
       question: item.question || "Nội dung trống",
@@ -104,7 +94,7 @@ export const geminiService = {
       QUY TẮC CÔNG THỨC TOÁN (BẮT BUỘC):
       - Sử dụng chuẩn LaTeX cho mọi ký hiệu toán học.
       - Bọc LaTeX trong cặp dấu $...$. Ví dụ: $x^2 + \\sqrt{y} = 0$.
-      - Với các ký tự đặc biệt như dấu căn, phân số, phải dùng đúng lệnh LaTeX (\\\\frac, \\\\sqrt).
+      - Không cần giải thích thêm, chỉ xuất data.
 
       CẤU TRÚC JSON:
       Trả về một mảng [ { "type": "...", "question": "...", "options": [...], "correctAnswer": ..., "explanation": "..." } ]
