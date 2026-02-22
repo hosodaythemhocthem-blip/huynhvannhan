@@ -11,8 +11,13 @@ import {
   Users,
   Clock,
   Edit3,
-  BarChart3
+  BarChart3,
+  Sparkles
 } from "lucide-react";
+
+// GỌI 2 COMPONENT CẦN THIẾT VÀO ĐÂY
+import ImportExamFromFile from "../components/ImportExamFromFile";
+import ExamEditor from "../components/ExamEditor";
 
 interface Props {
   user: User;
@@ -23,6 +28,12 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // STATE QUẢN LÝ MODAL AI VÀ EDITOR
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [parsedExamData, setParsedExamData] = useState<any>(null);
 
   useEffect(() => {
     loadExams();
@@ -42,7 +53,7 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
     setLoading(false);
   };
 
-  // Đây là hàm đã được cập nhật để bắt lỗi
+  // Hàm tạo đề thủ công (Giữ nguyên của Thầy)
   const createExam = async () => {
     try {
       setLoading(true);
@@ -91,14 +102,45 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
     setExams(prev => prev.filter(e => e.id !== id));
   };
 
+  // Mở Trình soạn thảo (Editor) để sửa đề
+  const openEditor = (exam: Exam | null = null) => {
+    setEditingExam(exam);
+    setParsedExamData(null);
+    setIsEditorOpen(true);
+  };
+
+  // Xử lý khi AI đọc file thành công
+  const handleImportSuccess = (aiData: any) => {
+    setParsedExamData(aiData);
+    setIsImportModalOpen(false); // Đóng modal AI
+    setEditingExam(null); // Báo là đề mới
+    setIsEditorOpen(true); // Mở Editor lên để xem trước
+  };
+
   const filteredExams = exams.filter(e => 
     e.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // NẾU ĐANG BẬT EDITOR THÌ HIỂN THỊ MÀN HÌNH SOẠN THẢO
+  if (isEditorOpen) {
+    return (
+      <ExamEditor 
+        user={user}
+        exam={editingExam} 
+        aiGeneratedData={parsedExamData}
+        onClose={() => { 
+          setIsEditorOpen(false); 
+          setParsedExamData(null);
+          loadExams(); // Tắt editor thì load lại danh sách
+        }} 
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-800">
       <div className="max-w-7xl mx-auto mb-10">
-        <div className="flex justify-between items-end mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-indigo-900 mb-2">
               Xin chào, {user?.full_name || "Thầy cô"} 👋 
@@ -106,15 +148,26 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
             <p className="text-slate-500">Quản lý kho đề thi và lớp học của thầy.</p>
           </div>
           
-          <button
-            onClick={createExam}
-            className="group px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 font-semibold"
-          >
-            <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-            Tạo đề thi mới
-          </button>
+          {/* CỤM NÚT TẠO ĐỀ THI MỚI */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="group px-6 py-3 bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-xl shadow-sm transition-all flex items-center gap-2 font-semibold"
+            >
+              <Sparkles size={20} className="text-indigo-500" />
+              Tạo bằng AI (File)
+            </button>
+            <button
+              onClick={createExam}
+              className="group px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 font-semibold"
+            >
+              <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
+              Tạo thủ công
+            </button>
+          </div>
         </div>
 
+        {/* CÁC THẺ THỐNG KÊ (Giữ nguyên) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
@@ -181,15 +234,17 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
                     <FileText size={20} />
                   </div>
                   <div className="flex gap-1">
+                    {/* ĐÃ GẮN SỰ KIỆN MỞ EDITOR VÀO NÚT CHỈNH SỬA NÀY */}
                     <button 
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      onClick={() => openEditor(e)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors z-10 relative"
                       title="Chỉnh sửa"
                     >
                       <Edit3 size={18} />
                     </button>
                     <button
                       onClick={() => deleteExam(e.id)}
-                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors z-10 relative"
                       title="Xóa đề"
                     >
                       <Trash2 size={18} />
@@ -218,6 +273,13 @@ const TeacherPortal: React.FC<Props> = ({ user }) => {
           </div>
         )}
       </div>
+
+      {/* GỌI MODAL IMPORT AI LÊN ĐÂY */}
+      <ImportExamFromFile
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={handleImportSuccess}
+      />
     </div>
   );
 };
