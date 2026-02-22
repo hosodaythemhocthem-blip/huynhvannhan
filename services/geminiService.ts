@@ -1,9 +1,9 @@
 // services/geminiService.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU (Đã sửa 'content' thành 'text' để khớp với Frontend) ---
+// --- 1. ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 export interface ExamQuestion {
-  text: string; // <-- FIX LỖI 1: Vercel báo thiếu property 'text'
+  text: string; // <-- Đã sửa thành 'text' để Vercel không báo lỗi TS2345
   type: "multiple_choice" | "true_false" | "essay";
   options: string[];
   correct_answer: string | null;
@@ -39,13 +39,12 @@ const API_KEY = getApiKey();
 // --- 3. KHỞI TẠO MODEL GEMINI ---
 const genAI = new GoogleGenerativeAI(API_KEY || "dummy-key");
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-pro", // <-- FIX LỖI 404: Dùng gemini-pro thay vì 1.5-flash cho tương thích thư viện cũ
   generationConfig: {
     temperature: 0.1, 
     topP: 0.8,
     topK: 40,
-    // Đã TẠM TẮT dòng dưới đây để FIX LỖI 2: Thư viện cũ trên Vercel không hỗ trợ
-    // responseMimeType: "application/json", 
+    // Đã xóa responseMimeType để sửa lỗi TS2353 trên Vercel
   }
 });
 
@@ -56,15 +55,13 @@ const cleanAndParseJSON = <T>(text: string): T => {
     return JSON.parse(cleanedText) as T;
   } catch (error) {
     console.error("Lỗi parse JSON từ chuỗi:", text);
-    throw new Error("Dữ liệu AI trả về không đúng định dạng JSON.");
+    throw new Error("Dữ liệu AI trả về không đúng định dạng JSON. Vui lòng thử lại.");
   }
 };
 
 // --- 5. SERVICE CHÍNH ---
 export const geminiService = {
-  /**
-   * Tính năng 1: Phân tích văn bản thô thành cấu trúc JSON Đề Thi
-   */
+  
   async parseExamWithAI(text: string): Promise<ExamData | null> {
     if (!API_KEY || API_KEY === "dummy-key") {
       throw new Error("CHƯA CẤU HÌNH API KEY! Vui lòng kiểm tra lại file .env");
@@ -81,7 +78,7 @@ Yêu cầu Output JSON:
   "description": "Mô tả ngắn gọn (nếu có)",
   "questions": [
     {
-      "text": "Nội dung câu hỏi", // <-- Đã sửa 'content' thành 'text'
+      "text": "Nội dung câu hỏi", 
       "type": "multiple_choice", 
       "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
       "correct_answer": "Nội dung chính xác của đáp án đúng",
@@ -113,9 +110,6 @@ ${text}
     }
   },
 
-  /**
-   * Tính năng 2: Tạo đề thi mới tự động
-   */
   async generateExam(topic: string, grade: string, questionCount: number = 10): Promise<ExamQuestion[]> {
     if (!API_KEY || API_KEY === "dummy-key") {
       throw new Error("Chưa cấu hình API Key của Gemini.");
@@ -127,7 +121,7 @@ Số lượng: ${questionCount} câu. Độ khó tăng dần.
 Yêu cầu Output JSON là một MẢNG các câu hỏi:
 [
   {
-    "text": "Nội dung câu hỏi (dùng LaTeX cho công thức trong cặp $...$)", // <-- Đã sửa 'content' thành 'text'
+    "text": "Nội dung câu hỏi (dùng LaTeX cho công thức trong cặp $...$)",
     "type": "multiple_choice",
     "options": ["Tùy chọn 1", "Tùy chọn 2", "Tùy chọn 3", "Tùy chọn 4"],
     "correct_answer": "Text của tùy chọn đúng",
@@ -135,7 +129,7 @@ Yêu cầu Output JSON là một MẢNG các câu hỏi:
     "points": 1
   }
 ]
-Chỉ trả về chuỗi JSON, không giải thích gì thêm.`;
+Chỉ trả về chuỗi JSON thuần túy, không giải thích gì thêm.`;
 
     try {
       const result = await model.generateContent(prompt);
@@ -146,9 +140,6 @@ Chỉ trả về chuỗi JSON, không giải thích gì thêm.`;
     }
   },
 
-  /**
-   * Tính năng 3: Chấm bài tự luận
-   */
   async gradeEssay(question: string, userAnswer: string): Promise<GradeResult> {
     if (!API_KEY || API_KEY === "dummy-key") {
       return { score: 0, feedback: "Chưa cấu hình API Key", suggestions: "" };
