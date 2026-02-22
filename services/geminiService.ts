@@ -7,15 +7,15 @@ const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /* =========================================================
-    🧠 GỌI MODEL THẾ HỆ MỚI NHẤT (GEMINI 2.5)
+    🧠 GỌI MODEL THẾ HỆ MỚI 
 ========================================================= */
 const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) => {
   if (!genAI) throw new Error("Chưa cấu hình API Key cho Gemini.");
 
   try {
-    // SỬ DỤNG MODEL GEMINI 2.5 MỚI NHẤT ĐỂ TRÁNH LỖI 404 DO MODEL CŨ BỊ KHAI TỬ
+    // SỬ DỤNG MODEL CHUẨN: gemini-1.5-flash (Tuyệt đối không dùng 2.5 vì sẽ báo 404)
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash", 
+      model: "gemini-1.5-flash", 
     });
 
     const generationConfig: any = {
@@ -42,17 +42,15 @@ const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) =
 };
 
 /* =========================================================
-    🛡️ PARSE JSON (ĐÃ ĐƯỢC ĐƠN GIẢN HÓA NHỜ JSON MODE)
+    🛡️ PARSE JSON (ĐÃ CLEAN ĐỂ KHÔNG LÀM HỎNG CÔNG THỨC TOÁN)
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
   
   try {
-    let cleaned = rawText.trim();
-    // Lớp bảo vệ mỏng cho LaTeX
-    cleaned = cleaned.replace(/\\(?![\\"])/g, "\\\\");
-
-    const parsed = JSON.parse(cleaned);
+    // Đã bỏ dòng regex tự động nhân đôi dấu gạch chéo vì JSON Mode đã xử lý an toàn
+    // Giữ nguyên bản gốc để bảo toàn công thức LaTeX (\frac, \sqrt...)
+    const parsed = JSON.parse(rawText.trim());
 
     let rawArray: any[] = [];
     if (Array.isArray(parsed)) rawArray = parsed;
@@ -69,7 +67,7 @@ const parseSafeJSON = (rawText: string | undefined) => {
 
   } catch (error: any) {
     console.error("❌ Lỗi Parse JSON:", error, "\nChuỗi AI gốc:", rawText);
-    throw new Error("Dữ liệu chứa phương trình Toán học phức tạp gây nhiễu. Thầy/Cô vui lòng ấn tạo lại nhé.");
+    throw new Error("Không thể đọc được dữ liệu do AI trả về. Thầy/Cô vui lòng ấn tạo lại nhé.");
   }
 };
 
@@ -86,8 +84,8 @@ export const geminiService = {
       ⚠️ QUY TẮC:
       1. TRẢ VỀ ĐÚNG ĐỊNH DẠNG MẢNG JSON SCHEMA SAU:
          [ { "type": "multiple_choice", "question": "...", "options": ["A. ...", "B. ..."], "correctAnswer": 0, "explanation": "..." } ]
-      2. MỌI công thức Toán phải bọc trong $...$.
-      3. LATEX: TUYỆT ĐỐI nhân đôi dấu gạch chéo ngược. Ví dụ: phải viết là \\\\begin{cases}, \\\\sqrt, \\\\frac.
+      2. MỌI công thức Toán phải bọc trong $...$ (nếu trong dòng) hoặc $$...$$ (nếu đứng riêng).
+      3. LATEX: Giữ nguyên các ký tự gạch chéo ngược chuẩn của LaTeX (ví dụ: \\sqrt, \\frac, \\begin{cases}). Tuyệt đối KHÔNG cần nhân đôi dấu gạch chéo.
       
       VĂN BẢN ĐỀ THI:
       ${text}
@@ -103,7 +101,8 @@ export const geminiService = {
       
       ⚠️ QUY TẮC BẮT BUỘC: 
       - Trả về định dạng JSON Array theo schema: [ { "type": "multiple_choice", "question": "...", "options": ["..."], "correctAnswer": 0, "explanation": "..." } ]
-      - Các lệnh LATEX PHẢI ĐƯỢC NHÂN ĐÔI DẤU GẠCH CHÉO (ví dụ: \\\\sqrt, \\\\frac).
+      - MỌI công thức Toán phải bọc trong $...$ hoặc $$...$$.
+      - Cú pháp LaTeX phải chuẩn (ví dụ: \\sqrt, \\frac).
     `;
 
     const raw = await generate(prompt, 0.7, true);
