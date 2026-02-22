@@ -1,21 +1,21 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /* =========================================================
-    🔐 CẤU HÌNH API KEY 
+   🔐 CẤU HÌNH API KEY 
 ========================================================= */
 const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /* =========================================================
-    🧠 GỌI MODEL THẾ HỆ MỚI 
+   🧠 GỌI MODEL THẾ HỆ MỚI 
 ========================================================= */
 const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) => {
   if (!genAI) throw new Error("Chưa cấu hình API Key cho Gemini.");
 
   try {
-    // SỬ DỤNG MODEL CHUẨN: gemini-1.5-flash (Tuyệt đối không dùng 2.5 vì sẽ báo 404)
+    // 🔥 SỬA Ở ĐÂY: Dùng gemini-2.5-flash vì bản 1.5 đã bị Google khai tử (gây lỗi 404)
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash", 
+      model: "gemini-2.5-flash", 
     });
 
     const generationConfig: any = {
@@ -24,7 +24,6 @@ const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) =
       topK: 10,
     };
 
-    // BẬT CHẾ ĐỘ ÉP KHUÔN JSON TỪ LÕI API CỦA GOOGLE
     if (isJsonMode) {
       generationConfig.responseMimeType = "application/json";
     }
@@ -42,14 +41,12 @@ const generate = async (prompt: string, temperature = 0.1, isJsonMode = false) =
 };
 
 /* =========================================================
-    🛡️ PARSE JSON (ĐÃ CLEAN ĐỂ KHÔNG LÀM HỎNG CÔNG THỨC TOÁN)
+   🛡️ PARSE JSON (ĐÃ CLEAN ĐỂ KHÔNG LÀM HỎNG CÔNG THỨC TOÁN)
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
   
   try {
-    // Đã bỏ dòng regex tự động nhân đôi dấu gạch chéo vì JSON Mode đã xử lý an toàn
-    // Giữ nguyên bản gốc để bảo toàn công thức LaTeX (\frac, \sqrt...)
     const parsed = JSON.parse(rawText.trim());
 
     let rawArray: any[] = [];
@@ -72,7 +69,7 @@ const parseSafeJSON = (rawText: string | undefined) => {
 };
 
 /* =========================================================
-    🚀 EXPORT SERVICE
+   🚀 EXPORT SERVICE
 ========================================================= */
 export const geminiService = {
   async parseExamWithAI(text: string) {
