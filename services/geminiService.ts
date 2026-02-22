@@ -1,19 +1,20 @@
 import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
 
-// 1. Lấy API Key dành riêng cho Vite
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+/* =========================================================
+    🔐 LẤY API KEY (Sửa lỗi TS2339 cho Vite)
+========================================================= */
+// Ép kiểu (as any) để TypeScript bỏ qua lỗi 'env' không tồn tại trên import.meta
+const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// 2. Hàm khởi tạo model chuẩn
 const getModel = (isJson: boolean = false, temperature: number = 0.7): GenerativeModel => {
   if (!API_KEY) {
-    console.error("❌ API Key bị trống! Hãy kiểm tra lại biến VITE_GEMINI_API_KEY trên Vercel.");
+    console.error("❌ Thiếu VITE_GEMINI_API_KEY!");
   }
 
-  // SỬA LỖI 404: Dùng tên model chuẩn xác nhất cho bản ổn định
   return genAI.getGenerativeModel({
-    model: "gemini-1.5-flash", 
+    model: "gemini-1.5-flash",
     generationConfig: {
       temperature,
       ...(isJson ? { responseMimeType: "application/json" } : {}),
@@ -22,34 +23,43 @@ const getModel = (isJson: boolean = false, temperature: number = 0.7): Generativ
 };
 
 /* =========================================================
-   🚀 CÁC SERVICE CHÍNH (GIỮ NGUYÊN LOGIC CỦA BẠN)
+    🚀 CÁC SERVICE CHÍNH
 ========================================================= */
 export const geminiService = {
-  // Parse đề thi
+  // 1. Phân tích đề thi
   async parseExamWithAI(text: string) {
     if (!text.trim()) return null;
     const model = getModel(true, 0.1);
-    const prompt = `Bạn là chuyên gia giáo dục. Chuyển văn bản sau thành JSON: ${text}`;
+    const prompt = `Bạn là chuyên gia giáo dục. Chuyển văn bản sau thành JSON chuẩn: ${text}`;
     
     try {
       const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return JSON.parse(response.text().replace(/```json|```/gi, "").trim());
+      const textResponse = result.response.text();
+      const cleanedJson = textResponse.replace(/```json|```/gi, "").trim();
+      return JSON.parse(cleanedJson);
     } catch (error) {
-      console.error("Lỗi AI:", error);
+      console.error("Lỗi Gemini:", error);
       throw error;
     }
   },
 
-  // Chat tự do
+  // 2. Chat với trợ lý
   async chatWithAI(prompt: string): Promise<string> {
     const model = getModel(false, 0.7);
     try {
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (error) {
-      return "AI đang bận, bạn thử lại sau nhé!";
+      console.error("Lỗi Chat:", error);
+      return "AI đang bận, thử lại sau nhé!";
     }
+  },
+
+  // 3. Tạo đề thi ngẫu nhiên
+  async generateExam(topic: string, grade: string, count = 10) {
+    const model = getModel(true, 0.8);
+    const prompt = `Tạo ${count} câu hỏi trắc nghiệm Toán lớp ${grade} về ${topic} dưới dạng mảng JSON.`;
+    const result = await model.generateContent(prompt);
+    return JSON.parse(result.response.text().replace(/```json|```/gi, "").trim());
   }
-  // ... Bạn có thể copy lại các hàm generateExam, gradeEssay từ bản trước của mình vào đây
 };
