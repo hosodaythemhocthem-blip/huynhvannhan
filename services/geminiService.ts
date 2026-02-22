@@ -124,13 +124,19 @@ export const geminiService = {
 
     const prompt = `
       Nhiệm vụ: Trích xuất các câu hỏi trắc nghiệm từ văn bản sau thành JSON Array.
-      Yêu cầu nghiêm ngặt:
+      
+      YÊU CẦU NGHIÊM NGẶT VỀ ĐỊNH DẠNG TOÁN HỌC:
+      - TẤT CẢ các công thức toán học, phương trình, hệ phương trình, phân số, số mũ, căn bậc, hoặc ký hiệu toán học đặc biệt PHẢI được chuyển đổi sang định dạng chuẩn LaTeX.
+      - PHẢI bọc các công thức LaTeX đó trong cặp dấu $ (Ví dụ: $2x^2 + 3y = 0$, $\\frac{1}{2}$).
+      - TUYỆT ĐỐI KHÔNG giữ nguyên các ký tự bị lỗi font (ví dụ: ≡, ) mà phải dịch nó thành công thức LaTeX tương ứng dựa trên ngữ cảnh toán học.
+      
+      Yêu cầu về cấu trúc JSON:
       - KHÔNG bọc trong markdown (không dùng \`\`\`json).
       - CHỈ trả về một mảng bắt đầu bằng [ và kết thúc bằng ].
       - Cấu trúc MỖI câu hỏi phải chính xác như sau:
       {
-        "question": "Nội dung câu hỏi",
-        "options": ["Đáp án 1", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
+        "question": "Nội dung câu hỏi chứa LaTeX nếu có, ví dụ: Giải phương trình $x^2 - 4 = 0$",
+        "options": ["Đáp án 1 có thể chứa LaTeX", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
         "correctAnswer": 0, // Vị trí index đáp án đúng (0-3)
         "explanation": "Giải thích chi tiết (để rỗng nếu không có)"
       }
@@ -175,7 +181,12 @@ export const geminiService = {
   async generateExam(topic: string, grade: string, count = 10) {
     const prompt = `
       Nhiệm vụ: Tạo ${count} câu hỏi trắc nghiệm môn Toán, lớp ${grade}, chủ đề "${topic}".
-      Yêu cầu nghiêm ngặt:
+      
+      YÊU CẦU NGHIÊM NGẶT VỀ ĐỊNH DẠNG TOÁN HỌC:
+      - TẤT CẢ các công thức toán học PHẢI được viết bằng LaTeX chuẩn và bọc trong cặp dấu $.
+      - Ví dụ: Thay vì viết "x mũ 2 cộng y", phải viết là "$x^2 + y$". Thay vì "căn bậc 2 của 4", viết là "$\\sqrt{4}$".
+
+      Yêu cầu về cấu trúc JSON:
       - KHÔNG dùng markdown.
       - CHỈ trả về mảng JSON [...].
       - Cấu trúc bắt buộc:
