@@ -27,35 +27,56 @@ interface EditorQuestion {
 }
 
 // --- HELPER FUNC: Map data AI sang EditorQuestion ---
+// ĐÃ FIX: Khớp 100% với cấu trúc dữ liệu trả về từ geminiService.ts
 const mapAiDataToEditor = (aiData: any): EditorQuestion[] => {
-  if (!aiData || !Array.isArray(aiData.questions)) return [];
+  // AI có thể trả thẳng về mảng, hoặc một object chứa mảng
+  let rawQuestions = [];
   
-  return aiData.questions.map((q: any) => {
-    // Tìm index của đáp án đúng trong mảng options AI trả về
+  if (Array.isArray(aiData)) {
+     rawQuestions = aiData;
+  } else if (aiData && Array.isArray(aiData.questions)) {
+     rawQuestions = aiData.questions;
+  } else {
+     return [];
+  }
+  
+  return rawQuestions.map((q: any) => {
+    // 1. Chuyển đổi correctAnswer (số 0-3) sang label (A, B, C, D)
     let answerLabel = 'A';
-    if (q.options && Array.isArray(q.options) && q.correct_answer) {
-      const foundIndex = q.options.findIndex(
-        (opt: string) => opt.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
-      );
-      if (foundIndex >= 0 && foundIndex < 4) {
-        answerLabel = ['A', 'B', 'C', 'D'][foundIndex];
-      }
+    if (typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 3) {
+        answerLabel = ['A', 'B', 'C', 'D'][q.correctAnswer];
+    } else if (q.correct_answer) {
+        // Fallback cho trường hợp dữ liệu cũ
+        const foundIndex = q.options?.findIndex(
+          (opt: string) => opt.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
+        );
+        if (foundIndex >= 0 && foundIndex < 4) {
+          answerLabel = ['A', 'B', 'C', 'D'][foundIndex];
+        }
     }
 
-    // Đảm bảo options luôn có 4 phần tử (Thêm rỗng nếu AI trả về thiếu)
+    // 2. Đảm bảo options luôn có 4 phần tử
     const safeOptions = ["", "", "", ""];
     if (q.options && Array.isArray(q.options)) {
       for(let i=0; i<4; i++){
-         if(q.options[i]) safeOptions[i] = q.options[i];
+         if(q.options[i] !== undefined) safeOptions[i] = String(q.options[i]);
       }
     }
 
+    // 3. Lấy nội dung câu hỏi (hỗ trợ cả q.question và q.content)
+    const questionText = q.question || q.content || "Lỗi đọc nội dung câu hỏi...";
+
+    // 4. Lấy giải thích (nếu có) ghép luôn vào cuối câu hỏi cho giáo viên dễ thấy
+    const finalQuestionText = q.explanation 
+        ? `${questionText}\n\n*Giải thích: ${q.explanation}*`
+        : questionText;
+
     return {
       id: crypto.randomUUID(),
-      text: q.content || "",
+      text: finalQuestionText,
       options: safeOptions,
       answer: answerLabel,
-      type: q.type === 'essay' ? 'essay' : 'multiple_choice',
+      type: 'multiple_choice',
       score: q.points || 1
     };
   });
@@ -92,7 +113,8 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
     if (aiGeneratedData) {
       const mapped = mapAiDataToEditor(aiGeneratedData);
       setQuestions(mapped);
-      setTitle(aiGeneratedData.title || "Đề thi mới (Tạo từ File)");
+      // Giữ nguyên title nếu user đã nhập, hoặc set default
+      setTitle(prev => prev === "Đề thi mới" ? (aiGeneratedData.title || "Đề thi mới (Tạo từ File)") : prev);
       if(mapped.length > 0) setActiveQId(mapped[0].id);
     }
   }, [aiGeneratedData]);
@@ -158,7 +180,10 @@ const ExamEditor: React.FC<Props> = ({ user, exam, aiGeneratedData, onClose }) =
   const deleteQuestion = (id: string) => {
     if (questions.length <= 1 && !window.confirm("Xóa câu hỏi cuối cùng?")) return;
     setQuestions(questions.filter(q => q.id !== id));
-    if (activeQId === id) setActiveQId(null);
+    if (activeQId === id) {
+        const remaining = questions.filter(q => q.id !== id);
+        setActiveQId(remaining.length > 0 ? remaining[0].id : null);
+    }
   };
 
   const updateQuestion = <K extends keyof EditorQuestion>(id: string, field: K, value: EditorQuestion[K]) => {
