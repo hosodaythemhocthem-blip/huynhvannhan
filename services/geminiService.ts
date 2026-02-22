@@ -1,10 +1,8 @@
-// services/geminiService.ts
 import { GoogleGenAI } from "@google/genai";
 
 /* =========================================================
-   🔐 LẤY API KEY CHUẨN VITE (Đã Fix lỗi Vercel)
+   🔐 LẤY API KEY CHUẨN VITE
 ========================================================= */
-// Dùng @ts-ignore để ép Vercel bỏ qua lỗi kiểm tra type của Vite
 // @ts-ignore
 const API_KEY = import.meta.env?.VITE_GEMINI_API_KEY || "";
 
@@ -37,7 +35,6 @@ const generate = async (
       contents: prompt,
       config: { 
         temperature,
-        // Ép model trả về JSON chuẩn xác
         ...(isJson ? { responseMimeType: "application/json" } : {}),
       },
     });
@@ -50,23 +47,20 @@ const generate = async (
 };
 
 /* =========================================================
-   🧹 HELPER: DỌN DẸP JSON (Siêu Cấp Chống Lỗi)
+   🧹 HELPER: DỌN DẸP JSON (BẢN NÂNG CẤP CHỐNG SẬP)
 ========================================================= */
 const parseSafeJSON = (rawText: string | undefined) => {
   if (!rawText) throw new Error("AI trả về chuỗi rỗng.");
   
   try {
-    // 1. Dọn dẹp mạnh tay mọi loại Markdown rác AI thường thêm vào
+    // 1. Dọn dẹp sạch sẽ markdown rác (```json ... ```)
     let cleaned = rawText.trim();
-    if (cleaned.startsWith('```')) {
-      const firstNewline = cleaned.indexOf('\n');
-      if (firstNewline !== -1) {
-          cleaned = cleaned.substring(firstNewline + 1);
-      }
-      cleaned = cleaned.replace(/```/g, "").trim();
-    }
     
-    // Cố gắng tìm mảng trực tiếp nếu AI vô tình chèn chữ ở ngoài
+    // Dùng Regex xóa các block markdown ở đầu và cuối chuỗi
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
+    cleaned = cleaned.replace(/\s*```$/i, '');
+
+    // Cố gắng tìm mảng array trực tiếp bằng indexOf/lastIndexOf
     const firstBracket = cleaned.indexOf('[');
     const lastBracket = cleaned.lastIndexOf(']');
     
@@ -74,11 +68,11 @@ const parseSafeJSON = (rawText: string | undefined) => {
         cleaned = cleaned.substring(firstBracket, lastBracket + 1);
     }
 
-    // 2. Parse dữ liệu
+    // 2. Parse dữ liệu sang Object
     const parsed = JSON.parse(cleaned);
 
-    // 3. Auto-Correct: Ép cấu trúc về Array nếu AI lỡ bọc trong Object
-    let finalArray = [];
+    // 3. Ép cấu trúc về Array nếu AI lỡ bọc trong Object linh tinh
+    let finalArray: any[] = [];
     if (Array.isArray(parsed)) {
         finalArray = parsed;
     } else if (parsed && typeof parsed === 'object') {
@@ -95,19 +89,39 @@ const parseSafeJSON = (rawText: string | undefined) => {
          throw new Error("Dữ liệu parse ra trống hoặc không tìm thấy mảng câu hỏi.");
     }
 
-    // 4. Chuẩn hóa Data: Đảm bảo correctAnswer luôn là số
-    const sanitizedArray = finalArray.map((item: any) => ({
-         question: item.question || "Lỗi đọc câu hỏi",
-         options: Array.isArray(item.options) ? item.options : ["A", "B", "C", "D"],
-         correctAnswer: typeof item.correctAnswer === 'number' ? item.correctAnswer : (parseInt(item.correctAnswer) || 0),
-         explanation: item.explanation || ""
-    }));
+    // 4. Chuẩn hóa Data cho "AZOTA MODE" (Hỗ trợ nhiều dạng câu hỏi)
+    const sanitizedArray = finalArray.map((item: any) => {
+        // Nhận diện kiểu câu hỏi, mặc định là trắc nghiệm
+        const type = item.type || "multiple_choice"; 
+        
+        let sanitizedItem = {
+            type: type,
+            question: item.question || "Lỗi đọc nội dung câu hỏi",
+            options: Array.isArray(item.options) ? item.options : [],
+            correctAnswer: item.correctAnswer, 
+            explanation: item.explanation || ""
+        };
+
+        // Nếu là trắc nghiệm hoặc đúng/sai, ép correctAnswer về định dạng số (index)
+        if (type === "multiple_choice" || type === "true_false") {
+            sanitizedItem.correctAnswer = typeof item.correctAnswer === 'number' 
+                ? item.correctAnswer 
+                : (parseInt(item.correctAnswer) || 0);
+        }
+        
+        // Đảm bảo đủ 4 đáp án cho dạng trắc nghiệm nếu AI trả thiếu
+        if (type === "multiple_choice" && sanitizedItem.options.length === 0) {
+             sanitizedItem.options = ["A", "B", "C", "D"];
+        }
+
+        return sanitizedItem;
+    });
 
     return sanitizedArray;
 
   } catch (error: any) {
     console.error("❌ Lỗi parse JSON từ AI:", error);
-    console.error("Dữ liệu thô gây lỗi:", rawText);
+    console.error("Dữ liệu thô gây lỗi:\n", rawText);
     throw new Error("Dữ liệu AI trả về bị sai cấu trúc hoặc không thể xử lý.");
   }
 };
@@ -117,27 +131,34 @@ const parseSafeJSON = (rawText: string | undefined) => {
 ========================================================= */
 export const geminiService = {
   /* ------------------------------------------------------
-     1️⃣ Phân tích đề thi thành JSON
+     1️⃣ Phân tích đề thi (Azota Style: Trắc nghiệm, Đúng/Sai, Điền khuyết)
   ------------------------------------------------------ */
   async parseExamWithAI(text: string) {
     if (!text.trim()) return null;
 
     const prompt = `
-      Nhiệm vụ: Trích xuất các câu hỏi trắc nghiệm từ văn bản sau thành JSON Array.
+      Nhiệm vụ: Đóng vai một chuyên gia giáo dục. Hãy trích xuất các câu hỏi từ văn bản đề thi dưới đây thành một mảng JSON Array duy nhất.
+      
+      PHÂN LOẠI CÂU HỎI (QUAN TRỌNG):
+      Bạn phải tự nhận diện câu hỏi thuộc 1 trong 3 loại sau và gán vào trường "type":
+      1. "multiple_choice": Câu hỏi trắc nghiệm thông thường (có A, B, C, D).
+      2. "true_false": Câu hỏi trắc nghiệm Đúng/Sai (Chỉ có 2 đáp án: Đúng, Sai).
+      3. "short_answer": Câu hỏi tự luận ngắn / Điền khuyết (Không có các đáp án lựa chọn).
       
       YÊU CẦU NGHIÊM NGẶT VỀ ĐỊNH DẠNG TOÁN HỌC:
       - TẤT CẢ các công thức toán học, phương trình, hệ phương trình, phân số, số mũ, căn bậc, hoặc ký hiệu toán học đặc biệt PHẢI được chuyển đổi sang định dạng chuẩn LaTeX.
       - PHẢI bọc các công thức LaTeX đó trong cặp dấu $ (Ví dụ: $2x^2 + 3y = 0$, $\\frac{1}{2}$).
-      - TUYỆT ĐỐI KHÔNG giữ nguyên các ký tự bị lỗi font (ví dụ: ≡, ) mà phải dịch nó thành công thức LaTeX tương ứng dựa trên ngữ cảnh toán học.
+      - TUYỆT ĐỐI KHÔNG giữ nguyên các ký tự bị lỗi font mà phải dịch nó thành công thức LaTeX tương ứng.
       
-      Yêu cầu về cấu trúc JSON:
-      - KHÔNG bọc trong markdown (không dùng \`\`\`json).
-      - CHỈ trả về một mảng bắt đầu bằng [ và kết thúc bằng ].
+      Yêu cầu về cấu trúc JSON (BẮT BUỘC):
+      - KHÔNG bọc trong thẻ code markdown (không dùng \`\`\`json).
+      - CHỈ trả về mảng bắt đầu bằng [ và kết thúc bằng ].
       - Cấu trúc MỖI câu hỏi phải chính xác như sau:
       {
+        "type": "multiple_choice" hoặc "true_false" hoặc "short_answer",
         "question": "Nội dung câu hỏi chứa LaTeX nếu có, ví dụ: Giải phương trình $x^2 - 4 = 0$",
-        "options": ["Đáp án 1 có thể chứa LaTeX", "Đáp án 2", "Đáp án 3", "Đáp án 4"],
-        "correctAnswer": 0, // Vị trí index đáp án đúng (0-3)
+        "options": ["Đáp án 1", "Đáp án 2"...], // Nếu type là short_answer, hãy để mảng rỗng []
+        "correctAnswer": 0, // Vị trí index đáp án đúng (dành cho multiple_choice/true_false). NẾU là short_answer, hãy để chuỗi chứa đáp án đúng (ví dụ: "x = 2"). Nếu không rõ đáp án, để rỗng.
         "explanation": "Giải thích chi tiết (để rỗng nếu không có)"
       }
 
@@ -176,28 +197,27 @@ export const geminiService = {
   },
 
   /* ------------------------------------------------------
-     3️⃣ Tạo đề thi
+     3️⃣ Tạo đề thi tự động
   ------------------------------------------------------ */
   async generateExam(topic: string, grade: string, count = 10) {
     const prompt = `
-      Nhiệm vụ: Tạo ${count} câu hỏi trắc nghiệm môn Toán, lớp ${grade}, chủ đề "${topic}".
+      Nhiệm vụ: Tạo ${count} câu hỏi môn Toán, lớp ${grade}, chủ đề "${topic}".
+      Hỗn hợp các loại câu hỏi: Ưu tiên khoảng 70% trắc nghiệm (multiple_choice), 20% đúng/sai (true_false), 10% điền khuyết (short_answer).
       
       YÊU CẦU NGHIÊM NGẶT VỀ ĐỊNH DẠNG TOÁN HỌC:
-      - TẤT CẢ các công thức toán học PHẢI được viết bằng LaTeX chuẩn và bọc trong cặp dấu $.
-      - Ví dụ: Thay vì viết "x mũ 2 cộng y", phải viết là "$x^2 + y$". Thay vì "căn bậc 2 của 4", viết là "$\\sqrt{4}$".
+      - TẤT CẢ công thức toán học PHẢI viết bằng LaTeX chuẩn và bọc trong cặp dấu $.
+      - Ví dụ: Thay vì viết "x mũ 2 cộng y", phải viết là "$x^2 + y$".
 
       Yêu cầu về cấu trúc JSON:
-      - KHÔNG dùng markdown.
-      - CHỈ trả về mảng JSON [...].
-      - Cấu trúc bắt buộc:
-      [
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correctAnswer": 0,
-          "explanation": "..."
-        }
-      ]
+      - KHÔNG dùng markdown. CHỈ trả về mảng JSON [...].
+      - Cấu trúc bắt buộc cho mỗi Object trong mảng:
+      {
+        "type": "multiple_choice", // hoặc "true_false", "short_answer"
+        "question": "...",
+        "options": ["...", "...", "...", "..."], // Rỗng [] nếu là short_answer
+        "correctAnswer": 0, // Số nguyên nếu là trắc nghiệm/đúng sai. Chuỗi chữ nếu là short_answer.
+        "explanation": "..."
+      }
     `;
 
     try {
