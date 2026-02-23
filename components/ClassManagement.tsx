@@ -1,3 +1,4 @@
+// components/ClassManagement.tsx
 import React, { useState, useEffect } from "react";
 import { 
   Users, Trash2, CheckCircle2, Search, 
@@ -31,6 +32,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     if (user && user.id) {
@@ -54,8 +56,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       if (classData && classData.length > 0) {
         const classIds = classData.map(c => c.id);
 
-        // 2. Tải danh sách ghi danh (Enrollments) thuộc về các lớp của giáo viên này
-        // Lưu ý: Cú pháp Join của Supabase (yêu cầu đã set Foreign Key trong Database)
+        // 2. Tải danh sách ghi danh (Enrollments)
         const { data: enrollmentData, error: enrollError } = await supabase
           .from('class_enrollments')
           .select(`
@@ -67,16 +68,14 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
           .order('created_at', { ascending: false });
 
         if (enrollError) throw enrollError;
-        
-        console.log("📦 Dữ liệu Ghi danh từ Database:", enrollmentData);
         setEnrollments((enrollmentData as unknown as EnrollmentWithDetails[]) || []);
       } else {
-        setEnrollments([]); // Nếu chưa có lớp nào thì không có ai ghi danh
+        setEnrollments([]); 
       }
 
     } catch (err: any) {
-      console.error("Lỗi data:", err);
-      showToast(err.message || "Không thể tải dữ liệu lớp học", "error");
+      console.error("LỖI TẢI DỮ LIỆU:", err);
+      showToast(`Lỗi tải data: ${err.message || err.details || "Không rõ"}`, "error");
     } finally {
       setLoading(false);
     }
@@ -86,8 +85,8 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     e.preventDefault();
     if (!newClassName.trim()) return;
 
+    setIsCreating(true);
     try {
-      // Tạo mã mời ngẫu nhiên (VD: 6 ký tự) để học sinh có thể nhập
       const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       const { error } = await supabase.from('classes').insert({ 
@@ -103,9 +102,12 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       setShowCreateClass(false);
       showToast(`Đã tạo lớp "${newClassName}" thành công!`, "success");
       await loadAllData();
-    } catch (err) {
-      console.error(err);
-      showToast("Lỗi khi tạo lớp mới.", "error");
+    } catch (err: any) {
+      console.error("CHI TIẾT LỖI TẠO LỚP:", err);
+      // Hiển thị LỖI TẬN GỐC ra màn hình
+      showToast(`Lỗi tạo lớp: ${err.message || err.details || "Kiểm tra lại RLS hoặc Khóa ngoại"}`, "error");
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -113,21 +115,18 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     if (!window.confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nTất cả học sinh sẽ bị rời khỏi lớp này.`)) return;
 
     try {
-      // Vì đã thiết lập khóa ngoại (Foreign Key), xóa Class có thể tự động xóa Enrollment (Cascade)
-      // Nhưng để chắc chắn, ta gọi hàm xóa
       const { error } = await supabase.from('classes').delete().eq('id', id);
       if (error) throw error;
       
       showToast(`Đã xóa lớp ${name}.`, "success");
       if (selectedClassId === id) setSelectedClassId(null);
       await loadAllData();
-    } catch (err) {
-      console.error(err);
-      showToast("Không thể xóa lớp. Hãy kiểm tra lại.", "error");
+    } catch (err: any) {
+      console.error("LỖI XÓA LỚP:", err);
+      showToast(`Lỗi xóa lớp: ${err.message || "Không thể xóa"}`, "error");
     }
   };
 
-  // 🚀 LOGIC MỚI: Duyệt trực tiếp Enrollment (Không cần update User)
   const approveEnrollment = async (enrollment: EnrollmentWithDetails) => {
     try {
       const { error } = await supabase
@@ -142,13 +141,12 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       
       showToast(`Đã duyệt ${enrollment.student.full_name} vào lớp ${enrollment.target_class.name}!`, "success");
       await loadAllData();
-    } catch (err) {
-      console.error(err);
-      showToast("Lỗi phê duyệt học sinh.", "error");
+    } catch (err: any) {
+      console.error("LỖI DUYỆT HS:", err);
+      showToast(`Lỗi duyệt HS: ${err.message}`, "error");
     }
   };
 
-  // 🚀 LOGIC MỚI: Từ chối yêu cầu hoặc đuổi học sinh khỏi lớp
   const removeOrRejectEnrollment = async (enrollmentId: string, studentName: string, isPending: boolean) => {
     const msg = isPending 
       ? `Từ chối yêu cầu vào lớp của ${studentName}?` 
@@ -162,26 +160,22 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       
       showToast(isPending ? "Đã từ chối yêu cầu." : "Đã xóa học sinh khỏi lớp.", "info");
       await loadAllData();
-    } catch (err) {
-      console.error(err);
-      showToast("Lỗi hệ thống.", "error");
+    } catch (err: any) {
+      console.error("LỖI XÓA HS:", err);
+      showToast(`Lỗi xóa HS: ${err.message}`, "error");
     }
   };
 
   // --- BỘ LỌC DỮ LIỆU ---
-  
-  // Lọc theo lớp được chọn
   const filteredByClass = selectedClassId 
     ? enrollments.filter(e => e.class_id === selectedClassId)
     : enrollments;
 
-  // Lọc theo thanh tìm kiếm
   const searchedEnrollments = filteredByClass.filter(e => 
     (e.student?.full_name || "").toLowerCase().includes(search.toLowerCase()) || 
     (e.student?.email || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Chia danh sách (Pending thì lấy từ toàn bộ các lớp để ko bỏ sót, Active thì hiển thị theo lớp đang chọn)
   const pendingList = enrollments.filter(e => e.status === 'pending');
   const activeList = searchedEnrollments.filter(e => e.status === 'approved');
 
@@ -245,8 +239,11 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                         onChange={e => setNewClassName(e.target.value)} 
                     />
                   </div>
-                  <button className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm hover:bg-indigo-600 transition-all shadow-lg">
-                      XÁC NHẬN TẠO
+                  <button 
+                    disabled={isCreating}
+                    className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm hover:bg-indigo-600 transition-all shadow-lg disabled:opacity-70 flex items-center justify-center gap-2"
+                  >
+                      {isCreating ? <Loader2 size={18} className="animate-spin" /> : "XÁC NHẬN TẠO"}
                   </button>
                </form>
             </motion.div>
