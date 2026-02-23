@@ -5,31 +5,26 @@ import {
   ChevronRight, UserMinus, ShieldAlert, BadgeCheck
 } from "lucide-react";
 import { supabase } from "../supabase";
-import { User } from "../types";
+import { User, Class, ClassEnrollment } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-type ExtendedUser = User & {
-  role?: string;
-  class_name?: string | null;
-  status?: string;
+// Định nghĩa Type kết hợp (Join) từ Database
+type EnrollmentWithDetails = ClassEnrollment & {
+  student: User;
+  target_class: Class;
 };
 
-interface ClassItem {
-  id: string;
-  name: string;
-  created_at?: string;
-  teacher_id?: string;
-}
-
 interface Props {
-  user: User;
+  user: User; // Thông tin giáo viên đang đăng nhập
 }
 
 const ClassManagement: React.FC<Props> = ({ user }) => {
   const { showToast } = useToast();
-  const [users, setUsers] = useState<ExtendedUser[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [enrollments, setEnrollments] = useState<EnrollmentWithDetails[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -46,30 +41,42 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
+      // 1. Tải danh sách các lớp của giáo viên này
       const { data: classData, error: classError } = await supabase
         .from('classes')
         .select('*')
         .eq('teacher_id', user.id) 
-        .order('name', { ascending: true });
+        .order('created_at', { ascending: false });
       
-      if (userError) {
-        console.error("Lỗi tải users:", userError);
-      }
       if (classError) throw classError;
-      
-      // 🚀 LOG BẮT BỆNH: F12 lên xem có danh sách học sinh ở đây không nhé!
-      console.log("📦 Dữ liệu Users từ Database:", userData);
-      
-      setUsers((userData as ExtendedUser[]) || []);
-      setClasses((classData as ClassItem[]) || []);
-    } catch (err) {
+      setClasses(classData || []);
+
+      if (classData && classData.length > 0) {
+        const classIds = classData.map(c => c.id);
+
+        // 2. Tải danh sách ghi danh (Enrollments) thuộc về các lớp của giáo viên này
+        // Lưu ý: Cú pháp Join của Supabase (yêu cầu đã set Foreign Key trong Database)
+        const { data: enrollmentData, error: enrollError } = await supabase
+          .from('class_enrollments')
+          .select(`
+            *,
+            student:student_id(*),
+            target_class:class_id(*)
+          `)
+          .in('class_id', classIds)
+          .order('created_at', { ascending: false });
+
+        if (enrollError) throw enrollError;
+        
+        console.log("📦 Dữ liệu Ghi danh từ Database:", enrollmentData);
+        setEnrollments((enrollmentData as unknown as EnrollmentWithDetails[]) || []);
+      } else {
+        setEnrollments([]); // Nếu chưa có lớp nào thì không có ai ghi danh
+      }
+
+    } catch (err: any) {
       console.error("Lỗi data:", err);
-      showToast("Không thể tải dữ liệu lớp học", "error");
+      showToast(err.message || "Không thể tải dữ liệu lớp học", "error");
     } finally {
       setLoading(false);
     }
@@ -80,10 +87,14 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     if (!newClassName.trim()) return;
 
     try {
+      // Tạo mã mời ngẫu nhiên (VD: 6 ký tự) để học sinh có thể nhập
+      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
       const { error } = await supabase.from('classes').insert({ 
         name: newClassName.trim(),
         teacher_id: user.id, 
-        created_at: new Date().toISOString()
+        invite_code: inviteCode,
+        is_active: true
       });
 
       if (error) throw error;
@@ -99,11 +110,11 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   };
 
   const handleDeleteClass = async (id: string, name: string) => {
-    if (!window.confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nHọc sinh trong lớp này sẽ mất thông tin lớp.`)) return;
+    if (!window.confirm(`CẢNH BÁO: Thầy có chắc muốn xóa lớp "${name}"?\nTất cả học sinh sẽ bị rời khỏi lớp này.`)) return;
 
     try {
-      await supabase.from('users').update({ class_name: null }).eq('class_name', name);
-      
+      // Vì đã thiết lập khóa ngoại (Foreign Key), xóa Class có thể tự động xóa Enrollment (Cascade)
+      // Nhưng để chắc chắn, ta gọi hàm xóa
       const { error } = await supabase.from('classes').delete().eq('id', id);
       if (error) throw error;
       
@@ -112,31 +123,24 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       await loadAllData();
     } catch (err) {
       console.error(err);
-      showToast("Không thể xóa lớp.", "error");
+      showToast("Không thể xóa lớp. Hãy kiểm tra lại.", "error");
     }
   };
 
-  const approveUser = async (targetUser: ExtendedUser) => {
+  // 🚀 LOGIC MỚI: Duyệt trực tiếp Enrollment (Không cần update User)
+  const approveEnrollment = async (enrollment: EnrollmentWithDetails) => {
     try {
-      const targetClass = classes.find(c => c.id === selectedClassId)?.name;
-      const finalClassName = targetClass || targetUser.class_name || null;
-
-      if (!finalClassName) {
-        alert("⚠️ Thầy vui lòng click chọn một lớp ở danh mục bên trái trước để hệ thống biết xếp em này vào lớp nào nhé!");
-        return;
-      }
-
       const { error } = await supabase
-        .from('users')
+        .from('class_enrollments')
         .update({ 
-            status: 'active', 
-            class_name: finalClassName 
+            status: 'approved', 
+            joined_at: new Date().toISOString()
         })
-        .eq('id', targetUser.id);
+        .eq('id', enrollment.id);
 
       if (error) throw error;
       
-      showToast(`Đã duyệt em ${targetUser.full_name} vào lớp ${finalClassName}!`, "success");
+      showToast(`Đã duyệt ${enrollment.student.full_name} vào lớp ${enrollment.target_class.name}!`, "success");
       await loadAllData();
     } catch (err) {
       console.error(err);
@@ -144,42 +148,45 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
     }
   };
 
-  const deleteUser = async (id: string) => {
-    if (!window.confirm("Xóa vĩnh viễn tài khoản học sinh này? Hành động không thể hoàn tác.")) return;
+  // 🚀 LOGIC MỚI: Từ chối yêu cầu hoặc đuổi học sinh khỏi lớp
+  const removeOrRejectEnrollment = async (enrollmentId: string, studentName: string, isPending: boolean) => {
+    const msg = isPending 
+      ? `Từ chối yêu cầu vào lớp của ${studentName}?` 
+      : `Đuổi em ${studentName} khỏi lớp? Hành động này không xóa tài khoản của em ấy.`;
+      
+    if (!window.confirm(msg)) return;
     
     try {
-      const { error } = await supabase.from('users').delete().eq('id', id);
+      const { error } = await supabase.from('class_enrollments').delete().eq('id', enrollmentId);
       if (error) throw error;
       
-      showToast("Đã xóa hồ sơ học sinh.", "info");
+      showToast(isPending ? "Đã từ chối yêu cầu." : "Đã xóa học sinh khỏi lớp.", "info");
       await loadAllData();
     } catch (err) {
       console.error(err);
-      showToast("Lỗi khi xóa học sinh.", "error");
+      showToast("Lỗi hệ thống.", "error");
     }
   };
 
-  // 🚀 ĐÃ SỬA: Lọc cực chuẩn không sợ sai hoa/thường hay khoảng trắng
-  const studentList = users.filter(u => 
-    u.role?.trim().toLowerCase() === 'student' || 
-    u.role?.trim().toLowerCase() === 'hocsinh'
-  );
+  // --- BỘ LỌC DỮ LIỆU ---
   
+  // Lọc theo lớp được chọn
+  const filteredByClass = selectedClassId 
+    ? enrollments.filter(e => e.class_id === selectedClassId)
+    : enrollments;
+
+  // Lọc theo thanh tìm kiếm
+  const searchedEnrollments = filteredByClass.filter(e => 
+    (e.student?.full_name || "").toLowerCase().includes(search.toLowerCase()) || 
+    (e.student?.email || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Chia danh sách (Pending thì lấy từ toàn bộ các lớp để ko bỏ sót, Active thì hiển thị theo lớp đang chọn)
+  const pendingList = enrollments.filter(e => e.status === 'pending');
+  const activeList = searchedEnrollments.filter(e => e.status === 'approved');
+
   const selectedClassData = classes.find(c => c.id === selectedClassId);
   const selectedClassName = selectedClassData?.name || null;
-
-  const classStudents = selectedClassName
-    ? studentList.filter(u => u.class_name === selectedClassName)
-    : studentList;
-
-  const filteredStudents = classStudents.filter(u => 
-    (u.full_name || "").toLowerCase().includes(search.toLowerCase()) || 
-    (u.email || "").toLowerCase().includes(search.toLowerCase())
-  );
-
-  // 🚀 ĐÃ SỬA: Lấy chính xác status pending để hiển thị khu vực cần duyệt
-  const pendingList = studentList.filter(u => u.status?.trim().toLowerCase() === 'pending');
-  const activeList = filteredStudents.filter(u => u.status?.trim().toLowerCase() === 'active');
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-40 space-y-4">
@@ -201,7 +208,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
           <div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">QUẢN LÝ LỚP HỌC</h2>
             <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
-              {classes.length} Lớp • <span className="text-rose-500">{pendingList.length} Chờ duyệt</span> • {users.length} Tài khoản
+              {classes.length} Lớp • <span className="text-rose-500">{pendingList.length} Yêu cầu</span> • {enrollments.filter(e => e.status === 'approved').length} Học sinh
             </p>
           </div>
         </div>
@@ -269,9 +276,14 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                 <div key={cls.id} className="group relative flex items-center gap-2">
                   <button 
                     onClick={() => setSelectedClassId(cls.id)}
-                    className={`flex-1 flex items-center justify-between p-5 rounded-2xl transition-all font-bold text-sm border ${selectedClassId === cls.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-200' : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'}`}
+                    className={`flex-1 flex flex-col justify-center p-4 rounded-2xl transition-all border ${selectedClassId === cls.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-200' : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'}`}
                   >
-                     <span className="flex items-center gap-3"><School size={18} /> {cls.name}</span>
+                     <div className="flex items-center gap-3 font-bold text-sm w-full">
+                        <School size={18} /> <span>{cls.name}</span>
+                     </div>
+                     <span className={`text-[10px] ml-7 mt-1 font-medium ${selectedClassId === cls.id ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        Mã mời: {cls.invite_code || '---'}
+                     </span>
                   </button>
                   
                   <button 
@@ -300,6 +312,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
               />
            </div>
 
+           {/* KHU VỰC DUYỆT HỌC SINH */}
            {pendingList.length > 0 && (
              <div className="bg-rose-50/50 border border-rose-100 rounded-[2.5rem] p-8 space-y-6">
                 <div className="flex items-center gap-3 text-rose-600 px-2">
@@ -308,23 +321,28 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {pendingList.map(u => (
-                      <div key={u.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
+                   {pendingList.map(enroll => (
+                      <div key={enroll.id} className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 flex flex-col gap-4">
+                         <div className="flex items-center justify-between">
+                            <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                               Xin vào lớp: {enroll.target_class?.name}
+                            </span>
+                         </div>
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-rose-500 text-white rounded-xl flex items-center justify-center font-black text-lg shadow-lg shadow-rose-200">
-                               {(u.full_name || 'U').charAt(0)}
+                               {(enroll.student?.full_name || 'U').charAt(0)}
                             </div>
                             <div className="overflow-hidden">
-                               <h5 className="font-bold text-slate-800 truncate">{u.full_name || 'Học sinh mới'}</h5>
-                               <p className="text-xs text-slate-400 font-medium truncate">{u.email}</p>
+                               <h5 className="font-bold text-slate-800 truncate">{enroll.student?.full_name || 'Học sinh mới'}</h5>
+                               <p className="text-xs text-slate-400 font-medium truncate">{enroll.student?.email}</p>
                             </div>
                          </div>
                          <div className="flex gap-2 mt-auto">
-                            <button onClick={() => approveUser(u)} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2">
+                            <button onClick={() => approveEnrollment(enroll)} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2">
                                <CheckCircle2 size={16} /> Duyệt Ngay
                             </button>
-                            <button onClick={() => deleteUser(u.id)} className="p-3 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all">
-                               <UserMinus size={18} />
+                            <button onClick={() => removeOrRejectEnrollment(enroll.id, enroll.student?.full_name || 'Học sinh', true)} className="p-3 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="Từ chối">
+                               <X size={18} />
                             </button>
                          </div>
                       </div>
@@ -333,6 +351,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
              </div>
            )}
 
+           {/* DANH SÁCH LỚP HỌC CHÍNH THỨC */}
            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
               <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                  <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
@@ -352,38 +371,38 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                       {activeList.length > 0 ? activeList.map(u => (
-                          <tr key={u.id} className="group hover:bg-indigo-50/30 transition-all">
+                       {activeList.length > 0 ? activeList.map(enroll => (
+                          <tr key={enroll.id} className="group hover:bg-indigo-50/30 transition-all">
                              <td className="px-8 py-5">
                                 <div className="flex items-center gap-4">
                                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black">
-                                      {(u.full_name || 'U').charAt(0)}
+                                      {(enroll.student?.full_name || 'U').charAt(0)}
                                    </div>
                                    <div>
-                                      <span className="font-bold text-slate-800 block text-sm">{u.full_name || 'Chưa cập nhật tên'}</span>
-                                      <span className="text-[11px] text-slate-400 font-medium">{u.email}</span>
+                                      <span className="font-bold text-slate-800 block text-sm">{enroll.student?.full_name || 'Chưa cập nhật tên'}</span>
+                                      <span className="text-[11px] text-slate-400 font-medium">{enroll.student?.email}</span>
                                    </div>
                                 </div>
                              </td>
                              <td className="px-8 py-5">
-                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase border ${u.class_name ? 'bg-white border-slate-200 text-slate-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
-                                   {u.class_name || 'Chưa xếp lớp'}
+                                <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase bg-white border border-slate-200 text-slate-600 shadow-sm">
+                                   {enroll.target_class?.name || 'Lỗi dữ liệu'}
                                 </span>
                              </td>
                              <td className="px-8 py-5 text-right">
                                 <button 
-                                  onClick={() => deleteUser(u.id)} 
+                                  onClick={() => removeOrRejectEnrollment(enroll.id, enroll.student?.full_name || 'Học sinh', false)} 
                                   className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                                  title="Xóa học sinh này"
+                                  title="Đuổi khỏi lớp"
                                 >
-                                   <Trash2 size={18} />
+                                   <UserMinus size={18} />
                                 </button>
                              </td>
                           </tr>
                        )) : (
                           <tr>
                              <td colSpan={3} className="px-8 py-12 text-center text-slate-400 font-medium">
-                                Không có học sinh nào trong danh sách.
+                                Không có học sinh nào trong danh sách này.
                              </td>
                           </tr>
                        )}
