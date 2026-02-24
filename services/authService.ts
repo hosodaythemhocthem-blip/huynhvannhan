@@ -30,18 +30,18 @@ export const authService = {
   },
 
   /* ================= SIGN UP STUDENT ================= */
-  // Đã thêm tham số class_id vào hàm này
   async signUpStudent(
     email: string,
     password: string,
     full_name: string,
     class_id: string 
   ): Promise<void> {
+    // 1. Kiểm tra cơ bản
     if (password.length < 6) {
       throw new Error("Mật khẩu tối thiểu 6 ký tự.");
     }
 
-    // 1. Tạo tài khoản trong hệ thống Auth của Supabase
+    // 2. Tạo tài khoản trong hệ thống Auth của Supabase
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -52,14 +52,25 @@ export const authService = {
       }
     });
 
-    if (error || !data.user) {
+    // Bắt lỗi Supabase cực chuẩn để báo ra UI
+    if (error) {
       console.error("Lỗi Supabase Auth:", error);
-      throw new Error("Email đã tồn tại hoặc không hợp lệ.");
+      if (error.message.includes("User already registered")) {
+        throw new Error("Email này đã được sử dụng. Vui lòng dùng email khác!");
+      }
+      if (error.message.includes("Password should be at least")) {
+        throw new Error("Mật khẩu quá yếu. Supabase yêu cầu mật khẩu dài hơn!");
+      }
+      throw new Error(error.message || "Lỗi không xác định khi đăng ký.");
+    }
+
+    if (!data.user) {
+      throw new Error("Không thể tạo tài khoản lúc này, vui lòng thử lại sau.");
     }
 
     const newUserId = data.user.id;
 
-    // 2. Lưu thông tin vào bảng public.users
+    // 3. Lưu thông tin vào bảng public.users
     const { error: insertError } = await supabase.from("users").insert({
       id: newUserId,
       email: email,
@@ -72,10 +83,10 @@ export const authService = {
 
     if (insertError) {
       console.error("Lỗi chèn dữ liệu vào bảng users:", insertError);
-      throw new Error("Lỗi tạo hồ sơ người dùng.");
+      throw new Error("Đăng ký thành công nhưng lỗi tạo hồ sơ hệ thống.");
     }
 
-    // 3. BƯỚC QUAN TRỌNG NHẤT: Ghi nhận yêu cầu xin vào lớp
+    // 4. BƯỚC QUAN TRỌNG: Ghi nhận yêu cầu xin vào lớp
     if (class_id) {
       const { error: enrollError } = await supabase.from("class_enrollments").insert({
         student_id: newUserId,
@@ -85,7 +96,7 @@ export const authService = {
 
       if (enrollError) {
         console.error("Lỗi ghi nhận lớp học:", enrollError);
-        throw new Error("Tạo tài khoản thành công nhưng lỗi khi xin vào lớp. Vui lòng thử lại sau!");
+        throw new Error("Đăng ký thành công nhưng lỗi xin vào lớp. Hãy báo cho Thầy Nhẫn!");
       }
     }
   },
