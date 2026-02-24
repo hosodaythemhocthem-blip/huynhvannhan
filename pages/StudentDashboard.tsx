@@ -1,11 +1,10 @@
-// pages/StudentDashboard.tsx
 import React, { useState, useEffect } from "react";
 import { User, Class, ClassEnrollment } from "../types";
 import { supabase } from "../supabase";
 import { useToast } from "../components/Toast";
 import { 
-  School, Key, Loader2, Clock, 
-  CheckCircle2, ChevronRight, GraduationCap, Send
+  School, Loader2, Clock, 
+  CheckCircle2, ChevronRight, GraduationCap, Send, ListPlus
 } from "lucide-react";
 
 // Định nghĩa Type kết hợp từ Database
@@ -20,16 +19,35 @@ interface Props {
 const StudentDashboard: React.FC<Props> = ({ user }) => {
   const { showToast } = useToast();
   const [enrollments, setEnrollments] = useState<MyEnrollment[]>([]);
-  const [loading, setLoading] = useState(true);
   
-  const [inviteCode, setInviteCode] = useState("");
+  // State mới để lưu danh sách TẤT CẢ các lớp cho học sinh chọn
+  const [allClasses, setAllClasses] = useState<Class[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState("");
+  
+  const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       loadMyClasses();
+      loadAllAvailableClasses(); // Gọi hàm lấy danh sách lớp
     }
   }, [user]);
+
+  // Hàm lấy danh sách tất cả các lớp trên hệ thống
+  const loadAllAvailableClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAllClasses(data || []);
+    } catch (err) {
+      console.error("Lỗi tải danh sách lớp:", err);
+    }
+  };
 
   const loadMyClasses = async () => {
     setLoading(true);
@@ -47,7 +65,7 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
       setEnrollments((data as unknown as MyEnrollment[]) || []);
     } catch (err: any) {
       console.error(err);
-      showToast("Không thể tải danh sách lớp học", "error");
+      showToast("Không thể tải danh sách lớp học của bạn", "error");
     } finally {
       setLoading(false);
     }
@@ -55,28 +73,18 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
 
   const handleJoinClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteCode.trim()) return;
+    if (!selectedClassId) {
+      showToast("Vui lòng chọn một lớp học!", "warning");
+      return;
+    }
 
     setJoining(true);
     try {
-      const code = inviteCode.trim().toUpperCase();
-
-      // 1. Tìm lớp học có mã code này
-      const { data: classData, error: classError } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('invite_code', code)
-        .single();
-
-      if (classError || !classData) {
-        throw new Error("Mã lớp không tồn tại hoặc đã bị khóa!");
-      }
-
-      // 2. Tạo yêu cầu tham gia (Insert vào class_enrollments)
+      // Chỉ cần Insert trực tiếp class_id mà học sinh đã chọn
       const { error: enrollError } = await supabase
         .from('class_enrollments')
         .insert({
-          class_id: classData.id,
+          class_id: selectedClassId,
           student_id: user.id,
           status: 'pending' // Mặc định là chờ giáo viên duyệt
         });
@@ -89,9 +97,11 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
         throw enrollError;
       }
 
-      showToast(`Đã gửi yêu cầu tham gia lớp ${classData.name}!`, "success");
-      setInviteCode("");
-      await loadMyClasses(); // Tải lại danh sách
+      const joinedClass = allClasses.find(c => c.id === selectedClassId);
+      showToast(`Đã gửi yêu cầu tham gia lớp ${joinedClass?.name}!`, "success");
+      
+      setSelectedClassId(""); // Reset lại lựa chọn
+      await loadMyClasses(); // Tải lại danh sách lớp của học sinh
     } catch (err: any) {
       console.error(err);
       showToast(err.message || "Lỗi khi tham gia lớp", "error");
@@ -119,7 +129,7 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
         
         <div className="flex items-center gap-6 z-10">
           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-2xl text-white font-black text-2xl">
-             {(user.full_name || 'H').charAt(0)}
+             {(user.full_name || 'H').charAt(0).toUpperCase()}
           </div>
           <div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Xin chào, {user.full_name} 👋</h2>
@@ -132,35 +142,40 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* CỘT TRÁI: FORM NHẬP MÃ LỚP */}
+        {/* CỘT TRÁI: FORM CHỌN LỚP */}
         <aside className="lg:col-span-4 space-y-8">
            <div className="bg-indigo-600 p-8 rounded-[2.5rem] shadow-xl shadow-indigo-200 text-white relative overflow-hidden">
               <div className="absolute -top-10 -right-10 text-indigo-500 opacity-30">
-                 <Key size={120} strokeWidth={1} />
+                 <ListPlus size={120} strokeWidth={1} />
               </div>
               
               <div className="relative z-10">
                  <h3 className="text-xl font-black mb-2 flex items-center gap-2">
-                    <School size={24} /> Xin vào lớp mới
+                    <School size={24} /> Chọn lớp tham gia
                  </h3>
                  <p className="text-indigo-200 text-sm mb-6">
-                    Nhập mã mời (6 ký tự) do giáo viên cung cấp để tham gia lớp học.
+                    Lựa chọn lớp học em muốn tham gia từ danh sách bên dưới.
                  </p>
                  
                  <form onSubmit={handleJoinClass} className="space-y-4">
                     <div className="bg-indigo-700/50 p-2 rounded-2xl border border-indigo-500 focus-within:ring-2 focus-within:ring-white transition-all flex items-center">
-                       <input 
-                          type="text" 
-                          placeholder="MÃ MỜI LỚP" 
+                       {/* THAY INPUT BẰNG SELECT DROPDOWN */}
+                       <select 
                           required
-                          maxLength={6}
-                          className="w-full bg-transparent border-none outline-none font-black text-white text-center text-xl placeholder:text-indigo-400 tracking-[0.2em] uppercase" 
-                          value={inviteCode} 
-                          onChange={e => setInviteCode(e.target.value)} 
-                       />
+                          className="w-full bg-transparent border-none outline-none font-bold text-white text-base cursor-pointer appearance-none px-2 py-1" 
+                          value={selectedClassId} 
+                          onChange={e => setSelectedClassId(e.target.value)}
+                       >
+                          <option value="" className="text-slate-800">-- Bấm để chọn lớp học --</option>
+                          {allClasses.map(cls => (
+                             <option key={cls.id} value={cls.id} className="text-slate-800">
+                                {cls.name}
+                             </option>
+                          ))}
+                       </select>
                     </div>
                     <button 
-                      disabled={joining || !inviteCode}
+                      disabled={joining || !selectedClassId}
                       className="w-full bg-white text-indigo-600 py-4 rounded-2xl font-black text-sm hover:bg-indigo-50 transition-all shadow-lg disabled:opacity-70 flex items-center justify-center gap-2"
                     >
                         {joining ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -213,9 +228,8 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
                        </div>
                        
                        <h4 className="font-black text-xl text-slate-800 mb-1">{enroll.target_class?.name || 'Lớp ẩn danh'}</h4>
-                       <p className="text-sm text-slate-400 font-medium mb-6">Mã lớp: {enroll.target_class?.invite_code || '---'}</p>
                        
-                       <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between text-indigo-600 font-bold text-sm">
+                       <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between text-indigo-600 font-bold text-sm">
                           <span>Vào không gian lớp</span>
                           <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                        </div>
@@ -229,7 +243,7 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
                  </div>
                  <h4 className="text-lg font-black text-slate-700 mb-2">Chưa tham gia lớp nào</h4>
                  <p className="text-slate-400 text-sm max-w-sm mx-auto">
-                    Em hãy xin Mã mời (gồm 6 ký tự) từ giáo viên và nhập vào khung bên trái để bắt đầu nhé.
+                    Em hãy chọn một lớp học ở khung bên trái và gửi yêu cầu tham gia để bắt đầu nhé.
                  </p>
               </div>
            )}
