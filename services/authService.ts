@@ -30,10 +30,12 @@ export const authService = {
   },
 
   /* ================= SIGN UP STUDENT ================= */
+  // Đã thêm tham số class_id vào hàm này
   async signUpStudent(
     email: string,
     password: string,
-    full_name: string
+    full_name: string,
+    class_id: string 
   ): Promise<void> {
     if (password.length < 6) {
       throw new Error("Mật khẩu tối thiểu 6 ký tự.");
@@ -55,13 +57,15 @@ export const authService = {
       throw new Error("Email đã tồn tại hoặc không hợp lệ.");
     }
 
-    // 2. Lưu thông tin vào bảng public.users để Quản lý lớp query được
+    const newUserId = data.user.id;
+
+    // 2. Lưu thông tin vào bảng public.users
     const { error: insertError } = await supabase.from("users").insert({
-      id: data.user.id,
+      id: newUserId,
       email: email,
       full_name: full_name,
-      role: "student",     // Cố định chữ thường
-      status: "pending",   // Cố định chữ thường để code filter dễ dàng
+      role: "student",     
+      status: "pending",   
       created_at: now(),
       updated_at: now(),
     });
@@ -69,6 +73,20 @@ export const authService = {
     if (insertError) {
       console.error("Lỗi chèn dữ liệu vào bảng users:", insertError);
       throw new Error("Lỗi tạo hồ sơ người dùng.");
+    }
+
+    // 3. BƯỚC QUAN TRỌNG NHẤT: Ghi nhận yêu cầu xin vào lớp
+    if (class_id) {
+      const { error: enrollError } = await supabase.from("class_enrollments").insert({
+        student_id: newUserId,
+        class_id: class_id,
+        status: "pending" // Chờ Giáo viên duyệt
+      });
+
+      if (enrollError) {
+        console.error("Lỗi ghi nhận lớp học:", enrollError);
+        throw new Error("Tạo tài khoản thành công nhưng lỗi khi xin vào lớp. Vui lòng thử lại sau!");
+      }
     }
   },
 
