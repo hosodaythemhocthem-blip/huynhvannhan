@@ -1,21 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Mail, 
-  Lock, 
-  User as UserIcon, 
-  ArrowRight, 
-  Loader2, 
-  GraduationCap, 
-  ShieldCheck, 
-  Sparkles,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  BookOpen
+  Mail, Lock, User as UserIcon, ArrowRight, Loader2, GraduationCap, 
+  ShieldCheck, Sparkles, CheckCircle2, Eye, EyeOff, BookOpen
 } from "lucide-react";
 import { User } from "../types";
-import { supabase } from "../supabase"; // IMPORT SUPABASE ĐỂ LẤY LỚP
+import { supabase } from "../supabase";
+import { authService } from "../services/authService"; // THÊM IMPORT NÀY
 
 interface Props {
   onLogin: (user: User) => void;
@@ -30,13 +21,12 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
   const [fullName, setFullName] = useState("");
   
   const [selectedClass, setSelectedClass] = useState(""); 
-  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]); // STATE LƯU LỚP
+  const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // GỌI SUPABASE LẤY DANH SÁCH LỚP KHI VÀO TRANG HOẶC CHUYỂN TAB ĐĂNG KÝ
   useEffect(() => {
     const fetchClasses = async () => {
       try {
@@ -63,11 +53,10 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const now = new Date().toISOString();
-
       if (mode === "teacher") {
+        // Giữ nguyên logic cổng riêng của Giáo viên
         if (email.trim().toLowerCase() === "huynhvannhan@gmail.com" && password === "huynhvannhan2020") {
+          const now = new Date().toISOString();
           const teacherUser: User = {
             id: "teacher-admin-nhan",
             email: email,
@@ -86,39 +75,27 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
       else if (mode === "student-login") {
         if (!email || !password) throw new Error("Vui lòng nhập đầy đủ Email và Mật khẩu.");
         
-        const studentUser: User = {
-          id: `student-${Date.now()}`,
-          email: email,
-          full_name: "Học sinh Demo", 
-          role: "student",
-          status: "active",
-          created_at: now,
-          updated_at: now,
-          class_id: null,
-        };
-        onLogin(studentUser);
+        // GỌI API ĐĂNG NHẬP THẬT TỪ SUPABASE
+        const user = await authService.signIn(email, password);
+        onLogin(user);
       } 
       else if (mode === "student-register") {
         if (!email || !password || !fullName || !selectedClass) {
           throw new Error("Vui lòng điền đủ Họ tên, Lớp, Email và Mật khẩu.");
         }
         
-        // Lấy tên lớp để hiện thông báo cho đẹp
-        const className = availableClasses.find(c => c.id === selectedClass)?.name || selectedClass;
+        // GỌI API ĐĂNG KÝ THẬT VÀ TRUYỀN selectedClass VÀO
+        await authService.signUpStudent(email, password, fullName, selectedClass);
         
+        const className = availableClasses.find(c => c.id === selectedClass)?.name || selectedClass;
         alert(`Đã gửi yêu cầu đăng ký cho em: ${fullName} (Lớp ${className}).\nHãy chờ Thầy Nhẫn duyệt nhé!`);
-        setMode("student-login");
-        setFullName("");
-        setPassword("");
-        setSelectedClass(""); 
+        
+        // Đăng ký xong tự động chuyển sang form Đăng nhập để học sinh vào trải nghiệm ngay
+        switchMode("student-login");
       }
 
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Đã có lỗi không xác định xảy ra.");
-      }
+    } catch (err: any) {
+      setError(err.message || "Đã có lỗi không xác định xảy ra.");
     } finally {
       setLoading(false);
     }
@@ -161,6 +138,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
           <div className="flex p-1 bg-slate-950/50 rounded-xl mb-8 border border-white/5 relative">
              <button
               onClick={() => switchMode("teacher")}
+              type="button"
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all relative z-10 ${
                 mode === "teacher" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
@@ -169,6 +147,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
             </button>
             <button
               onClick={() => switchMode("student-login")}
+              type="button"
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all relative z-10 ${
                 mode !== "teacher" ? "text-white" : "text-slate-500 hover:text-slate-300"
               }`}
@@ -224,6 +203,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                         <UserIcon className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                         <input
                           type="text"
+                          required
                           value={fullName}
                           onChange={(e) => setFullName(e.target.value)}
                           className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
@@ -237,14 +217,14 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                       <div className="relative group">
                         <BookOpen className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors z-10" />
                         <select
+                          required
                           value={selectedClass}
                           onChange={(e) => setSelectedClass(e.target.value)}
                           className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-10 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all appearance-none cursor-pointer"
                         >
                           <option value="" disabled>-- Chọn lớp học --</option>
-                          {/* ĐỔ DỮ LIỆU TỪ SUPABASE VÀO ĐÂY */}
                           {availableClasses.map((cls) => (
-                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                            <option key={cls.id} value={cls.id} className="text-slate-800">{cls.name}</option>
                           ))}
                           {availableClasses.length === 0 && (
                             <option value="" disabled>Đang tải lớp...</option>
@@ -263,7 +243,8 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                   <div className="relative group">
                     <Mail className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                     <input
-                      type="text"
+                      type="email"
+                      required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
@@ -283,6 +264,7 @@ const LoginScreen: React.FC<Props> = ({ onLogin }) => {
                     <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                     <input
                       type={showPassword ? "text" : "password"}
+                      required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-12 pr-12 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all placeholder-slate-600"
