@@ -13,17 +13,20 @@ import {
   Edit3,
   BarChart3,
   Sparkles,
-  Send // <-- THÊM ICON GỬI/GIAO ĐỀ NÀY
+  Send,
+  X,
+  CheckCircle2,
+  CalendarDays
 } from "lucide-react";
 
 // GỌI CÁC COMPONENT CẦN THIẾT
 import ImportExamFromFile from "../components/ImportExamFromFile";
 import ExamEditor from "../components/ExamEditor";
-import ClassManagement from "../components/ClassManagement"; // COMPONENT QUẢN LÝ LỚP
+import ClassManagement from "../components/ClassManagement";
 
 interface Props {
   user: User;
-  activeTab: string; // THÊM PROP NÀY ĐỂ NHẬN BIẾT ĐANG CHỌN TAB NÀO
+  activeTab: string;
 }
 
 const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
@@ -37,6 +40,11 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [parsedExamData, setParsedExamData] = useState<any>(null);
+
+  // STATE QUẢN LÝ MODAL GIAO BÀI
+  const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
+  const [selectedClass, setSelectedClass] = useState("");
+  const [deadline, setDeadline] = useState("");
 
   useEffect(() => {
     if (activeTab === "exams" || activeTab === "dashboard") {
@@ -58,7 +66,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setLoading(false);
   };
 
-  // Hàm tạo đề thủ công
   const createExam = async () => {
     try {
       setLoading(true);
@@ -81,7 +88,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
         .single();
 
       if (error) {
-        console.error("Lỗi tạo đề thi từ Supabase:", error);
         alert(`Không thể tạo đề thi. Lỗi: ${error.message}`);
         setLoading(false);
         return;
@@ -92,7 +98,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
         await loadExams(); 
       }
     } catch (err) {
-      console.error("Lỗi hệ thống:", err);
       alert("Đã xảy ra lỗi không xác định!");
     } finally {
       setLoading(false);
@@ -101,7 +106,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
 
   const deleteExam = async (id: string) => {
     if (!window.confirm("Thầy có chắc chắn muốn xóa đề thi này không? Hành động này không thể hoàn tác.")) return;
-    
     await supabase.from("exams").delete().eq("id", id);
     setExams(prev => prev.filter(e => e.id !== id));
   };
@@ -119,17 +123,35 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setIsEditorOpen(true);
   };
 
-  // --- HÀM XỬ LÝ KHI BẤM NÚT GIAO ĐỀ ---
+  // --- HÀM MỞ MODAL GIAO ĐỀ ---
   const handleAssignExam = (exam: Exam) => {
-    // Tạm thời mình để alert, bước tiếp theo ta sẽ làm popup chọn lớp nhé!
-    alert(`Chuẩn bị giao đề: "${exam.title}". Chức năng chọn lớp đang được nạp...`);
+    setAssigningExam(exam);
+    setSelectedClass(""); // Reset form
+    setDeadline("");      // Reset form
+  };
+
+  // --- HÀM XÁC NHẬN GIAO ĐỀ (GỬI LÊN DATABASE) ---
+  const confirmAssign = () => {
+    if (!selectedClass) {
+      alert("⚠️ Thầy vui lòng chọn lớp để giao bài nhé!");
+      return;
+    }
+    if (!deadline) {
+      alert("⚠️ Thầy vui lòng đặt hạn nộp bài nhé!");
+      return;
+    }
+
+    // TẠM THỜI HIỂN THỊ THÔNG BÁO THÀNH CÔNG (Sau này sẽ gọi hàm Insert vào DB ở đây)
+    alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${selectedClass}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
+    
+    // Đóng Modal
+    setAssigningExam(null);
   };
 
   const filteredExams = exams.filter(e => 
     e.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // NẾU ĐANG BẬT EDITOR THÌ HIỂN THỊ MÀN HÌNH SOẠN THẢO (Phủ toàn màn hình)
   if (isEditorOpen) {
     return (
       <ExamEditor 
@@ -145,7 +167,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     );
   }
 
-  // --- TÁCH GIAO DIỆN QUẢN LÝ ĐỀ THI RA MỘT HÀM RIÊNG CHO SẠCH SẼ ---
   const renderExamDashboard = () => (
     <div className="p-8">
       <div className="max-w-7xl mx-auto mb-10">
@@ -242,7 +263,7 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
                   </div>
                   <div className="flex gap-1">
                     
-                    {/* --- NÚT GIAO ĐỀ ĐƯỢC THÊM VÀO ĐÂY --- */}
+                    {/* --- NÚT GIAO ĐỀ --- */}
                     <button 
                       onClick={() => handleAssignExam(e)}
                       className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors z-10 relative"
@@ -292,32 +313,105 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     </div>
   );
 
-  // --- LOGIC CHỌN GIAO DIỆN HIỂN THỊ THEO TAB ---
   const renderContent = () => {
     switch (activeTab) {
       case "classes":
-        // CHÍNH LÀ CHỖ NÀY! Đã thêm user={user} vào Component
         return <div className="p-8"><ClassManagement user={user} /></div>; 
-      
       case "dashboard":
       case "exams":
       default:
-        // Mặc định hoặc chọn Đề thi sẽ gọi giao diện Đề thi
         return renderExamDashboard(); 
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Vùng chứa nội dung chính */}
+    <div className="min-h-screen bg-slate-50 relative">
       {renderContent()}
 
-      {/* MODAL IMPORT LUÔN ĐỂ Ở NGOÀI CÙNG ĐỂ KHÔNG BỊ LỖI HIỂN THỊ */}
       <ImportExamFromFile
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportSuccess={handleImportSuccess}
       />
+
+      {/* --- MODAL GIAO BÀI CHO LỚP --- */}
+      {assigningExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Lớp nền đen mờ */}
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
+            onClick={() => setAssigningExam(null)}
+          ></div>
+
+          {/* Nội dung Modal */}
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Header Modal */}
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6 relative">
+              <button 
+                onClick={() => setAssigningExam(null)} 
+                className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-md border border-white/20">
+                <CheckCircle2 size={24} className="text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-1">Giao Bài Thi</h2>
+              <p className="text-emerald-50 text-sm line-clamp-1 opacity-90">Đề: {assigningExam.title}</p>
+            </div>
+
+            {/* Body Modal */}
+            <div className="p-6 space-y-5 bg-slate-50">
+              {/* Chọn Lớp */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Users size={16} className="text-indigo-500"/> Chọn Lớp Nhận Đề
+                </label>
+                <select 
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm cursor-pointer"
+                >
+                  <option value="" disabled>-- Vui lòng chọn lớp --</option>
+                  <option value="Lớp 10A1">Lớp 10A1 - Toán Cơ Bản</option>
+                  <option value="Lớp 10A2">Lớp 10A2 - Toán Nâng Cao</option>
+                  <option value="Lớp 11B1">Lớp 11B1 - Luyện Thi</option>
+                  <option value="Tất cả các lớp">Giao cho tất cả các lớp đang quản lý</option>
+                </select>
+              </div>
+
+              {/* Hạn Nộp */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <CalendarDays size={16} className="text-amber-500"/> Hạn chót nộp bài (Deadline)
+                </label>
+                <input 
+                  type="datetime-local" 
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => setAssigningExam(null)}
+                className="flex-1 px-4 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Hủy Bỏ
+              </button>
+              <button 
+                onClick={confirmAssign}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-emerald-200 transition-all active:scale-95"
+              >
+                Phát Đề Ngay 🚀
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
