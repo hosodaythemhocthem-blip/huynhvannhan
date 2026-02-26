@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -10,6 +10,7 @@ export interface Question {
   options: string[];
   correctAnswer?: number;
   correctText?: string;
+  points?: number; // THÊM TRƯỜNG ĐIỂM CHO CÂU HỎI
 }
 
 export interface Exam {
@@ -20,7 +21,7 @@ export interface Exam {
 }
 
 interface ExamEditorProps {
-  user: { id: string } | null; // Cấu trúc user cơ bản từ Supabase auth
+  user: { id: string } | null;
   exam?: Exam | null;
   aiGeneratedData?: Partial<Exam> | null;
   onClose: () => void;
@@ -32,6 +33,11 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
   const [questions, setQuestions] = useState<Question[]>(exam?.questions || []);
   const [saving, setSaving] = useState(false);
 
+  // TÍNH TỔNG ĐIỂM TỰ ĐỘNG
+  const totalPoints = useMemo(() => {
+    return questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
+  }, [questions]);
+
   useEffect(() => {
     if (aiGeneratedData) {
       if (aiGeneratedData.title) setTitle(aiGeneratedData.title);
@@ -41,7 +47,8 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
           content: q.content || "",
           options: q.options || ["", "", "", ""],
           correctAnswer: q.correctAnswer || 0,
-          correctText: q.correctText || ""
+          correctText: q.correctText || "",
+          points: q.points || 1 // Mặc định 1 điểm cho đề AI tạo
         }));
         setQuestions(formattedQs);
       }
@@ -51,7 +58,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
   const handlePermanentSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên đề thi!");
     if (questions.length === 0) return alert("Chưa có câu hỏi nào để lưu!");
-    if (timeLimit <= 0) return alert("Thời gian làm bài phải lớn hơn 0!"); // Validate thời gian
+    if (timeLimit <= 0) return alert("Thời gian làm bài phải lớn hơn 0!");
 
     setSaving(true);
     try {
@@ -87,7 +94,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
     }
   };
 
-  // Tạm thời giữ nguyên toolbar, nhưng khuyên bạn nên làm custom image handler
   const quillModules = {
     toolbar: [
       ['bold', 'italic', 'underline'],
@@ -107,12 +113,14 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-2xl font-black text-indigo-900 bg-transparent outline-none border-b-2 border-indigo-200 focus:border-indigo-600 pb-1"
+            className="text-2xl font-black text-indigo-900 bg-transparent outline-none border-b-2 border-indigo-200 focus:border-indigo-600 pb-1 w-[400px]"
             placeholder="Tên đề thi siêu cấp..."
           />
           <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
             <span>SỐ CÂU: {questions.length}</span>
-            <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-200">
+            {/* HIỂN THỊ TỔNG ĐIỂM */}
+            <span className="text-amber-500">TỔNG ĐIỂM: {totalPoints}</span>
+            <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-200 ml-2">
               ⏱️ <input 
                 type="number" 
                 value={timeLimit} 
@@ -150,8 +158,8 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
               <div key={qIndex} className="p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 relative group">
                 
                 <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="bg-indigo-600 text-white px-4 py-1 rounded-full text-sm font-black">CÂU {qIndex + 1}</span>
+                  <div className="flex items-center flex-wrap gap-3">
+                    <span className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-sm font-black shadow-sm">CÂU {qIndex + 1}</span>
                     <select
                       value={q.type}
                       onChange={(e) => {
@@ -168,19 +176,38 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                         }
                         setQuestions(newQs);
                       }}
-                      className="text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none"
+                      className="text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none hover:border-indigo-300 transition-colors"
                     >
                       <option value="multiple_choice">Trắc nghiệm (4 đáp án)</option>
                       <option value="true_false">Đúng / Sai</option>
                       <option value="short_answer">Trả lời ngắn</option>
                     </select>
+
+                    {/* Ô NHẬP ĐIỂM CHO TỪNG CÂU */}
+                    <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:border-amber-300 transition-colors shadow-sm">
+                      <span className="text-sm font-bold text-slate-500 mr-2">Điểm:</span>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={q.points !== undefined ? q.points : 1}
+                        onChange={(e) => {
+                          const newQs = [...questions];
+                          newQs[qIndex].points = Number(e.target.value);
+                          setQuestions(newQs);
+                        }}
+                        className="w-14 text-amber-600 font-black bg-transparent outline-none"
+                        placeholder="1"
+                      />
+                    </div>
+
                   </div>
-                  <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIndex))} className="text-red-400 font-bold text-xs hover:text-red-600">
-                    🗑️ XÓA CÂU NÀY
+                  <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIndex))} className="text-red-400 font-bold text-xs hover:text-red-600 transition-colors ml-2">
+                    🗑️ XÓA
                   </button>
                 </div>
 
-                <div className="mb-4 bg-white rounded-xl overflow-hidden">
+                <div className="mb-4 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100">
                   <ReactQuill 
                     theme="snow"
                     value={q.content}
@@ -199,7 +226,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                   {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                     <div className="grid grid-cols-2 gap-3">
                       {q.options.map((opt: string, oIdx: number) => (
-                        <div key={oIdx} className={`flex items-center gap-2 p-3 rounded-xl border-2 ${q.correctAnswer === oIdx ? 'border-green-500 bg-green-50' : 'border-slate-200 bg-white'}`}>
+                        <div key={oIdx} className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${q.correctAnswer === oIdx ? 'border-green-500 bg-green-50 shadow-sm' : 'border-slate-200 bg-white'}`}>
                           <input 
                             type="radio" 
                             checked={q.correctAnswer === oIdx} 
@@ -229,7 +256,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                   )}
 
                   {q.type === 'short_answer' && (
-                    <div className="flex flex-col gap-2 p-4 bg-white rounded-xl border-2 border-slate-100">
+                    <div className="flex flex-col gap-2 p-4 bg-white rounded-xl border-2 border-slate-100 shadow-sm">
                       <label className="text-sm font-bold text-slate-500">Nhập đáp án chính xác (Dùng để hệ thống chấm điểm tự động):</label>
                       <input 
                         type="text"
@@ -249,21 +276,27 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
               </div>
             ))}
             <button 
-              onClick={() => setQuestions([...questions, { type: 'multiple_choice', content: "", options: ["", "", "", ""], correctAnswer: 0, correctText: "" }])}
-              className="w-full py-6 border-4 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black hover:border-indigo-400 hover:text-indigo-600 transition-all"
+              onClick={() => setQuestions([...questions, { type: 'multiple_choice', content: "", options: ["", "", "", ""], correctAnswer: 0, correctText: "", points: 1 }])}
+              className="w-full py-6 border-4 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
             >
               + THÊM CÂU HỎI MỚI
             </button>
           </div>
         </div>
 
-        {/* CỘT PHẢI: XEM TRƯỚC */}
-        <div className="w-1/2 h-full overflow-y-auto p-12 bg-slate-50">
-          <div className="max-w-xl mx-auto bg-white p-10 rounded-[40px] shadow-2xl shadow-slate-200">
+        {/* CỘT PHẢI: XEM TRƯỚC (PREVIEW) */}
+        <div className="w-[50%] h-full overflow-y-auto p-12 bg-slate-100">
+          <div className="max-w-xl mx-auto bg-white p-10 rounded-[40px] shadow-2xl shadow-slate-200/50">
              <div className="flex justify-between items-start mb-6">
-                <h2 className="text-3xl font-black text-slate-800 uppercase flex-1">{title}</h2>
-                <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-bold border border-indigo-100 whitespace-nowrap">
-                  ⏱️ {timeLimit} Phút
+                <h2 className="text-3xl font-black text-slate-800 uppercase flex-1 pr-4 leading-tight">{title}</h2>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-bold border border-indigo-100 whitespace-nowrap shadow-sm">
+                    ⏱️ {timeLimit} Phút
+                  </div>
+                  {/* TỔNG ĐIỂM TRONG PREVIEW */}
+                  <div className="bg-amber-50 text-amber-600 px-4 py-1.5 rounded-xl font-bold border border-amber-100 whitespace-nowrap text-sm shadow-sm">
+                    ⭐ Tổng: {totalPoints} Điểm
+                  </div>
                 </div>
              </div>
              <div className="w-20 h-2 bg-indigo-600 mb-10 rounded-full"></div>
@@ -276,27 +309,31 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
              ) : (
                questions.map((q, i) => (
                  <div key={i} className="mb-10 animate-in fade-in slide-in-from-bottom-4">
-                   <div className="font-bold text-slate-800 flex gap-2">
-                     <span className="text-indigo-600 whitespace-nowrap">Câu {i+1}:</span> 
-                     <span 
-                       className="prose prose-sm max-w-none"
+                   <div className="font-bold text-slate-800 flex items-start gap-2 mb-3">
+                     <span className="text-indigo-600 whitespace-nowrap mt-1">Câu {i+1}:</span> 
+                     <div 
+                       className="prose prose-sm max-w-none flex-1 mt-1"
                        dangerouslySetInnerHTML={{ __html: q.content || "..." }} 
                      />
+                     {/* ĐIỂM CỦA TỪNG CÂU BÊN PREVIEW */}
+                     <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs whitespace-nowrap ml-2 mt-1">
+                       {q.points !== undefined ? q.points : 1} điểm
+                     </span>
                    </div>
                    
-                   <div className="mt-4 pl-12">
+                   <div className="pl-12">
                      {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                         <div className="grid grid-cols-2 gap-4">
                           {q.options?.map((label: string, oi: number) => (
-                            <div key={oi} className={`text-sm ${q.correctAnswer === oi ? 'text-green-600 font-black bg-green-50 p-2 rounded-lg inline-block' : 'text-slate-500 p-2'}`}>
-                              {String.fromCharCode(65 + oi)}. {label || "..."} {q.correctAnswer === oi && "✓"}
+                            <div key={oi} className={`text-sm rounded-lg p-2.5 transition-colors ${q.correctAnswer === oi ? 'text-green-700 font-bold bg-green-50 border border-green-100' : 'text-slate-600 hover:bg-slate-50 border border-transparent'}`}>
+                              <span className="font-bold mr-1">{String.fromCharCode(65 + oi)}.</span> {label || "..."} {q.correctAnswer === oi && "✓"}
                             </div>
                           ))}
                         </div>
                      )}
 
                      {q.type === 'short_answer' && (
-                        <div className="p-3 border-2 border-dashed border-slate-200 rounded-lg inline-block min-w-[200px] text-sm text-slate-400">
+                        <div className="p-3 border-2 border-dashed border-slate-200 rounded-lg inline-block min-w-[200px] text-sm text-slate-400 mt-2 bg-slate-50">
                           {q.correctText ? <span className="text-green-600 font-bold">{q.correctText} ✓</span> : "Học sinh sẽ nhập đáp án vào đây..."}
                          </div>
                      )}
