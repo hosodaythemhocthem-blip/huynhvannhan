@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Play, Edit3, Trash2, Lock, Unlock, FileText, Clock, Calendar } from "lucide-react";
+import { Play, Edit3, Trash2, Lock, Unlock, FileText, Clock, Calendar, Send } from "lucide-react";
 import { Exam } from "../types";
 import { motion } from "framer-motion";
 
@@ -10,6 +10,7 @@ interface Props {
   onEdit?: (exam: Exam) => void;
   onDelete?: (id: string) => void;
   onToggleLock?: (exam: Exam) => void;
+  onAssign?: (exam: Exam) => void; // Thêm hàm Giao bài
   role?: "teacher" | "student" | "admin";
 }
 
@@ -20,6 +21,7 @@ const ExamCard: React.FC<Props> = ({
   onEdit,
   onDelete,
   onToggleLock,
+  onAssign,
   role = "student",
 }) => {
   const isTeacher = role === "teacher" || role === "admin";
@@ -84,36 +86,58 @@ const ExamCard: React.FC<Props> = ({
 
         {/* Footer Actions */}
         <div className="flex gap-2 pt-4 border-t border-slate-100 mt-auto">
-          <button
-            onClick={() => onView?.(exam)}
-            disabled={exam.is_locked && !isTeacher}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2
-              ${exam.is_locked && !isTeacher 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-slate-900 text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-violet-600 shadow-md hover:shadow-indigo-200 hover:shadow-lg'}`}
-          >
-            <Play size={16} className={exam.is_locked && !isTeacher ? "" : "group-hover:scale-110 transition-transform"} /> 
-            {isTeacher ? "Xem trước" : "Làm bài"}
-          </button>
-
-          {isTeacher && (
+          {isTeacher ? (
             <>
+              {/* NÚT GIAO BÀI (Chỉ hiển thị cho Giáo viên) */}
+              <button
+                onClick={() => onAssign?.(exam)}
+                disabled={exam.is_locked}
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm
+                  ${exam.is_locked 
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-emerald-200 hover:shadow-lg hover:scale-[1.02] active:scale-95'}`}
+                title={exam.is_locked ? "Phải mở khóa đề mới có thể giao bài" : "Giao đề thi này cho lớp"}
+              >
+                <Send size={16} className={exam.is_locked ? "" : "group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform"} /> 
+                Giao lớp
+              </button>
+
+              {/* CÁC NÚT ICON NHỎ (Xem, Sửa, Xóa) */}
+              <button
+                onClick={() => onView?.(exam)}
+                className="p-2.5 bg-slate-50 text-slate-600 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                title="Xem trước đề"
+              >
+                <Play size={16} />
+              </button>
               <button
                 onClick={() => onEdit?.(exam)}
-                className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all shadow-sm hover:shadow"
-                title="Chỉnh sửa chi tiết"
+                className="p-2.5 bg-slate-50 border border-slate-100 text-slate-600 rounded-xl hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+                title="Chỉnh sửa"
               >
-                <Edit3 size={18} />
+                <Edit3 size={16} />
               </button>
-
               <button
                 onClick={() => onDelete?.(exam.id)}
-                className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-all shadow-sm hover:shadow"
+                className="p-2.5 bg-slate-50 border border-slate-100 text-slate-600 rounded-xl hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-colors"
                 title="Xóa vĩnh viễn"
               >
-                <Trash2 size={18} />
+                <Trash2 size={16} />
               </button>
             </>
+          ) : (
+            /* NÚT LÀM BÀI DÀNH CHO HỌC SINH */
+            <button
+              onClick={() => onView?.(exam)}
+              disabled={exam.is_locked}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2
+                ${exam.is_locked 
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                  : 'bg-slate-900 text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-violet-600 shadow-md hover:shadow-indigo-200 hover:shadow-lg hover:scale-[1.02] active:scale-95'}`}
+            >
+              <Play size={16} className={exam.is_locked ? "" : "group-hover:scale-110 transition-transform"} /> 
+              Làm bài
+            </button>
           )}
         </div>
       </div>
