@@ -19,7 +19,6 @@ import {
   CalendarDays
 } from "lucide-react";
 
-// GỌI CÁC COMPONENT CẦN THIẾT
 import ImportExamFromFile from "../components/ImportExamFromFile";
 import ExamEditor from "../components/ExamEditor";
 import ClassManagement from "../components/ClassManagement";
@@ -32,16 +31,15 @@ interface Props {
 const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
+  const [myClasses, setMyClasses] = useState<any[]>([]); // THÊM STATE LƯU LỚP HỌC THẬT
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // STATE QUẢN LÝ MODAL AI VÀ EDITOR
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [parsedExamData, setParsedExamData] = useState<any>(null);
 
-  // STATE QUẢN LÝ MODAL GIAO BÀI
   const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
   const [selectedClass, setSelectedClass] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -49,6 +47,7 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   useEffect(() => {
     if (activeTab === "exams" || activeTab === "dashboard") {
       loadExams();
+      loadClasses(); // GỌI HÀM LẤY LỚP HỌC KHI MỞ TRANG
     }
   }, [user.id, activeTab]);
 
@@ -64,6 +63,19 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
       setExams(data as Exam[]);
     }
     setLoading(false);
+  };
+
+  // --- HÀM MỚI: TẢI DANH SÁCH LỚP HỌC THẬT TỪ SUPABASE ---
+  const loadClasses = async () => {
+    const { data, error } = await supabase
+      .from("classes")
+      .select("*")
+      .eq("teacher_id", user.id) // Lấy lớp của đúng thầy giáo này
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setMyClasses(data);
+    }
   };
 
   const createExam = async () => {
@@ -123,14 +135,12 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setIsEditorOpen(true);
   };
 
-  // --- HÀM MỞ MODAL GIAO ĐỀ ---
   const handleAssignExam = (exam: Exam) => {
     setAssigningExam(exam);
-    setSelectedClass(""); // Reset form
-    setDeadline("");      // Reset form
+    setSelectedClass(""); 
+    setDeadline("");      
   };
 
-  // --- HÀM XÁC NHẬN GIAO ĐỀ (GỬI LÊN DATABASE) ---
   const confirmAssign = () => {
     if (!selectedClass) {
       alert("⚠️ Thầy vui lòng chọn lớp để giao bài nhé!");
@@ -141,10 +151,10 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
       return;
     }
 
-    // TẠM THỜI HIỂN THỊ THÔNG BÁO THÀNH CÔNG (Sau này sẽ gọi hàm Insert vào DB ở đây)
-    alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${selectedClass}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
+    // Tạm thời hiển thị Alert, bài sau sẽ làm tính năng insert vào bảng assignments
+    const className = selectedClass === "all" ? "Tất cả các lớp" : myClasses.find(c => c.id === selectedClass)?.name || selectedClass;
+    alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${className}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
     
-    // Đóng Modal
     setAssigningExam(null);
   };
 
@@ -251,10 +261,7 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredExams.map((e) => (
-              <div
-                key={e.id}
-                className="group bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
-              >
+              <div key={e.id} className="group bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 
                 <div className="flex justify-between items-start mb-3">
@@ -262,8 +269,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
                     <FileText size={20} />
                   </div>
                   <div className="flex gap-1">
-                    
-                    {/* --- NÚT GIAO ĐỀ --- */}
                     <button 
                       onClick={() => handleAssignExam(e)}
                       className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors z-10 relative"
@@ -334,18 +339,14 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
         onImportSuccess={handleImportSuccess}
       />
 
-      {/* --- MODAL GIAO BÀI CHO LỚP --- */}
       {assigningExam && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Lớp nền đen mờ */}
           <div 
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
             onClick={() => setAssigningExam(null)}
           ></div>
 
-          {/* Nội dung Modal */}
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200">
-            {/* Header Modal */}
             <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6 relative">
               <button 
                 onClick={() => setAssigningExam(null)} 
@@ -360,9 +361,7 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
               <p className="text-emerald-50 text-sm line-clamp-1 opacity-90">Đề: {assigningExam.title}</p>
             </div>
 
-            {/* Body Modal */}
             <div className="p-6 space-y-5 bg-slate-50">
-              {/* Chọn Lớp */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                   <Users size={16} className="text-indigo-500"/> Chọn Lớp Nhận Đề
@@ -373,14 +372,22 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
                   className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all shadow-sm cursor-pointer"
                 >
                   <option value="" disabled>-- Vui lòng chọn lớp --</option>
-                  <option value="Lớp 10A1">Lớp 10A1 - Toán Cơ Bản</option>
-                  <option value="Lớp 10A2">Lớp 10A2 - Toán Nâng Cao</option>
-                  <option value="Lớp 11B1">Lớp 11B1 - Luyện Thi</option>
-                  <option value="Tất cả các lớp">Giao cho tất cả các lớp đang quản lý</option>
+                  
+                  {/* ĐỔ DỮ LIỆU LỚP THẬT TỪ DATABASE VÀO ĐÂY */}
+                  {myClasses.length === 0 ? (
+                    <option value="" disabled>Chưa có lớp nào (Vui lòng tạo lớp trước)</option>
+                  ) : (
+                    myClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name} {cls.grade ? `- Khối ${cls.grade}` : ""}
+                      </option>
+                    ))
+                  )}
+
+                  <option value="all">Giao cho tất cả các lớp đang quản lý</option>
                 </select>
               </div>
 
-              {/* Hạn Nộp */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                   <CalendarDays size={16} className="text-amber-500"/> Hạn chót nộp bài (Deadline)
@@ -394,7 +401,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
               </div>
             </div>
 
-            {/* Footer Modal */}
             <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
               <button 
                 onClick={() => setAssigningExam(null)}
