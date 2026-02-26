@@ -12,7 +12,8 @@ import {
   Clock,
   Edit3,
   BarChart3,
-  Sparkles
+  Sparkles,
+  Send // <-- THÊM ICON GỬI/GIAO ĐỀ NÀY
 } from "lucide-react";
 
 // GỌI CÁC COMPONENT CẦN THIẾT
@@ -116,6 +117,12 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setIsImportModalOpen(false);
     setEditingExam(null);
     setIsEditorOpen(true);
+  };
+
+  // --- HÀM XỬ LÝ KHI BẤM NÚT GIAO ĐỀ ---
+  const handleAssignExam = (exam: Exam) => {
+    // Tạm thời mình để alert, bước tiếp theo ta sẽ làm popup chọn lớp nhé!
+    alert(`Chuẩn bị giao đề: "${exam.title}". Chức năng chọn lớp đang được nạp...`);
   };
 
   const filteredExams = exams.filter(e => 
@@ -234,6 +241,16 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
                     <FileText size={20} />
                   </div>
                   <div className="flex gap-1">
+                    
+                    {/* --- NÚT GIAO ĐỀ ĐƯỢC THÊM VÀO ĐÂY --- */}
+                    <button 
+                      onClick={() => handleAssignExam(e)}
+                      className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors z-10 relative"
+                      title="Giao đề cho lớp"
+                    >
+                      <Send size={18} />
+                    </button>
+
                     <button 
                       onClick={() => openEditor(e)}
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors z-10 relative"
