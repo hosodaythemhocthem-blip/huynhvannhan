@@ -17,7 +17,7 @@ export interface Question {
   correctText?: string;
   points?: number;
   statements?: Statement[];
-  explanation?: string; // <-- THÊM MỚI: Lời giải chi tiết
+  explanation?: string; // Lời giải chi tiết
 }
 
 export interface Exam {
@@ -254,7 +254,21 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                 </div>
 
                 {/* NỘI DUNG CÂU HỎI CHÍNH */}
-                <div className="mb-4 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200">
+                <div className="mb-4 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 relative">
+                  
+                  {/* === NÚT XÓA TRẮNG NỘI DUNG (NẰM Ở GÓC PHẢI TOOLBAR) === */}
+                  <button
+                    onClick={() => {
+                      const newQs = [...questions];
+                      newQs[qIndex].content = '';
+                      setQuestions(newQs);
+                    }}
+                    className="absolute top-1.5 right-2 z-10 text-slate-500 bg-slate-200/80 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                    title="Xóa trắng nội dung câu hỏi"
+                  >
+                    🗑️ XÓA
+                  </button>
+
                   <ReactQuill 
                     theme="snow"
                     value={q.content}
@@ -304,7 +318,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                                 setQuestions(newQs);
                               }}
                               className="text-red-500 bg-red-50 hover:bg-red-500 hover:text-white text-xs font-bold px-2 py-1 rounded transition-colors"
-                              title="Xóa đáp án này"
+                              title="Xóa ô đáp án này"
                             >
                               🗑️ Xóa đáp án
                             </button>
@@ -401,7 +415,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                           </div>
 
                           {/* Mini Editor cho từng ý a, b, c, d */}
-                          <div className="bg-slate-50 rounded-md overflow-hidden border border-slate-200 mini-quill">
+                          <div className="bg-slate-50 rounded-md overflow-hidden border border-slate-200 mini-quill relative">
                             <ReactQuill
                               theme="snow"
                               value={stmt.content}
@@ -451,7 +465,21 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                     <label className="flex items-center gap-2 text-sm font-bold text-blue-700 mb-2">
                       💡 Lời giải chi tiết (Hiển thị cho học sinh sau khi nộp bài):
                     </label>
-                    <div className="bg-white rounded-md overflow-hidden border border-slate-200 text-slate-900">
+                    <div className="bg-white rounded-md overflow-hidden border border-slate-200 text-slate-900 relative">
+                      
+                      {/* === NÚT XÓA TRẮNG LỜI GIẢI === */}
+                      <button
+                        onClick={() => {
+                          const newQs = [...questions];
+                          newQs[qIndex].explanation = '';
+                          setQuestions(newQs);
+                        }}
+                        className="absolute top-1.5 right-2 z-10 text-slate-500 bg-slate-200/80 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                        title="Xóa trắng nội dung lời giải"
+                      >
+                        🗑️ XÓA
+                      </button>
+
                       <ReactQuill 
                         theme="snow"
                         value={q.explanation || ''}
