@@ -4,13 +4,19 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
 // 1. ĐỊNH NGHĨA CÁC INTERFACE ĐỂ DỌN DẸP "ANY"
+export interface Statement {
+  content: string;
+  isTrue: boolean;
+}
+
 export interface Question {
-  type: 'multiple_choice' | 'true_false' | 'short_answer';
+  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'true_false_cluster'; // Thêm true_false_cluster
   content: string;
   options: string[];
   correctAnswer?: number;
   correctText?: string;
-  points?: number; // THÊM TRƯỜNG ĐIỂM CHO CÂU HỎI
+  points?: number;
+  statements?: Statement[]; // THÊM MỚI: Dành riêng cho dạng Đúng/Sai 4 ý
 }
 
 export interface Exam {
@@ -48,7 +54,13 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
           options: q.options || ["", "", "", ""],
           correctAnswer: q.correctAnswer || 0,
           correctText: q.correctText || "",
-          points: q.points || 1 // Mặc định 1 điểm cho đề AI tạo
+          points: q.points || 1,
+          statements: q.statements || [
+            { content: '', isTrue: true },
+            { content: '', isTrue: false },
+            { content: '', isTrue: true },
+            { content: '', isTrue: false }
+          ]
         }));
         setQuestions(formattedQs);
       }
@@ -94,6 +106,15 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
     }
   };
 
+  // Hàm update riêng cho ý a,b,c,d
+  const updateStatement = (qIndex: number, sIndex: number, field: 'content' | 'isTrue', value: any) => {
+    const newQs = [...questions];
+    if (newQs[qIndex].statements) {
+      newQs[qIndex].statements![sIndex] = { ...newQs[qIndex].statements![sIndex], [field]: value };
+      setQuestions(newQs);
+    }
+  };
+
   const quillModules = {
     toolbar: [
       ['bold', 'italic', 'underline'],
@@ -118,7 +139,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
           />
           <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
             <span>SỐ CÂU: {questions.length}</span>
-            {/* HIỂN THỊ TỔNG ĐIỂM */}
             <span className="text-amber-500">TỔNG ĐIỂM: {totalPoints}</span>
             <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-lg border border-slate-200 ml-2">
               ⏱️ <input 
@@ -173,17 +193,25 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                         } else if (newType === 'multiple_choice') {
                           newQs[qIndex].options = ["", "", "", ""];
                           newQs[qIndex].correctAnswer = 0;
+                        } else if (newType === 'true_false_cluster') {
+                          // Khởi tạo 4 ý a,b,c,d khi chọn Cấu trúc mới
+                          newQs[qIndex].statements = [
+                            { content: '', isTrue: true },
+                            { content: '', isTrue: false },
+                            { content: '', isTrue: true },
+                            { content: '', isTrue: false }
+                          ];
                         }
                         setQuestions(newQs);
                       }}
                       className="text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none hover:border-indigo-300 transition-colors"
                     >
                       <option value="multiple_choice">Trắc nghiệm (4 đáp án)</option>
-                      <option value="true_false">Đúng / Sai</option>
+                      <option value="true_false_cluster">Đúng/Sai (4 ý a,b,c,d)</option>
                       <option value="short_answer">Trả lời ngắn</option>
+                      <option value="true_false">Đúng / Sai (Cũ)</option>
                     </select>
 
-                    {/* Ô NHẬP ĐIỂM CHO TỪNG CÂU */}
                     <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:border-amber-300 transition-colors shadow-sm">
                       <span className="text-sm font-bold text-slate-500 mr-2">Điểm:</span>
                       <input
@@ -223,6 +251,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                 </div>
 
                 <div className="mt-4">
+                  {/* UI DÀNH CHO TRẮC NGHIỆM 4 ĐÁP ÁN HOẶC ĐÚNG SAI CŨ */}
                   {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                     <div className="grid grid-cols-2 gap-3">
                       {q.options.map((opt: string, oIdx: number) => (
@@ -250,6 +279,43 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                             className={`bg-transparent outline-none w-full text-sm ${q.type === 'true_false' ? 'font-bold text-slate-700 cursor-default' : ''}`}
                             placeholder="Nhập đáp án..."
                           />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* UI MỚI: DÀNH CHO ĐÚNG/SAI 4 Ý THEO CẤU TRÚC BỘ GD&ĐT */}
+                  {q.type === 'true_false_cluster' && q.statements && (
+                    <div className="space-y-3">
+                      <div className="text-sm font-bold text-indigo-700 bg-indigo-50 p-2 rounded-lg inline-block mb-1">
+                        👉 Nhập 4 ý và chọn đáp án Đúng/Sai cho từng ý:
+                      </div>
+                      {q.statements.map((stmt, sIdx) => (
+                        <div key={sIdx} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-300 transition-all focus-within:border-indigo-500">
+                          <span className="font-black text-indigo-500 w-6 text-center">{['a', 'b', 'c', 'd'][sIdx]}.</span>
+                          <input
+                            type="text"
+                            value={stmt.content}
+                            onChange={(e) => updateStatement(qIndex, sIdx, 'content', e.target.value)}
+                            className="flex-1 bg-transparent outline-none text-sm font-medium text-slate-700"
+                            placeholder={`Nhập nội dung ý ${['a', 'b', 'c', 'd'][sIdx]}...`}
+                          />
+                          
+                          {/* Khối chọn Đúng / Sai */}
+                          <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+                            <button
+                              onClick={() => updateStatement(qIndex, sIdx, 'isTrue', true)}
+                              className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${stmt.isTrue ? 'bg-green-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+                            >
+                              ĐÚNG
+                            </button>
+                            <button
+                              onClick={() => updateStatement(qIndex, sIdx, 'isTrue', false)}
+                              className={`px-4 py-1.5 rounded-md text-xs font-black transition-all ${!stmt.isTrue ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+                            >
+                              SAI
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -293,7 +359,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                   <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-bold border border-indigo-100 whitespace-nowrap shadow-sm">
                     ⏱️ {timeLimit} Phút
                   </div>
-                  {/* TỔNG ĐIỂM TRONG PREVIEW */}
                   <div className="bg-amber-50 text-amber-600 px-4 py-1.5 rounded-xl font-bold border border-amber-100 whitespace-nowrap text-sm shadow-sm">
                     ⭐ Tổng: {totalPoints} Điểm
                   </div>
@@ -315,7 +380,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                        className="prose prose-sm max-w-none flex-1 mt-1"
                        dangerouslySetInnerHTML={{ __html: q.content || "..." }} 
                      />
-                     {/* ĐIỂM CỦA TỪNG CÂU BÊN PREVIEW */}
                      <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs whitespace-nowrap ml-2 mt-1">
                        {q.points !== undefined ? q.points : 1} điểm
                      </span>
@@ -327,6 +391,27 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
                           {q.options?.map((label: string, oi: number) => (
                             <div key={oi} className={`text-sm rounded-lg p-2.5 transition-colors ${q.correctAnswer === oi ? 'text-green-700 font-bold bg-green-50 border border-green-100' : 'text-slate-600 hover:bg-slate-50 border border-transparent'}`}>
                               <span className="font-bold mr-1">{String.fromCharCode(65 + oi)}.</span> {label || "..."} {q.correctAnswer === oi && "✓"}
+                            </div>
+                          ))}
+                        </div>
+                     )}
+
+                     {/* PREVIEW CHO CẤU TRÚC ĐÚNG SAI MỚI */}
+                     {q.type === 'true_false_cluster' && q.statements && (
+                        <div className="grid grid-cols-1 gap-3 mt-2">
+                          {q.statements.map((stmt, sIdx) => (
+                            <div key={sIdx} className="flex justify-between items-center text-sm rounded-xl p-3 bg-slate-50 border border-slate-200">
+                              <div className="flex-1 pr-4">
+                                <span className="font-black text-indigo-500 mr-2">{['a', 'b', 'c', 'd'][sIdx]}.</span>
+                                <span className="text-slate-700 font-medium">{stmt.content || "..."}</span>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                 {stmt.isTrue ? (
+                                   <span className="bg-green-100 text-green-700 px-3 py-1 rounded-md font-bold text-xs border border-green-200 shadow-sm">Đúng ✓</span>
+                                 ) : (
+                                   <span className="bg-red-100 text-red-700 px-3 py-1 rounded-md font-bold text-xs border border-red-200 shadow-sm">Sai ✗</span>
+                                 )}
+                              </div>
                             </div>
                           ))}
                         </div>
