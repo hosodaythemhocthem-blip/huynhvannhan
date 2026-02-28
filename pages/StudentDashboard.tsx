@@ -109,7 +109,7 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  // 🚀 HÀM MỚI: TẢI BÀI TẬP TỪ BẢNG ASSIGNMENTS
+  // 🚀 HÀM ĐÃ ĐƯỢC FIX LỖI JOIN BẢNG 
   const loadAssignments = async (classIds: string[]) => {
     try {
       const { data, error } = await supabase
@@ -119,7 +119,7 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
           due_date,
           class_id,
           classes (name),
-          exam:exam_id (id, title, duration, total_points)
+          exam:exams (id, title, duration, total_points)
         `)
         .in('class_id', classIds)
         .order('due_date', { ascending: true });
@@ -175,7 +175,6 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  // 🚀 HÀM XỬ LÝ KHI BẤM "LÀM BÀI"
   const handleDoExam = (examId: string) => {
     if (onTabChange) {
       // Lưu lại ID đề thi muốn làm để trang Exams biết mà mở lên
