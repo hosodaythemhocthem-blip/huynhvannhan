@@ -109,8 +109,9 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  // 🚀 HÀM ĐÃ ĐƯỢC FIX LỖI JOIN BẢNG 
+  // 🚀 HÀM ĐÃ ĐƯỢC THÊM CONSOLE.LOG ĐỂ BẮT BỆNH
   const loadAssignments = async (classIds: string[]) => {
+    console.log("👉 1. Đang tìm bài tập cho các lớp có ID là:", classIds);
     try {
       const { data, error } = await supabase
         .from('assignments')
@@ -124,7 +125,13 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
         .in('class_id', classIds)
         .order('due_date', { ascending: true });
 
-      if (error) throw error;
+      console.log("👉 2. Kết quả Supabase trả về:", data);
+      
+      if (error) {
+        console.error("❌ 3. Lỗi từ Supabase:", error);
+        throw error;
+      }
+      
       setAssignments(data || []);
     } catch (err) {
       console.error("Lỗi tải bài tập:", err);
