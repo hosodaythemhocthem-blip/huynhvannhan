@@ -187,7 +187,8 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setDeadline("");      
   };
 
-  const confirmAssign = () => {
+  // ĐÃ SỬA: Hàm giao bài lưu thẳng xuống cơ sở dữ liệu Supabase
+  const confirmAssign = async () => {
     if (!selectedClass) {
       alert("⚠️ Thầy vui lòng chọn lớp để giao bài nhé!");
       return;
@@ -197,10 +198,47 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
       return;
     }
 
-    const className = selectedClass === "all" ? "Tất cả các lớp" : myClasses.find(c => c.id === selectedClass)?.name || selectedClass;
-    alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${className}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
-    
-    setAssigningExam(null);
+    try {
+      let assignmentRecords = [];
+
+      if (selectedClass === "all") {
+        assignmentRecords = myClasses.map(cls => ({
+          exam_id: assigningExam?.id,
+          class_id: cls.id,
+          due_date: new Date(deadline).toISOString()
+        }));
+      } else {
+        assignmentRecords = [{
+          exam_id: assigningExam?.id,
+          class_id: selectedClass,
+          due_date: new Date(deadline).toISOString()
+        }];
+      }
+
+      if (assignmentRecords.length === 0) {
+         alert("⚠️ Thầy chưa quản lý lớp nào để giao bài!");
+         return;
+      }
+
+      const { error } = await supabase
+        .from('assignments')
+        .insert(assignmentRecords);
+
+      if (error) {
+        console.error("Lỗi khi lưu bài tập:", error);
+        alert(`❌ Giao bài thất bại: ${error.message}`);
+        return;
+      }
+
+      const className = selectedClass === "all" ? "Tất cả các lớp" : myClasses.find(c => c.id === selectedClass)?.name || selectedClass;
+      alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${className}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
+      
+      setAssigningExam(null);
+
+    } catch (err) {
+      console.error("Lỗi hệ thống:", err);
+      alert("❌ Có lỗi xảy ra trong quá trình giao bài.");
+    }
   };
 
   const filteredExams = exams.filter(e => 
@@ -267,7 +305,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
             </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Học sinh hoạt động</p>
-              {/* ĐÃ SỬA THÀNH BIẾN DỮ LIỆU THẬT */}
               <h3 className="text-2xl font-bold text-slate-800">{activeStudents}</h3>
             </div>
           </div>
@@ -277,7 +314,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
             </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Lượt làm bài tuần này</p>
-              {/* ĐÃ SỬA THÀNH BIẾN DỮ LIỆU THẬT */}
               <h3 className="text-2xl font-bold text-slate-800">{weeklyAttempts}</h3>
             </div>
           </div>
