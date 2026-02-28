@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { User, Class, ClassEnrollment } from "../types";
 import { supabase } from "../supabase";
 import { useToast } from "../components/Toast";
@@ -7,10 +7,24 @@ import {
   CheckCircle2, ChevronRight, GraduationCap, Send, ListPlus, BookOpen, Calendar, Timer, Play
 } from "lucide-react";
 
-// Định nghĩa Type kết hợp từ Database
+// --- BỔ SUNG TYPES RÕ RÀNG ---
 type MyEnrollment = ClassEnrollment & {
   target_class: Class;
 };
+
+// Khai báo cấu trúc chuẩn cho Bài tập thay vì dùng any
+interface Assignment {
+  id: string;
+  due_date: string;
+  class_id: string;
+  classes?: { name: string };
+  exam?: {
+    id: string;
+    title: string;
+    duration: number;
+    total_points: number;
+  };
+}
 
 interface Props {
   user: User;
@@ -19,48 +33,17 @@ interface Props {
 
 const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
   const { showToast } = useToast();
+  
+  // --- STATES ---
   const [enrollments, setEnrollments] = useState<MyEnrollment[]>([]);
   const [allClasses, setAllClasses] = useState<Class[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedClassId, setSelectedClassId] = useState("");
+  
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
-  
-  // 🚀 STATE MỚI ĐỂ LƯU BÀI TẬP ĐƯỢC GIAO
-  const [assignments, setAssignments] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-
-    loadMyClasses();
-    loadAllAvailableClasses();
-
-    // 🚀 THÊM REALTIME: Lắng nghe trạng thái duyệt lớp
-    const enrollmentSubscription = supabase
-      .channel('public:class_enrollments')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'class_enrollments',
-          filter: `student_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Có cập nhật trạng thái lớp học!', payload);
-          loadMyClasses();
-          
-          if (payload.eventType === 'UPDATE' && payload.new.status === 'approved') {
-            showToast("Thầy/Cô giáo vừa duyệt cho em vào lớp!", "success");
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(enrollmentSubscription);
-    };
-  }, [user]);
-
+  // --- DATA FETCHING ---
   const loadAllAvailableClasses = async () => {
     try {
       const { data, error } = await supabase
@@ -75,8 +58,34 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  const loadMyClasses = async () => {
-    setLoading(true);
+  const loadAssignments = async (classIds: string[]) => {
+    if (!classIds.length) {
+      setAssignments([]);
+      return;
+    }
+
+    try {
+      // Dùng !inner để đảm bảo chỉ lấy assignment có liên kết hợp lệ với bảng exams và classes
+      const { data, error } = await supabase
+        .from('assignments')
+        .select(`
+          id,
+          due_date,
+          class_id,
+          classes!inner (name),
+          exam:exams!inner (id, title, duration, total_points)
+        `)
+        .in('class_id', classIds)
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+      setAssignments((data as unknown as Assignment[]) || []);
+    } catch (err) {
+      console.error("Lỗi tải bài tập:", err);
+    }
+  };
+
+  const loadMyClasses = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('class_enrollments')
@@ -92,52 +101,65 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
       const myEnrollments = (data as unknown as MyEnrollment[]) || [];
       setEnrollments(myEnrollments);
 
-      // 🚀 NẾU CÓ LỚP ĐÃ DUYỆT -> TẢI BÀI TẬP CỦA CÁC LỚP ĐÓ
-      const approvedClasses = myEnrollments.filter(e => e.status === 'approved');
-      if (approvedClasses.length > 0) {
-        const classIds = approvedClasses.map(c => c.class_id);
-        loadAssignments(classIds);
-      } else {
-        setAssignments([]);
-      }
-
-    } catch (err: any) {
-      console.error(err);
-      showToast("Không thể tải danh sách lớp học của bạn", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🚀 HÀM ĐÃ ĐƯỢC THÊM CONSOLE.LOG ĐỂ BẮT BỆNH
-  const loadAssignments = async (classIds: string[]) => {
-    console.log("👉 1. Đang tìm bài tập cho các lớp có ID là:", classIds);
-    try {
-      const { data, error } = await supabase
-        .from('assignments')
-        .select(`
-          id,
-          due_date,
-          class_id,
-          classes (name),
-          exam:exams (id, title, duration, total_points)
-        `)
-        .in('class_id', classIds)
-        .order('due_date', { ascending: true });
-
-      console.log("👉 2. Kết quả Supabase trả về:", data);
-      
-      if (error) {
-        console.error("❌ 3. Lỗi từ Supabase:", error);
-        throw error;
-      }
-      
-      setAssignments(data || []);
+      // Tải bài tập cho các lớp đã được duyệt
+      const approvedClassIds = myEnrollments
+        .filter(e => e.status === 'approved')
+        .map(e => e.class_id);
+        
+      await loadAssignments(approvedClassIds);
     } catch (err) {
-      console.error("Lỗi tải bài tập:", err);
+      console.error("Lỗi tải lớp học của tôi:", err);
+      showToast("Không thể tải thông tin lớp học", "error");
     }
-  };
+  }, [user.id, showToast]);
 
+  // --- EFFECT: KHỞI TẠO & LẮNG NGHE REALTIME ---
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let isMounted = true;
+
+    const initializeData = async () => {
+      setLoading(true);
+      await Promise.all([
+        loadAllAvailableClasses(),
+        loadMyClasses()
+      ]);
+      if (isMounted) setLoading(false);
+    };
+
+    initializeData();
+
+    // Thiết lập kênh Realtime riêng biệt cho user này
+    const enrollmentChannel = supabase
+      .channel(`enrollments_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'class_enrollments',
+          filter: `student_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Realtime Update:', payload);
+          loadMyClasses(); // Reload data khi có thay đổi
+          
+          if (payload.eventType === 'UPDATE' && payload.new.status === 'approved') {
+            showToast("Thầy/Cô giáo vừa duyệt cho em vào lớp!", "success");
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup function để tránh memory leak
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(enrollmentChannel);
+    };
+  }, [user?.id, loadMyClasses, showToast]);
+
+  // --- HANDLERS ---
   const handleJoinClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClassId) {
@@ -147,7 +169,7 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
 
     setJoining(true);
     try {
-      const { error: enrollError } = await supabase
+      const { error } = await supabase
         .from('class_enrollments')
         .insert({
           class_id: selectedClassId,
@@ -155,11 +177,11 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
           status: 'pending' 
         });
 
-      if (enrollError) {
-        if (enrollError.code === '23505') {
+      if (error) {
+        if (error.code === '23505') {
           throw new Error("Em đã gửi yêu cầu vào lớp này rồi, vui lòng đợi thầy cô duyệt nhé!");
         }
-        throw enrollError;
+        throw error;
       }
 
       const joinedClass = allClasses.find(c => c.id === selectedClassId);
@@ -182,14 +204,18 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  const handleDoExam = (examId: string) => {
+  const handleDoExam = (examId: string | undefined) => {
+    if (!examId) {
+      showToast("Lỗi: Không tìm thấy ID bài tập!", "error");
+      return;
+    }
     if (onTabChange) {
-      // Lưu lại ID đề thi muốn làm để trang Exams biết mà mở lên
       localStorage.setItem('lms_active_exam_id', examId);
-      onTabChange("exams"); // Chuyển sang tab làm bài
+      onTabChange("exams");
     }
   };
 
+  // --- RENDER HELPERS ---
   const pendingList = enrollments.filter(e => e.status === 'pending');
   const activeList = enrollments.filter(e => e.status === 'approved');
 
@@ -203,6 +229,7 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
   return (
     <div className="space-y-8 animate-fade-in pb-20 max-w-6xl mx-auto">
       
+      {/* HEADER */}
       <header className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
         <div className="flex items-center gap-6 z-10">
@@ -297,13 +324,13 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
                                 </h4>
                                 <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-500">
                                    <span className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md">
-                                      <School size={12}/> {task.classes?.name}
+                                      <School size={12}/> {task.classes?.name || "Lớp học"}
                                    </span>
                                    <span className="flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1 rounded-md">
                                       <Calendar size={12}/> Hạn nộp: {new Date(task.due_date).toLocaleString('vi-VN')}
                                    </span>
                                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md">
-                                      Thời gian: {task.exam?.duration} phút
+                                      Thời gian: {task.exam?.duration || 0} phút
                                    </span>
                                 </div>
                              </div>
