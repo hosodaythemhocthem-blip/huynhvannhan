@@ -29,12 +29,13 @@ export interface Exam {
 
 interface ExamEditorProps {
   user: { id: string } | null;
+  classId: string; // 👈 Đã thêm classId vào đây
   exam?: Exam | null;
   aiGeneratedData?: Partial<Exam> | null;
   onClose: () => void;
 }
 
-const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, onClose }) => {
+const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGeneratedData, onClose }) => {
   const [title, setTitle] = useState(exam?.title || "Đề thi mới (Chưa đặt tên)");
   const [timeLimit, setTimeLimit] = useState<number>(exam?.timeLimit || 45);
   const [questions, setQuestions] = useState<Question[]>(exam?.questions || []);
@@ -83,6 +84,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, exam, aiGeneratedData, on
         time_limit: timeLimit,
         questions: questions,
         teacher_id: teacherId,
+        class_id: classId, // 👈 Đã thêm trường này để lưu ID lớp xuống Database
         updated_at: new Date().toISOString(),
         is_locked: false
       };
