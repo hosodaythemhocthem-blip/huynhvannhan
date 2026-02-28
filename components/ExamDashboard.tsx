@@ -4,7 +4,6 @@ import { supabase } from "../supabase";
 import ExamCard from "./ExamCard";
 import ExamEditor from "./ExamEditor"; 
 import ImportExamFromFile from "./ImportExamFromFile"; 
-// 🚀 IMPORT COMPONENT LÀM BÀI THI CỦA HỌC SINH
 import StudentQuiz from "./StudentQuiz"; 
 import { useToast } from "./Toast";
 import { User, Exam } from "../types";
@@ -30,19 +29,41 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [parsedExamData, setParsedExamData] = useState<any>(null);
 
-  // 🚀 STATE MỚI: Quản lý trạng thái học sinh đang làm bài
+  // State quản lý học sinh đang làm bài
   const [takingExam, setTakingExam] = useState<Exam | null>(null);
 
-  // SIÊU ĐỈNH: State quản lý Modal Giao Bài
+  // 🚀 ĐÃ THÊM: Quản lý danh sách lớp học thật từ Database
+  const [classes, setClasses] = useState<any[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>(""); // Lớp chọn để tạo đề
+
+  // State quản lý Modal Giao Bài
   const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
-  const [selectedClass, setSelectedClass] = useState("class-10a1"); 
+  const [selectedClass, setSelectedClass] = useState(""); 
   const [deadline, setDeadline] = useState("");
 
   const isTeacher = user.role === 'teacher' || user.role === 'admin';
 
   useEffect(() => {
     fetchExams();
+    if (isTeacher) {
+      fetchClasses();
+    }
   }, []);
+
+  // Lấy danh sách Lớp học từ Database
+  const fetchClasses = async () => {
+    try {
+      const { data, error } = await supabase.from('classes').select('*');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setClasses(data);
+        setSelectedClassId(data[0].id); // Mặc định chọn lớp đầu tiên để tạo đề
+        setSelectedClass(data[0].id);   // Mặc định chọn lớp đầu tiên cho Modal giao bài
+      }
+    } catch (err) {
+      console.error("Lỗi tải lớp:", err);
+    }
+  };
 
   const fetchExams = async () => {
     setLoading(true);
@@ -81,6 +102,10 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   };
 
   const openEditor = (exam?: Exam) => {
+    if (isTeacher && !selectedClassId && !exam?.id) {
+      showToast("Vui lòng đợi tải dữ liệu lớp học trước khi tạo đề!", "error");
+      return;
+    }
     setEditingExam(exam || null);
     setParsedExamData(null); 
     setIsEditorOpen(true);
@@ -93,16 +118,32 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     setIsEditorOpen(true); 
   };
 
-  const handleConfirmAssign = () => {
-    if (!deadline) {
-      showToast("Vui lòng chọn hạn nộp bài!", "error");
-      return;
+  // 🚀 ĐÃ FIX: Lệnh Giao Bài thật xuống Database
+  const handleConfirmAssign = async () => {
+    if (!selectedClass) return showToast("Vui lòng chọn lớp!", "error");
+    if (!deadline) return showToast("Vui lòng chọn hạn nộp bài!", "error");
+    
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .update({ 
+          class_id: selectedClass, 
+          is_locked: false // Mở khóa luôn để học sinh làm
+        } as any)
+        .eq('id', assigningExam?.id);
+
+      if (error) throw error;
+
+      showToast(`Đã giao đề "${assigningExam?.title}" cho lớp thành công! 🚀`, "success");
+      setAssigningExam(null); 
+      fetchExams(); // Tải lại danh sách đề mới nhất
+    } catch (error) {
+      showToast("Lỗi khi giao đề thi", "error");
+      console.error(error);
     }
-    showToast(`Đã giao đề "${assigningExam?.title}" cho lớp thành công! 🚀`, "success");
-    setAssigningExam(null); 
   };
 
-  // 🚀 LOGIC LỌC ĐỀ THI: Bảo vệ học sinh khỏi các đề chưa mở
+  // LOGIC LỌC ĐỀ THI: Bảo vệ học sinh khỏi các đề chưa mở
   let processedExams = exams.filter(e => (e.title || "").toLowerCase().includes(searchTerm.toLowerCase()));
   
   if (!isTeacher) {
@@ -131,6 +172,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     return (
       <ExamEditor 
         user={user}
+        classId={selectedClassId} // 👈 ĐÃ TRUYỀN CLASS ID VÀO ĐÂY (Sẽ hết lỗi NULL)
         exam={editingExam} 
         aiGeneratedData={parsedExamData} 
         onClose={() => { setIsEditorOpen(false); setParsedExamData(null); fetchExams(); }} 
@@ -138,13 +180,12 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     );
   }
 
-  // Nếu học sinh click vào đề, hiển thị StudentQuiz
   if (takingExam) {
     return (
       <StudentQuiz 
         exam={takingExam} 
         user={user} 
-        onClose={() => { setTakingExam(null); fetchExams(); }} // Cập nhật lại khi nộp bài xong
+        onClose={() => { setTakingExam(null); fetchExams(); }} 
       />
     );
   }
@@ -152,7 +193,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
       
-      {/* HEADER & THỐNG KÊ (Giữ nguyên) */}
+      {/* HEADER & THỐNG KÊ */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
         <div>
           <h1 className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600 mb-2">
@@ -227,20 +268,33 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
         </div>
 
         {isTeacher && (
-          <div className="flex gap-3 w-full xl:w-auto">
+          <div className="flex gap-3 w-full xl:w-auto items-center">
+            
+            {/* 🚀 ĐÃ THÊM: Dropdown Chọn lớp trước khi tạo đề */}
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              title="Chọn lớp học để tạo đề"
+              className="px-4 py-3 bg-indigo-50/80 border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-700 font-bold cursor-pointer hidden sm:block max-w-[200px] truncate"
+            >
+              {classes.length === 0 ? <option value="">Đang tải lớp...</option> : classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name || 'Lớp chưa đặt tên'}</option>
+              ))}
+            </select>
+
             <button 
               onClick={() => setIsImportModalOpen(true)}
               className="flex-1 xl:flex-none flex justify-center items-center gap-2 px-5 py-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-indigo-200 hover:border-indigo-300 text-indigo-700 font-bold rounded-xl cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-sm"
             >
               <Sparkles size={18} className="text-violet-500"/>
-              <span>AI Bóc Tách File</span>
+              <span className="whitespace-nowrap">AI Bóc Tách File</span>
             </button>
             <button 
               onClick={() => openEditor()}
               className="flex-1 xl:flex-none flex justify-center items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-300 hover:shadow-indigo-400 transition-all hover:scale-105 active:scale-95"
             >
               <Plus size={20} strokeWidth={3}/> 
-              <span>Tạo Đề Mới</span>
+              <span className="whitespace-nowrap">Tạo Đề Mới</span>
             </button>
           </div>
         )}
@@ -269,7 +323,6 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                   exam={exam}
                   role={user.role}
                   questionCount={Array.isArray((exam as any).questions) ? (exam as any).questions.length : 0}
-                  // 🚀 KÍCH HOẠT NÚT LÀM BÀI Ở ĐÂY
                   onView={() => setTakingExam(exam)} 
                   onEdit={() => openEditor(exam)}
                   onDelete={handleDelete}
@@ -306,7 +359,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
       {/* Modal AI */}
       <ImportExamFromFile isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={handleImportSuccess} />
 
-      {/* SIÊU ĐỈNH: MODAL GIAO BÀI (ASSIGN EXAM) (Giữ nguyên phần UI của bạn) */}
+      {/* MODAL GIAO BÀI (ASSIGN EXAM) */}
       <AnimatePresence>
         {assigningExam && (
           <>
@@ -337,15 +390,15 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                   <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                     <Users size={16} className="text-indigo-500"/> Chọn Lớp Nhận Đề
                   </label>
+                  {/* 🚀 ĐÃ FIX: Danh sách chọn lớp gọi từ Database thật */}
                   <select 
                     value={selectedClass}
                     onChange={(e) => setSelectedClass(e.target.value)}
-                    className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm cursor-pointer"
+                    className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm cursor-pointer font-medium"
                   >
-                    <option value="class-10a1">Lớp 10A1 - Toán Cơ Bản</option>
-                    <option value="class-10a2">Lớp 10A2 - Toán Nâng Cao</option>
-                    <option value="class-11b1">Lớp 11B1 - Luyện Thi</option>
-                    <option value="all">Giao cho tất cả các lớp</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name || `Lớp: ${c.id.substring(0,6)}`}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -357,7 +410,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                     type="datetime-local" 
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
-                    className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm cursor-pointer"
+                    className="w-full p-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm cursor-pointer font-medium"
                   />
                 </div>
               </div>
