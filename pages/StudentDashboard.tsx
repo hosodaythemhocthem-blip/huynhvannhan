@@ -14,27 +14,54 @@ type MyEnrollment = ClassEnrollment & {
 
 interface Props {
   user: User;
+  // Thêm prop này để chuyển hướng sang trang Kỳ thi khi click vào lớp
+  onTabChange?: (tab: string) => void; 
 }
 
-const StudentDashboard: React.FC<Props> = ({ user }) => {
+const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
   const { showToast } = useToast();
   const [enrollments, setEnrollments] = useState<MyEnrollment[]>([]);
-  
-  // State mới để lưu danh sách TẤT CẢ các lớp cho học sinh chọn
   const [allClasses, setAllClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState("");
-  
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
-    if (user?.id) {
-      loadMyClasses();
-      loadAllAvailableClasses(); // Gọi hàm lấy danh sách lớp
-    }
+    if (!user?.id) return;
+
+    loadMyClasses();
+    loadAllAvailableClasses();
+
+    // 🚀 THÊM REALTIME: Tự động lắng nghe khi giáo viên duyệt lớp
+    const enrollmentSubscription = supabase
+      .channel('public:class_enrollments')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Lắng nghe mọi thay đổi (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'class_enrollments',
+          filter: `student_id=eq.${user.id}` // Chỉ lắng nghe thay đổi của học sinh này
+        },
+        (payload) => {
+          console.log('Có cập nhật trạng thái lớp học!', payload);
+          // Nếu có thay đổi (ví dụ: giáo viên vừa duyệt), lập tức gọi lại hàm tải dữ liệu
+          loadMyClasses();
+          
+          // Hiện thông báo cho học sinh biết
+          if (payload.eventType === 'UPDATE' && payload.new.status === 'approved') {
+            showToast("Thầy/Cô giáo vừa duyệt cho em vào lớp!", "success");
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup function để gỡ lắng nghe khi component unmount
+    return () => {
+      supabase.removeChannel(enrollmentSubscription);
+    };
   }, [user]);
 
-  // Hàm lấy danh sách tất cả các lớp trên hệ thống
   const loadAllAvailableClasses = async () => {
     try {
       const { data, error } = await supabase
@@ -80,17 +107,15 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
 
     setJoining(true);
     try {
-      // Chỉ cần Insert trực tiếp class_id mà học sinh đã chọn
       const { error: enrollError } = await supabase
         .from('class_enrollments')
         .insert({
           class_id: selectedClassId,
           student_id: user.id,
-          status: 'pending' // Mặc định là chờ giáo viên duyệt
+          status: 'pending' 
         });
 
       if (enrollError) {
-        // Lỗi 23505 là mã lỗi của Postgres khi vi phạm Unique (đã xin vào rồi)
         if (enrollError.code === '23505') {
           throw new Error("Em đã gửi yêu cầu vào lớp này rồi, vui lòng đợi thầy cô duyệt nhé!");
         }
@@ -100,13 +125,24 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
       const joinedClass = allClasses.find(c => c.id === selectedClassId);
       showToast(`Đã gửi yêu cầu tham gia lớp ${joinedClass?.name}!`, "success");
       
-      setSelectedClassId(""); // Reset lại lựa chọn
-      await loadMyClasses(); // Tải lại danh sách lớp của học sinh
+      setSelectedClassId(""); 
+      await loadMyClasses(); 
     } catch (err: any) {
       console.error(err);
       showToast(err.message || "Lỗi khi tham gia lớp", "error");
     } finally {
       setJoining(false);
+    }
+  };
+
+  // 🚀 XỬ LÝ CLICK: Chuyển học sinh qua tab Kỳ thi
+  const handleGoToClass = (classId: string) => {
+    if (onTabChange) {
+      // Bạn có thể lưu classId vào localStorage hoặc Context/Zustand để trang 'exams' biết học sinh đang xem lớp nào
+      localStorage.setItem('lms_current_class_id', classId);
+      onTabChange("exams"); // Chuyển sang tab Kỳ thi (giống với id trong Sidebar)
+    } else {
+      showToast("Đang phát triển tính năng chuyển trang...", "warning");
     }
   };
 
@@ -122,11 +158,10 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
 
   return (
     <div className="space-y-8 animate-fade-in pb-20 max-w-6xl mx-auto">
+      {/* ... [GIỮ NGUYÊN PHẦN HEADER VÀ CỘT TRÁI CỦA BẠN] ... */}
       
-      {/* HEADER & THÔNG TIN HỌC SINH */}
       <header className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
-        
         <div className="flex items-center gap-6 z-10">
           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center shadow-2xl text-white font-black text-2xl">
              {(user.full_name || 'H').charAt(0).toUpperCase()}
@@ -148,18 +183,13 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
               <div className="absolute -top-10 -right-10 text-indigo-500 opacity-30">
                  <ListPlus size={120} strokeWidth={1} />
               </div>
-              
               <div className="relative z-10">
                  <h3 className="text-xl font-black mb-2 flex items-center gap-2">
                     <School size={24} /> Chọn lớp tham gia
                  </h3>
-                 <p className="text-indigo-200 text-sm mb-6">
-                    Lựa chọn lớp học em muốn tham gia từ danh sách bên dưới.
-                 </p>
-                 
+                 <p className="text-indigo-200 text-sm mb-6">Lựa chọn lớp học em muốn tham gia từ danh sách bên dưới.</p>
                  <form onSubmit={handleJoinClass} className="space-y-4">
                     <div className="bg-indigo-700/50 p-2 rounded-2xl border border-indigo-500 focus-within:ring-2 focus-within:ring-white transition-all flex items-center">
-                       {/* THAY INPUT BẰNG SELECT DROPDOWN */}
                        <select 
                           required
                           className="w-full bg-transparent border-none outline-none font-bold text-white text-base cursor-pointer appearance-none px-2 py-1" 
@@ -168,9 +198,7 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
                        >
                           <option value="" className="text-slate-800">-- Bấm để chọn lớp học --</option>
                           {allClasses.map(cls => (
-                             <option key={cls.id} value={cls.id} className="text-slate-800">
-                                {cls.name}
-                             </option>
+                             <option key={cls.id} value={cls.id} className="text-slate-800">{cls.name}</option>
                           ))}
                        </select>
                     </div>
@@ -185,7 +213,6 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
               </div>
            </div>
 
-           {/* HIỂN THỊ CÁC LỚP ĐANG CHỜ DUYỆT */}
            {pendingList.length > 0 && (
               <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100">
                  <h4 className="font-black text-amber-700 text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -194,12 +221,8 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
                  <div className="space-y-3">
                     {pendingList.map(enroll => (
                        <div key={enroll.id} className="bg-white p-4 rounded-2xl shadow-sm border border-amber-100 flex items-center justify-between">
-                          <span className="font-bold text-slate-700 truncate pr-2">
-                             Lớp: {enroll.target_class?.name || '---'}
-                          </span>
-                          <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-1 rounded-md font-black uppercase whitespace-nowrap">
-                             Đang xử lý
-                          </span>
+                          <span className="font-bold text-slate-700 truncate pr-2">Lớp: {enroll.target_class?.name || '---'}</span>
+                          <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-1 rounded-md font-black uppercase whitespace-nowrap">Đang xử lý</span>
                        </div>
                     ))}
                  </div>
@@ -217,7 +240,12 @@ const StudentDashboard: React.FC<Props> = ({ user }) => {
            {activeList.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                  {activeList.map(enroll => (
-                    <div key={enroll.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all group cursor-pointer flex flex-col h-full">
+                    // 🚀 ĐÃ THÊM SỰ KIỆN onClick Ở ĐÂY
+                    <div 
+                      key={enroll.id} 
+                      onClick={() => handleGoToClass(enroll.class_id)}
+                      className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all group cursor-pointer flex flex-col h-full"
+                    >
                        <div className="flex items-start justify-between mb-4">
                           <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
                              <School size={24} />
