@@ -35,7 +35,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- THÊM STATE ĐỂ LƯU THỐNG KÊ ---
   const [activeStudents, setActiveStudents] = useState<number | string>("--");
   const [weeklyAttempts, setWeeklyAttempts] = useState<number | string>("--");
 
@@ -55,11 +54,9 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     }
   }, [user.id, activeTab]);
 
-  // --- HÀM MỚI: TẢI THỐNG KÊ HOẠT ĐỘNG TỪ SUPABASE ---
   useEffect(() => {
     const loadStats = async () => {
       try {
-        // 1. Đếm tổng số học sinh đã tham gia vào các lớp của thầy
         if (myClasses.length > 0) {
           const classIds = myClasses.map(c => c.id);
           const { count: studentCount } = await supabase
@@ -72,7 +69,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
           setActiveStudents(0);
         }
 
-        // 2. Đếm lượt làm bài (quiz_attempts) trong 7 ngày qua của các đề thi của thầy
         if (exams.length > 0) {
           const examIds = exams.map(e => e.id);
           const sevenDaysAgo = new Date();
@@ -187,7 +183,7 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setDeadline("");      
   };
 
-  // ĐÃ SỬA: Hàm giao bài lưu thẳng xuống cơ sở dữ liệu Supabase
+  // --- HÀM GIAO BÀI ĐÃ ĐƯỢC SỬA LỖI (Thêm teacher_id) ---
   const confirmAssign = async () => {
     if (!selectedClass) {
       alert("⚠️ Thầy vui lòng chọn lớp để giao bài nhé!");
@@ -201,16 +197,19 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     try {
       let assignmentRecords = [];
 
+      // THÊM: teacher_id: user.id vào từng record
       if (selectedClass === "all") {
         assignmentRecords = myClasses.map(cls => ({
           exam_id: assigningExam?.id,
           class_id: cls.id,
+          teacher_id: user.id, // <--- SỬA LỖI Ở ĐÂY
           due_date: new Date(deadline).toISOString()
         }));
       } else {
         assignmentRecords = [{
           exam_id: assigningExam?.id,
           class_id: selectedClass,
+          teacher_id: user.id, // <--- VÀ Ở ĐÂY
           due_date: new Date(deadline).toISOString()
         }];
       }
