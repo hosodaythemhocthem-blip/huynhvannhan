@@ -142,11 +142,30 @@ export interface AiLog extends BaseEntity {
    NOTIFICATION (HỆ THỐNG THÔNG BÁO - TÙY CHỌN)
 ====================================================== */
 
-// BẢNG MỚI: Dùng để đẩy thông báo "Có 1 học sinh xin vào lớp" cho giáo viên
 export interface Notification extends BaseEntity {
   user_id: string; // ID của người nhận thông báo (Giáo viên)
   title: string;
   message: string;
   is_read: boolean;
   link_url?: string; // Link bấm vào (ví dụ: /teacher/class-management)
+}
+
+/* ======================================================
+   ASSIGNMENT (BẢNG GIAO BÀI TẬP - FIX LỖI 0 BÀI TẬP)
+====================================================== */
+
+export interface Assignment extends BaseEntity {
+  exam_id: string;
+  class_id: string;
+  teacher_id: string;
+  due_date: string;
+  
+  // Dữ liệu Join từ Supabase trả về để hiển thị UI
+  classes?: { name: string };
+  exam?: {
+    id: string;
+    title: string;
+    duration: number;
+    total_points: number;
+  };
 }
