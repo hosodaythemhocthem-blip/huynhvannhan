@@ -4,7 +4,7 @@ import { supabase } from "../supabase";
 import { useToast } from "../components/Toast";
 import { 
   School, Loader2, Clock, 
-  CheckCircle2, ChevronRight, GraduationCap, Send, ListPlus
+  CheckCircle2, ChevronRight, GraduationCap, Send, ListPlus, BookOpen, Calendar, Timer, Play
 } from "lucide-react";
 
 // Định nghĩa Type kết hợp từ Database
@@ -14,7 +14,6 @@ type MyEnrollment = ClassEnrollment & {
 
 interface Props {
   user: User;
-  // Thêm prop này để chuyển hướng sang trang Kỳ thi khi click vào lớp
   onTabChange?: (tab: string) => void; 
 }
 
@@ -25,6 +24,9 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  
+  // 🚀 STATE MỚI ĐỂ LƯU BÀI TẬP ĐƯỢC GIAO
+  const [assignments, setAssignments] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -32,23 +34,21 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     loadMyClasses();
     loadAllAvailableClasses();
 
-    // 🚀 THÊM REALTIME: Tự động lắng nghe khi giáo viên duyệt lớp
+    // 🚀 THÊM REALTIME: Lắng nghe trạng thái duyệt lớp
     const enrollmentSubscription = supabase
       .channel('public:class_enrollments')
       .on(
         'postgres_changes',
         {
-          event: '*', // Lắng nghe mọi thay đổi (INSERT, UPDATE, DELETE)
+          event: '*',
           schema: 'public',
           table: 'class_enrollments',
-          filter: `student_id=eq.${user.id}` // Chỉ lắng nghe thay đổi của học sinh này
+          filter: `student_id=eq.${user.id}`
         },
         (payload) => {
           console.log('Có cập nhật trạng thái lớp học!', payload);
-          // Nếu có thay đổi (ví dụ: giáo viên vừa duyệt), lập tức gọi lại hàm tải dữ liệu
           loadMyClasses();
           
-          // Hiện thông báo cho học sinh biết
           if (payload.eventType === 'UPDATE' && payload.new.status === 'approved') {
             showToast("Thầy/Cô giáo vừa duyệt cho em vào lớp!", "success");
           }
@@ -56,7 +56,6 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
       )
       .subscribe();
 
-    // Cleanup function để gỡ lắng nghe khi component unmount
     return () => {
       supabase.removeChannel(enrollmentSubscription);
     };
@@ -89,12 +88,46 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setEnrollments((data as unknown as MyEnrollment[]) || []);
+      
+      const myEnrollments = (data as unknown as MyEnrollment[]) || [];
+      setEnrollments(myEnrollments);
+
+      // 🚀 NẾU CÓ LỚP ĐÃ DUYỆT -> TẢI BÀI TẬP CỦA CÁC LỚP ĐÓ
+      const approvedClasses = myEnrollments.filter(e => e.status === 'approved');
+      if (approvedClasses.length > 0) {
+        const classIds = approvedClasses.map(c => c.class_id);
+        loadAssignments(classIds);
+      } else {
+        setAssignments([]);
+      }
+
     } catch (err: any) {
       console.error(err);
       showToast("Không thể tải danh sách lớp học của bạn", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🚀 HÀM MỚI: TẢI BÀI TẬP TỪ BẢNG ASSIGNMENTS
+  const loadAssignments = async (classIds: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('assignments')
+        .select(`
+          id,
+          due_date,
+          class_id,
+          classes (name),
+          exam:exam_id (id, title, duration, total_points)
+        `)
+        .in('class_id', classIds)
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+      setAssignments(data || []);
+    } catch (err) {
+      console.error("Lỗi tải bài tập:", err);
     }
   };
 
@@ -135,14 +168,19 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
   };
 
-  // 🚀 XỬ LÝ CLICK: Chuyển học sinh qua tab Kỳ thi
   const handleGoToClass = (classId: string) => {
     if (onTabChange) {
-      // Bạn có thể lưu classId vào localStorage hoặc Context/Zustand để trang 'exams' biết học sinh đang xem lớp nào
       localStorage.setItem('lms_current_class_id', classId);
-      onTabChange("exams"); // Chuyển sang tab Kỳ thi (giống với id trong Sidebar)
-    } else {
-      showToast("Đang phát triển tính năng chuyển trang...", "warning");
+      onTabChange("exams"); 
+    }
+  };
+
+  // 🚀 HÀM XỬ LÝ KHI BẤM "LÀM BÀI"
+  const handleDoExam = (examId: string) => {
+    if (onTabChange) {
+      // Lưu lại ID đề thi muốn làm để trang Exams biết mà mở lên
+      localStorage.setItem('lms_active_exam_id', examId);
+      onTabChange("exams"); // Chuyển sang tab làm bài
     }
   };
 
@@ -158,7 +196,6 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
 
   return (
     <div className="space-y-8 animate-fade-in pb-20 max-w-6xl mx-auto">
-      {/* ... [GIỮ NGUYÊN PHẦN HEADER VÀ CỘT TRÁI CỦA BẠN] ... */}
       
       <header className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl -z-10 opacity-50 translate-x-1/2 -translate-y-1/2"></div>
@@ -230,51 +267,104 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
            )}
         </aside>
 
-        {/* CỘT PHẢI: DANH SÁCH LỚP CHÍNH THỨC */}
-        <main className="lg:col-span-8 space-y-6">
-           <div className="flex items-center gap-3 mb-6 px-2">
-              <GraduationCap className="text-slate-400" size={28} />
-              <h3 className="text-xl font-black text-slate-800">Lớp học của tôi</h3>
-           </div>
+        {/* CỘT PHẢI: DANH SÁCH LỚP CHÍNH THỨC & BÀI TẬP */}
+        <main className="lg:col-span-8 space-y-10">
+           
+           {/* PHẦN 1: BÀI TẬP MỚI ĐƯỢC GIAO */}
+           <section>
+              <div className="flex items-center gap-3 mb-6 px-2">
+                 <BookOpen className="text-rose-500" size={28} />
+                 <h3 className="text-xl font-black text-slate-800">Bài tập cần làm ({assignments.length})</h3>
+              </div>
 
-           {activeList.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                 {activeList.map(enroll => (
-                    // 🚀 ĐÃ THÊM SỰ KIỆN onClick Ở ĐÂY
-                    <div 
-                      key={enroll.id} 
-                      onClick={() => handleGoToClass(enroll.class_id)}
-                      className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all group cursor-pointer flex flex-col h-full"
-                    >
-                       <div className="flex items-start justify-between mb-4">
-                          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-                             <School size={24} />
+              {assignments.length > 0 ? (
+                 <div className="grid grid-cols-1 gap-4">
+                    {assignments.map(task => (
+                       <div key={task.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 hover:shadow-md hover:border-rose-100 transition-all group">
+                          <div className="flex items-center gap-5 w-full">
+                             <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                                <Timer size={24} />
+                             </div>
+                             <div>
+                                <h4 className="font-black text-lg text-slate-800 group-hover:text-rose-600 transition-colors">
+                                   {task.exam?.title || "Bài tập chưa có tên"}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-500">
+                                   <span className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md">
+                                      <School size={12}/> {task.classes?.name}
+                                   </span>
+                                   <span className="flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1 rounded-md">
+                                      <Calendar size={12}/> Hạn nộp: {new Date(task.due_date).toLocaleString('vi-VN')}
+                                   </span>
+                                   <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md">
+                                      Thời gian: {task.exam?.duration} phút
+                                   </span>
+                                </div>
+                             </div>
                           </div>
-                          <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500 bg-emerald-50 px-3 py-1.5 rounded-full uppercase">
-                             <CheckCircle2 size={12} /> Đã duyệt
-                          </span>
+                          
+                          <button 
+                             onClick={() => handleDoExam(task.exam?.id)}
+                             className="w-full sm:w-auto flex-shrink-0 bg-rose-500 hover:bg-rose-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                          >
+                             <Play size={16} /> Làm Bài
+                          </button>
                        </div>
-                       
-                       <h4 className="font-black text-xl text-slate-800 mb-1">{enroll.target_class?.name || 'Lớp ẩn danh'}</h4>
-                       
-                       <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between text-indigo-600 font-bold text-sm">
-                          <span>Vào không gian lớp</span>
-                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                       </div>
-                    </div>
-                 ))}
-              </div>
-           ) : (
-              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
-                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
-                    <School size={40} />
+                    ))}
                  </div>
-                 <h4 className="text-lg font-black text-slate-700 mb-2">Chưa tham gia lớp nào</h4>
-                 <p className="text-slate-400 text-sm max-w-sm mx-auto">
-                    Em hãy chọn một lớp học ở khung bên trái và gửi yêu cầu tham gia để bắt đầu nhé.
-                 </p>
+              ) : (
+                 <div className="bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 p-8 text-center">
+                    <p className="text-slate-500 font-medium">Hiện tại chưa có bài tập nào cần làm. Tuyệt vời! 🎉</p>
+                 </div>
+              )}
+           </section>
+
+           {/* PHẦN 2: LỚP HỌC CỦA TÔI */}
+           <section>
+              <div className="flex items-center gap-3 mb-6 px-2">
+                 <GraduationCap className="text-emerald-500" size={28} />
+                 <h3 className="text-xl font-black text-slate-800">Lớp học của tôi</h3>
               </div>
-           )}
+
+              {activeList.length > 0 ? (
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {activeList.map(enroll => (
+                       <div 
+                         key={enroll.id} 
+                         onClick={() => handleGoToClass(enroll.class_id)}
+                         className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-emerald-100 transition-all group cursor-pointer flex flex-col h-full"
+                       >
+                          <div className="flex items-start justify-between mb-4">
+                             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
+                                <School size={24} />
+                             </div>
+                             <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500 bg-emerald-50 px-3 py-1.5 rounded-full uppercase">
+                                <CheckCircle2 size={12} /> Đã duyệt
+                             </span>
+                          </div>
+                          
+                          <h4 className="font-black text-xl text-slate-800 mb-1">{enroll.target_class?.name || 'Lớp ẩn danh'}</h4>
+                          
+                          <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between text-emerald-600 font-bold text-sm">
+                             <span>Vào không gian lớp</span>
+                             <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                          </div>
+                       </div>
+                    ))}
+                 </div>
+              ) : (
+                 <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center flex flex-col items-center justify-center min-h-[200px]">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
+                       <School size={32} />
+                    </div>
+                    <h4 className="text-lg font-black text-slate-700 mb-2">Chưa tham gia lớp nào</h4>
+                    <p className="text-slate-400 text-sm max-w-sm mx-auto">
+                       Em hãy chọn một lớp học ở khung bên trái và gửi yêu cầu tham gia nhé.
+                    </p>
+                 </div>
+              )}
+           </section>
+
         </main>
       </div>
     </div>
