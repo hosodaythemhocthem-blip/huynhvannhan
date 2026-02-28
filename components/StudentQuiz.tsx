@@ -22,10 +22,12 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
-  // Khắc phục lỗi type duration: fallback về 60 phút nếu không có
   const [timeLeft, setTimeLeft] = useState((exam as any).duration ? (exam as any).duration * 60 : 60 * 60); 
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // 🚀 STATE MỚI: Cờ báo hiệu hết giờ để chống lỗi Closure
+  const [isTimeUp, setIsTimeUp] = useState(false);
   
   // --- INIT ---
   useEffect(() => {
@@ -39,7 +41,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
       showToast("Lỗi tải đề thi. Vui lòng báo giáo viên.", "error");
     }
 
-    // Khôi phục bài làm nháp tự động
     const storageKey = `quiz_draft_${exam.id}_${user.id}`;
     const savedAnswers = localStorage.getItem(storageKey);
     if (savedAnswers) {
@@ -54,7 +55,7 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmit(true); 
+          setIsTimeUp(true); // 🚀 Bật cờ hết giờ thay vì gọi handleSubmit trực tiếp
           return 0;
         }
         return prev - 1;
@@ -62,6 +63,14 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // --- AUTO SUBMIT KHI HẾT GIỜ ---
+  // 🚀 Effect này luôn nhìn thấy state "answers" và "questions" mới nhất
+  useEffect(() => {
+    if (isTimeUp && !isSubmitting) {
+      handleSubmit(true);
+    }
+  }, [isTimeUp]); // Chỉ chạy khi isTimeUp chuyển sang true
 
   // --- AUTO SAVE ---
   useEffect(() => {
@@ -99,7 +108,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
     try {
       const score = quizService.gradeExam(questions, answers);
       
-      // Xây dựng payload an toàn, loại bỏ các trường gây lỗi type TypeScript
       const payload: any = {
         exam_id: exam.id,
         student_id: user.id,
@@ -107,14 +115,12 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
         score: score,
       };
       
-      // Chỉ truyền class_id nếu backend thực sự cần (khắc phục lỗi TS2353)
       if ((user as any).class_id) {
         payload.class_id = (user as any).class_id;
       }
 
       await quizService.submitExam(payload);
 
-      // Cleanup nháp sau khi nộp thành công
       localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       showToast(autoSubmit ? "Hết giờ! Đã tự động nộp bài." : "Nộp bài thành công!", "success");
       onClose(); 
@@ -127,7 +133,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
     }
   };
 
-  // Format thời gian
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -139,9 +144,9 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
   const currentQ = questions[currentQIndex];
   const progress = Math.round((Object.keys(answers).length / questions.length) * 100);
 
+  // ... (Giữ nguyên toàn bộ phần return giao diện của bạn ở dưới, không cần thay đổi gì cả)
   return (
     <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden font-sans">
-      
       {/* HEADER */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center shadow-sm h-16 shrink-0 z-20">
         <div className="flex items-center gap-3">
@@ -229,7 +234,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                        </span>
                     </div>
                     
-                    {/* MathPreview đảm bảo render công thức siêu đẹp */}
                     <div className="text-lg text-slate-800 leading-relaxed font-medium">
                        <MathPreview content={currentQ.content} />
                     </div>
@@ -264,7 +268,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                        <div className="space-y-3">
                           <div className="flex justify-between items-end">
                             <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">Bài làm của bạn:</p>
-                            {/* Nút dán siêu nhanh cho tự luận */}
                             <button 
                               onClick={() => handlePaste(currentQ.id)}
                               className="text-sm bg-white border border-slate-200 shadow-sm hover:border-indigo-300 text-indigo-600 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-2 transition-all active:scale-95"
@@ -282,7 +285,6 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
                     )}
                  </div>
 
-                 {/* Action Bar dưới cùng (Cho phép xóa đáp án hiện tại) */}
                  <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end items-center rounded-b-2xl">
                     <button 
                       onClick={() => handleClearAnswer(currentQ.id)}
