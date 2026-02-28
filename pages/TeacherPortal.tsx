@@ -31,9 +31,13 @@ interface Props {
 const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
-  const [myClasses, setMyClasses] = useState<any[]>([]); // THÊM STATE LƯU LỚP HỌC THẬT
+  const [myClasses, setMyClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // --- THÊM STATE ĐỂ LƯU THỐNG KÊ ---
+  const [activeStudents, setActiveStudents] = useState<number | string>("--");
+  const [weeklyAttempts, setWeeklyAttempts] = useState<number | string>("--");
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -47,9 +51,52 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
   useEffect(() => {
     if (activeTab === "exams" || activeTab === "dashboard") {
       loadExams();
-      loadClasses(); // GỌI HÀM LẤY LỚP HỌC KHI MỞ TRANG
+      loadClasses();
     }
   }, [user.id, activeTab]);
+
+  // --- HÀM MỚI: TẢI THỐNG KÊ HOẠT ĐỘNG TỪ SUPABASE ---
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        // 1. Đếm tổng số học sinh đã tham gia vào các lớp của thầy
+        if (myClasses.length > 0) {
+          const classIds = myClasses.map(c => c.id);
+          const { count: studentCount } = await supabase
+            .from('class_enrollments')
+            .select('*', { count: 'exact', head: true })
+            .in('class_id', classIds);
+          
+          setActiveStudents(studentCount || 0);
+        } else {
+          setActiveStudents(0);
+        }
+
+        // 2. Đếm lượt làm bài (quiz_attempts) trong 7 ngày qua của các đề thi của thầy
+        if (exams.length > 0) {
+          const examIds = exams.map(e => e.id);
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+          const { count: attemptCount } = await supabase
+            .from('quiz_attempts')
+            .select('*', { count: 'exact', head: true })
+            .in('exam_id', examIds)
+            .gte('created_at', sevenDaysAgo.toISOString());
+
+          setWeeklyAttempts(attemptCount || 0);
+        } else {
+          setWeeklyAttempts(0);
+        }
+      } catch (error) {
+        console.error("Lỗi khi tải thống kê:", error);
+      }
+    };
+
+    if (myClasses.length > 0 || exams.length > 0) {
+      loadStats();
+    }
+  }, [myClasses, exams]);
 
   const loadExams = async () => {
     setLoading(true);
@@ -65,12 +112,11 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
     setLoading(false);
   };
 
-  // --- HÀM MỚI: TẢI DANH SÁCH LỚP HỌC THẬT TỪ SUPABASE ---
   const loadClasses = async () => {
     const { data, error } = await supabase
       .from("classes")
       .select("*")
-      .eq("teacher_id", user.id) // Lấy lớp của đúng thầy giáo này
+      .eq("teacher_id", user.id)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -151,7 +197,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
       return;
     }
 
-    // Tạm thời hiển thị Alert, bài sau sẽ làm tính năng insert vào bảng assignments
     const className = selectedClass === "all" ? "Tất cả các lớp" : myClasses.find(c => c.id === selectedClass)?.name || selectedClass;
     alert(`🎉 Đã giao đề "${assigningExam?.title}" thành công!\nLớp nhận: ${className}\nHạn nộp: ${new Date(deadline).toLocaleString('vi-VN')}`);
     
@@ -222,7 +267,8 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
             </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Học sinh hoạt động</p>
-              <h3 className="text-2xl font-bold text-slate-800">--</h3>
+              {/* ĐÃ SỬA THÀNH BIẾN DỮ LIỆU THẬT */}
+              <h3 className="text-2xl font-bold text-slate-800">{activeStudents}</h3>
             </div>
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
@@ -231,7 +277,8 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
             </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Lượt làm bài tuần này</p>
-              <h3 className="text-2xl font-bold text-slate-800">--</h3>
+              {/* ĐÃ SỬA THÀNH BIẾN DỮ LIỆU THẬT */}
+              <h3 className="text-2xl font-bold text-slate-800">{weeklyAttempts}</h3>
             </div>
           </div>
         </div>
@@ -373,7 +420,6 @@ const TeacherPortal: React.FC<Props> = ({ user, activeTab }) => {
                 >
                   <option value="" disabled>-- Vui lòng chọn lớp --</option>
                   
-                  {/* ĐỔ DỮ LIỆU LỚP THẬT TỪ DATABASE VÀO ĐÂY */}
                   {myClasses.length === 0 ? (
                     <option value="" disabled>Chưa có lớp nào (Vui lòng tạo lớp trước)</option>
                   ) : (
