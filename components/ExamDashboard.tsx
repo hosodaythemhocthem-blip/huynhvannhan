@@ -3,9 +3,11 @@ import { Plus, Search, Loader2, FileText, Sparkles, BookOpen, Lock, Unlock, User
 import { supabase } from "../supabase";
 import ExamCard from "./ExamCard";
 import ExamEditor from "./ExamEditor"; 
+import ImportExamFromFile from "./ImportExamFromFile"; 
+// 🚀 IMPORT COMPONENT LÀM BÀI THI CỦA HỌC SINH
+import StudentQuiz from "./StudentQuiz"; 
 import { useToast } from "./Toast";
 import { User, Exam } from "../types";
-import ImportExamFromFile from "./ImportExamFromFile"; 
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Props {
@@ -28,9 +30,12 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [parsedExamData, setParsedExamData] = useState<any>(null);
 
+  // 🚀 STATE MỚI: Quản lý trạng thái học sinh đang làm bài
+  const [takingExam, setTakingExam] = useState<Exam | null>(null);
+
   // SIÊU ĐỈNH: State quản lý Modal Giao Bài
   const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
-  const [selectedClass, setSelectedClass] = useState("class-10a1"); // Tạm thời hardcode
+  const [selectedClass, setSelectedClass] = useState("class-10a1"); 
   const [deadline, setDeadline] = useState("");
 
   const isTeacher = user.role === 'teacher' || user.role === 'admin';
@@ -88,20 +93,27 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     setIsEditorOpen(true); 
   };
 
-  // SIÊU ĐỈNH: Xử lý Giao bài (Tạm thời là giả lập, bạn có thể nối API sau)
   const handleConfirmAssign = () => {
     if (!deadline) {
       showToast("Vui lòng chọn hạn nộp bài!", "error");
       return;
     }
     showToast(`Đã giao đề "${assigningExam?.title}" cho lớp thành công! 🚀`, "success");
-    setAssigningExam(null); // Đóng modal
+    setAssigningExam(null); 
   };
 
-  // Lọc và Sắp xếp
+  // 🚀 LOGIC LỌC ĐỀ THI: Bảo vệ học sinh khỏi các đề chưa mở
   let processedExams = exams.filter(e => (e.title || "").toLowerCase().includes(searchTerm.toLowerCase()));
-  if (filterStatus === 'locked') processedExams = processedExams.filter(e => e.is_locked);
-  if (filterStatus === 'unlocked') processedExams = processedExams.filter(e => !e.is_locked);
+  
+  if (!isTeacher) {
+    // Nếu là học sinh, CHỈ được thấy đề đã mở khóa (is_locked = false)
+    processedExams = processedExams.filter(e => !e.is_locked);
+  } else {
+    // Nếu là giáo viên, dùng bộ lọc bình thường
+    if (filterStatus === 'locked') processedExams = processedExams.filter(e => e.is_locked);
+    if (filterStatus === 'unlocked') processedExams = processedExams.filter(e => !e.is_locked);
+  }
+
   if (sortBy === 'oldest') {
     processedExams.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
   } else {
@@ -114,6 +126,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     locked: exams.filter(e => e.is_locked).length
   };
 
+  // 🚀 RENDER MÀN HÌNH THEO TRẠNG THÁI
   if (isEditorOpen) {
     return (
       <ExamEditor 
@@ -125,10 +138,21 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     );
   }
 
+  // Nếu học sinh click vào đề, hiển thị StudentQuiz
+  if (takingExam) {
+    return (
+      <StudentQuiz 
+        exam={takingExam} 
+        user={user} 
+        onClose={() => { setTakingExam(null); fetchExams(); }} // Cập nhật lại khi nộp bài xong
+      />
+    );
+  }
+
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
       
-      {/* HEADER & THỐNG KÊ */}
+      {/* HEADER & THỐNG KÊ (Giữ nguyên) */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
         <div>
           <h1 className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600 mb-2">
@@ -137,29 +161,31 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
           <p className="text-slate-500 font-medium text-lg">Quản lý, phân tích và tổ chức thi trực tuyến thông minh</p>
         </div>
 
-        <div className="flex gap-4 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0">
-          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><BookOpen size={24} /></div>
-            <div>
-              <p className="text-sm text-slate-400 font-semibold">Tổng số đề</p>
-              <p className="text-2xl font-black text-slate-800">{stats.total}</p>
+        {isTeacher && (
+          <div className="flex gap-4 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0">
+            <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><BookOpen size={24} /></div>
+              <div>
+                <p className="text-sm text-slate-400 font-semibold">Tổng số đề</p>
+                <p className="text-2xl font-black text-slate-800">{stats.total}</p>
+              </div>
+            </div>
+            <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
+              <div className="p-2 bg-emerald-50 text-emerald-500 rounded-xl"><Unlock size={24} /></div>
+              <div>
+                <p className="text-sm text-slate-400 font-semibold">Đang mở</p>
+                <p className="text-2xl font-black text-slate-800">{stats.unlocked}</p>
+              </div>
+            </div>
+            <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
+              <div className="p-2 bg-rose-50 text-rose-500 rounded-xl"><Lock size={24} /></div>
+              <div>
+                <p className="text-sm text-slate-400 font-semibold">Đã khóa</p>
+                <p className="text-2xl font-black text-slate-800">{stats.locked}</p>
+              </div>
             </div>
           </div>
-          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
-            <div className="p-2 bg-emerald-50 text-emerald-500 rounded-xl"><Unlock size={24} /></div>
-            <div>
-              <p className="text-sm text-slate-400 font-semibold">Đang mở</p>
-              <p className="text-2xl font-black text-slate-800">{stats.unlocked}</p>
-            </div>
-          </div>
-          <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 min-w-[140px] hover:shadow-md transition-shadow">
-            <div className="p-2 bg-rose-50 text-rose-500 rounded-xl"><Lock size={24} /></div>
-            <div>
-              <p className="text-sm text-slate-400 font-semibold">Đã khóa</p>
-              <p className="text-2xl font-black text-slate-800">{stats.locked}</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* THANH CÔNG CỤ TÌM KIẾM/LỌC */}
@@ -177,15 +203,17 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
           </div>
           
           <div className="flex gap-2">
-            <select 
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="px-4 py-3 bg-slate-100/50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-600 font-medium cursor-pointer"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="unlocked">Chỉ đề đang mở</option>
-              <option value="locked">Chỉ đề đã khóa</option>
-            </select>
+            {isTeacher && (
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as any)}
+                className="px-4 py-3 bg-slate-100/50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-600 font-medium cursor-pointer"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="unlocked">Chỉ đề đang mở</option>
+                <option value="locked">Chỉ đề đã khóa</option>
+              </select>
+            )}
             
             <select 
               value={sortBy}
@@ -218,7 +246,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
         )}
       </div>
 
-      {/* KHU VỰC HIỂN THỊ ĐỀ THI VỚI ANIMATION */}
+      {/* KHU VỰC HIỂN THỊ ĐỀ THI */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-indigo-600">
           <Loader2 className="animate-spin mb-4" size={48} strokeWidth={1.5}/>
@@ -241,11 +269,12 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                   exam={exam}
                   role={user.role}
                   questionCount={Array.isArray((exam as any).questions) ? (exam as any).questions.length : 0}
-                  onView={() => { /* Logic làm bài thi */ }}
+                  // 🚀 KÍCH HOẠT NÚT LÀM BÀI Ở ĐÂY
+                  onView={() => setTakingExam(exam)} 
                   onEdit={() => openEditor(exam)}
                   onDelete={handleDelete}
                   onToggleLock={handleToggleLock}
-                  onAssign={(examToAssign) => setAssigningExam(examToAssign)} // Nối mạch Giao bài
+                  onAssign={(examToAssign) => setAssigningExam(examToAssign)}
                 />
               </motion.div>
             ))}
@@ -262,7 +291,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                </div>
                <h3 className="text-xl font-bold text-slate-700 mb-2">Chưa tìm thấy đề thi nào!</h3>
                <p className="text-slate-500 font-medium max-w-md text-center mb-6">
-                 Thử thay đổi bộ lọc hoặc tạo một đề thi mới tinh xem sao.
+                 {isTeacher ? "Thử thay đổi bộ lọc hoặc tạo một đề thi mới tinh xem sao." : "Hiện tại giáo viên chưa mở đề thi nào cho bạn."}
                </p>
                {isTeacher && (
                  <button onClick={() => openEditor()} className="text-indigo-600 font-bold hover:underline flex items-center gap-2 bg-indigo-50 px-6 py-3 rounded-xl">
@@ -277,24 +306,21 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
       {/* Modal AI */}
       <ImportExamFromFile isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={handleImportSuccess} />
 
-      {/* SIÊU ĐỈNH: MODAL GIAO BÀI (ASSIGN EXAM) */}
+      {/* SIÊU ĐỈNH: MODAL GIAO BÀI (ASSIGN EXAM) (Giữ nguyên phần UI của bạn) */}
       <AnimatePresence>
         {assigningExam && (
           <>
-            {/* Backdrop Blur */}
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setAssigningExam(null)}
               className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
             />
-            {/* Modal Box */}
             <motion.div 
               initial={{ opacity: 0, y: 50, scale: 0.95 }} 
               animate={{ opacity: 1, y: 0, scale: 1 }} 
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-50 overflow-hidden border border-slate-100"
             >
-              {/* Header Modal */}
               <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6 relative">
                 <button onClick={() => setAssigningExam(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition-colors">
                   <X size={20} />
@@ -306,9 +332,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                 <p className="text-emerald-50 text-sm line-clamp-1 opacity-90">Đề: {assigningExam.title}</p>
               </div>
 
-              {/* Body Modal */}
               <div className="p-6 space-y-5 bg-slate-50/50">
-                {/* Chọn Lớp */}
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                     <Users size={16} className="text-indigo-500"/> Chọn Lớp Nhận Đề
@@ -325,7 +349,6 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                   </select>
                 </div>
 
-                {/* Hạn Nộp */}
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
                     <CalendarDays size={16} className="text-amber-500"/> Hạn chót nộp bài (Deadline)
@@ -339,7 +362,6 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                 </div>
               </div>
 
-              {/* Footer Modal */}
               <div className="p-6 bg-white border-t border-slate-100 flex gap-3">
                 <button 
                   onClick={() => setAssigningExam(null)}
