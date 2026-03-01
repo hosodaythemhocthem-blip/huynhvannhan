@@ -12,6 +12,10 @@ import TeacherPortal from "./pages/TeacherPortal"
 import StudentDashboard from "./pages/StudentDashboard"
 import AdminDashboard from "./pages/AdminDashboard"
 
+// 👇 THÊM DÒNG NÀY: Import giao diện phòng thi của học sinh
+// (Nếu file làm bài thi của bạn tên khác, ví dụ ExamRoom hay TakeExam thì bạn sửa lại tên file ở đây nhé)
+import StudentQuiz from "./components/StudentQuiz" 
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -51,6 +55,7 @@ const App: React.FC = () => {
 
   const handleLogin = useCallback((u: User) => {
     setUser(u)
+    setActiveTab("dashboard") // Reset tab về trang chủ khi đăng nhập
   }, [])
 
   const handleLogout = useCallback(async () => {
@@ -80,15 +85,20 @@ const App: React.FC = () => {
                   <Route path="/admin" element={<AdminDashboard />} />
                   <Route
                     path="*"
-                    // CHÍNH LÀ CHỖ NÀY: Đã truyền thêm activeTab vào TeacherPortal
                     element={<TeacherPortal user={user} activeTab={activeTab} />}
                   />
                 </>
               ) : (
                 <Route
                   path="*"
-                  // Tương tự, nếu sau này StudentDashboard cần chia Tab, bạn cũng thêm activeTab={activeTab} vào đây
-                  element={<StudentDashboard user={user} />}
+                  element={
+                    // 👇 ĐÃ FIX: Chuyển đổi màn hình dựa vào activeTab
+                    activeTab === "exams" ? (
+                      <StudentQuiz user={user} onTabChange={setActiveTab} />
+                    ) : (
+                      <StudentDashboard user={user} onTabChange={setActiveTab} />
+                    )
+                  }
                 />
               )}
             </Routes>
