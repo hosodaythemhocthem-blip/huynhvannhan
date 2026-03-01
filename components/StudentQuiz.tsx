@@ -8,75 +8,103 @@ import MathPreview from './MathPreview';
 import { useToast } from './Toast';
 import { quizService } from '../services/quizService';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../supabase'; // 🚀 Thêm import supabase để tự tải đề
 
 interface Props {
-  exam: Exam;
   user: User;
-  onClose: () => void;
+  onTabChange: (tab: string) => void; // Đã đổi props để tương thích với App.tsx
 }
 
-const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
+const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const { showToast } = useToast();
   
   // --- STATE ---
+  const [exam, setExam] = useState<Exam | null>(null); // Lưu trữ đề thi tự tải
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState((exam as any).duration ? (exam as any).duration * 60 : 60 * 60); 
+  const [timeLeft, setTimeLeft] = useState(0); 
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // 🚀 STATE MỚI: Cờ báo hiệu hết giờ để chống lỗi Closure
   const [isTimeUp, setIsTimeUp] = useState(false);
   
-  // --- INIT ---
+  // --- INIT: TỰ ĐỘNG TẢI ĐỀ THI TỪ SUPABASE ---
   useEffect(() => {
-    try {
-      if (exam.raw_content) {
-        const parsed = JSON.parse(exam.raw_content);
-        if (Array.isArray(parsed)) setQuestions(parsed);
+    const fetchExamData = async () => {
+      // Đọc ID đề thi đã lưu khi học sinh bấm nút "Làm bài"
+      const examId = localStorage.getItem('lms_active_exam_id');
+      if (!examId) {
+        showToast("Không tìm thấy mã đề thi. Vui lòng quay lại trang chủ!", "error");
+        onTabChange('dashboard');
+        return;
       }
-    } catch (e) {
-      console.error("Error parsing questions", e);
-      showToast("Lỗi tải đề thi. Vui lòng báo giáo viên.", "error");
-    }
 
-    const storageKey = `quiz_draft_${exam.id}_${user.id}`;
-    const savedAnswers = localStorage.getItem(storageKey);
-    if (savedAnswers) {
-      setAnswers(JSON.parse(savedAnswers));
-      showToast("Đã khôi phục bài làm trước đó!", "info");
-    }
-  }, [exam, user, showToast]);
+      try {
+        // Tải dữ liệu đề thi từ Database
+        const { data, error } = await supabase
+          .from('exams')
+          .select('*')
+          .eq('id', examId)
+          .single();
+
+        if (error || !data) throw error;
+
+        setExam(data);
+        setTimeLeft(data.duration ? data.duration * 60 : 60 * 60);
+
+        if (data.raw_content) {
+          const parsed = JSON.parse(data.raw_content);
+          if (Array.isArray(parsed)) setQuestions(parsed);
+        }
+
+        // Khôi phục bài làm dang dở
+        const storageKey = `quiz_draft_${examId}_${user.id}`;
+        const savedAnswers = localStorage.getItem(storageKey);
+        if (savedAnswers) {
+          setAnswers(JSON.parse(savedAnswers));
+          showToast("Đã khôi phục bài làm trước đó!", "info");
+        }
+      } catch (e) {
+        console.error("Lỗi tải đề thi", e);
+        showToast("Lỗi tải đề thi. Vui lòng báo giáo viên.", "error");
+        onTabChange('dashboard');
+      }
+    };
+
+    fetchExamData();
+  }, [user.id, onTabChange, showToast]);
 
   // --- TIMER ---
   useEffect(() => {
+    if (!exam || isSubmitting) return; // Chỉ đếm ngược khi đã tải xong đề
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          setIsTimeUp(true); // 🚀 Bật cờ hết giờ thay vì gọi handleSubmit trực tiếp
+          setIsTimeUp(true); 
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [exam, isSubmitting]);
 
   // --- AUTO SUBMIT KHI HẾT GIỜ ---
-  // 🚀 Effect này luôn nhìn thấy state "answers" và "questions" mới nhất
   useEffect(() => {
-    if (isTimeUp && !isSubmitting) {
+    if (isTimeUp && !isSubmitting && exam) {
       handleSubmit(true);
     }
-  }, [isTimeUp]); // Chỉ chạy khi isTimeUp chuyển sang true
+  }, [isTimeUp]);
 
   // --- AUTO SAVE ---
   useEffect(() => {
-    const storageKey = `quiz_draft_${exam.id}_${user.id}`;
-    localStorage.setItem(storageKey, JSON.stringify(answers));
-  }, [answers, exam.id, user.id]);
+    if (exam) {
+      const storageKey = `quiz_draft_${exam.id}_${user.id}`;
+      localStorage.setItem(storageKey, JSON.stringify(answers));
+    }
+  }, [answers, exam, user.id]);
 
   // --- HANDLERS ---
   const handleSelectAnswer = (qId: string, value: string) => {
@@ -102,6 +130,7 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
   };
 
   const handleSubmit = async (autoSubmit = false) => {
+    if (!exam) return;
     if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài? Hành động này không thể hoàn tác.")) return;
 
     setIsSubmitting(true);
@@ -123,7 +152,9 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
 
       localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       showToast(autoSubmit ? "Hết giờ! Đã tự động nộp bài." : "Nộp bài thành công!", "success");
-      onClose(); 
+      
+      // Đổi onClose() thành quay về trang chủ
+      onTabChange('dashboard'); 
 
     } catch (err) {
       console.error(err);
@@ -139,12 +170,12 @@ const StudentQuiz: React.FC<Props> = ({ exam, user, onClose }) => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (questions.length === 0) return <div className="p-10 text-center font-medium text-slate-600">Đang tải cấu trúc đề thi...</div>;
+  // 🚀 Màn hình Loading trong lúc lấy dữ liệu từ Supabase
+  if (!exam || questions.length === 0) return <div className="flex items-center justify-center h-screen bg-slate-50"><div className="p-10 text-center font-bold text-indigo-600 animate-pulse text-xl">Đang thiết lập phòng thi...</div></div>;
 
   const currentQ = questions[currentQIndex];
   const progress = Math.round((Object.keys(answers).length / questions.length) * 100);
 
-  // ... (Giữ nguyên toàn bộ phần return giao diện của bạn ở dưới, không cần thay đổi gì cả)
   return (
     <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col h-screen w-screen overflow-hidden font-sans">
       {/* HEADER */}
