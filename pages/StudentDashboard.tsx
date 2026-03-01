@@ -12,18 +12,15 @@ type MyEnrollment = ClassEnrollment & {
   target_class: Class;
 };
 
-// Khai báo cấu trúc chuẩn cho Bài tập thay vì dùng any
-interface Assignment {
+// Cấu trúc chuẩn cho Bài tập (lấy từ bảng exams)
+interface ExamTask {
   id: string;
-  due_date: string;
+  title: string;
+  duration: number;
+  total_points: number;
   class_id: string;
+  created_at: string;
   classes?: { name: string };
-  exam?: {
-    id: string;
-    title: string;
-    duration: number;
-    total_points: number;
-  };
 }
 
 interface Props {
@@ -37,7 +34,7 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
   // --- STATES ---
   const [enrollments, setEnrollments] = useState<MyEnrollment[]>([]);
   const [allClasses, setAllClasses] = useState<Class[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [assignments, setAssignments] = useState<ExamTask[]>([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   
   const [loading, setLoading] = useState(true);
@@ -65,21 +62,23 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
     }
 
     try {
-      // Dùng !inner để đảm bảo chỉ lấy assignment có liên kết hợp lệ với bảng exams và classes
+      // Đã sửa thành chọc thẳng vào bảng 'exams' để lấy đề giáo viên vừa tạo
       const { data, error } = await supabase
-        .from('assignments')
+        .from('exams')
         .select(`
           id,
-          due_date,
+          title,
+          duration,
+          total_points,
           class_id,
-          classes!inner (name),
-          exam:exams!inner (id, title, duration, total_points)
+          created_at,
+          classes!inner (name)
         `)
         .in('class_id', classIds)
-        .order('due_date', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setAssignments((data as unknown as Assignment[]) || []);
+      setAssignments((data as unknown as ExamTask[]) || []);
     } catch (err) {
       console.error("Lỗi tải bài tập:", err);
     }
@@ -320,24 +319,24 @@ const StudentDashboard: React.FC<Props> = ({ user, onTabChange }) => {
                              </div>
                              <div>
                                 <h4 className="font-black text-lg text-slate-800 group-hover:text-rose-600 transition-colors">
-                                   {task.exam?.title || "Bài tập chưa có tên"}
+                                   {task.title || "Bài tập chưa có tên"}
                                 </h4>
                                 <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-medium text-slate-500">
                                    <span className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md">
                                       <School size={12}/> {task.classes?.name || "Lớp học"}
                                    </span>
                                    <span className="flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1 rounded-md">
-                                      <Calendar size={12}/> Hạn nộp: {new Date(task.due_date).toLocaleString('vi-VN')}
+                                      <Calendar size={12}/> Ngày giao: {task.created_at ? new Date(task.created_at).toLocaleDateString('vi-VN') : '---'}
                                    </span>
                                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md">
-                                      Thời gian: {task.exam?.duration || 0} phút
+                                      Thời gian: {task.duration || 0} phút
                                    </span>
                                 </div>
                              </div>
                           </div>
                           
                           <button 
-                             onClick={() => handleDoExam(task.exam?.id)}
+                             onClick={() => handleDoExam(task.id)}
                              className="w-full sm:w-auto flex-shrink-0 bg-rose-500 hover:bg-rose-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2 active:scale-95"
                           >
                              <Play size={16} /> Làm Bài
