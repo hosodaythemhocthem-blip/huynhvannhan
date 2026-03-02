@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Plus, Search, Sparkles, BookOpen, Lock, Unlock, 
-  Users, CalendarDays, X, CheckCircle2, Clock, AlertCircle, LayoutGrid, List
+  Users, CalendarDays, X, CheckCircle2, Clock, AlertCircle, 
+  LayoutGrid, List, BarChart3, GraduationCap, Filter
 } from "lucide-react";
 import { supabase } from "../supabase";
 import ExamCard from "./ExamCard";
@@ -19,7 +20,7 @@ interface Props {
 const ExamDashboard: React.FC<Props> = ({ user }) => {
   const { showToast } = useToast();
   
-  // Data State
+  // --- STATE MANAGEMENT ---
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<any[]>([]);
@@ -27,8 +28,9 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   // UI State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<'all' | 'locked' | 'unlocked'>('all');
-  const [studentTab, setStudentTab] = useState<'assigned' | 'practice'>('assigned'); // Tab cho học sinh
-  
+  const [studentTab, setStudentTab] = useState<'assigned' | 'practice'>('assigned');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // Thêm chế độ xem List/Grid
+
   // Modal State
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -38,23 +40,17 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   
   // Assign Modal State
   const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
-  const [selectedClassId, setSelectedClassId] = useState<string>(""); 
   const [assignClassTarget, setAssignClassTarget] = useState(""); 
   const [deadline, setDeadline] = useState("");
 
   const isTeacher = user.role === 'teacher' || user.role === 'admin';
 
-  // --- 1. REALTIME & INITIAL FETCH ---
+  // --- 1. INITIALIZATION & REALTIME ---
   useEffect(() => {
     fetchData();
-
-    // Đăng ký nhận sự kiện thay đổi từ DB (Realtime)
-    const channel = supabase
-      .channel('exams_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'exams' }, (payload) => {
-        // Khi có thay đổi (thêm/sửa/xóa), tải lại danh sách nhẹ nhàng
-        fetchExams(false); 
-      })
+    // Realtime Subscription
+    const channel = supabase.channel('exams_dashboard_update')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'exams' }, () => fetchExams(false))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -67,53 +63,70 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   };
 
   const fetchClasses = async () => {
-    try {
-      const { data } = await supabase.from('classes').select('*');
-      if (data) {
-        setClasses(data);
-        if (data.length > 0) {
-          setSelectedClassId(data[0].id);
-          setAssignClassTarget(data[0].id);
-        }
-      }
-    } catch (error) { console.error("Lỗi tải lớp", error); }
+    const { data } = await supabase.from('classes').select('*');
+    if (data && data.length > 0) {
+      setClasses(data);
+      setAssignClassTarget(data[0].id);
+    }
   };
 
   const fetchExams = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      let query = supabase.from('exams').select('*').order('created_at', { ascending: false });
-
-      // LOGIC QUAN TRỌNG: 
-      // Nếu là học sinh: Chỉ lấy bài của lớp mình (assigned) HOẶC bài public (nếu có logic public)
-      // Ở đây mình lấy hết về rồi lọc ở Client để đảm bảo Realtime mượt mà, 
-      // nhưng tốt nhất là dùng RLS ở Supabase để bảo mật.
-      
-      const { data, error } = await query;
+      // Lấy toàn bộ data và lọc ở client để đảm bảo tính reactive cao nhất
+      // (Lưu ý: Với Production lớn nên lọc từ Server và dùng RLS)
+      const { data, error } = await supabase.from('exams').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       setExams(data || []);
     } catch (err) {
       console.error(err);
-      showToast("Không thể đồng bộ dữ liệu đề thi", "error");
+      showToast("Không thể tải dữ liệu.", "error");
     } finally {
       if (showLoading) setLoading(false);
     }
   };
 
-  // --- 2. ACTIONS ---
+  // --- 2. LOGIC XỬ LÝ DỮ LIỆU (MEMOIZED) ---
+  const filteredExams = useMemo(() => {
+    let result = exams.filter(e => (e.title || "").toLowerCase().includes(searchTerm.toLowerCase()));
+
+    if (isTeacher) {
+      if (filterStatus === 'locked') result = result.filter(e => e.is_locked);
+      if (filterStatus === 'unlocked') result = result.filter(e => !e.is_locked);
+    } else {
+      // Logic Học Sinh
+      if (studentTab === 'assigned') {
+        // Cần check user.class_id. Nếu user chưa có class_id thì trả về rỗng hoặc logic khác
+        result = result.filter(e => e.class_id === user.class_id && !e.is_locked);
+      } else {
+        // Bài tự luyện (không gán lớp cụ thể)
+        result = result.filter(e => !e.class_id && !e.is_locked);
+      }
+    }
+    return result;
+  }, [exams, searchTerm, filterStatus, studentTab, isTeacher, user.class_id]);
+
+  const stats = useMemo(() => {
+    return {
+      total: exams.length,
+      active: exams.filter(e => !e.is_locked).length,
+      assigned: exams.filter(e => e.class_id).length
+    };
+  }, [exams]);
+
+  // --- 3. ACTIONS ---
   const handleAssignConfirm = async () => {
     if (!assignClassTarget || !deadline) return showToast("Vui lòng nhập đủ thông tin!", "error");
-    
     try {
       const { error } = await supabase.from('exams').update({ 
         class_id: assignClassTarget, 
-        is_locked: false, // Mở khóa ngay
-        description: `Hạn chót: ${new Date(deadline).toLocaleString('vi-VN')}` // Lưu deadline tạm vào desc hoặc tạo cột mới
+        is_locked: false, 
+        // Lưu metadata deadline (nên có cột riêng trong DB, đây là workaround)
+        description: `Hạn chót: ${new Date(deadline).toLocaleString('vi-VN')}` 
       } as any).eq('id', assigningExam?.id);
 
       if (error) throw error;
-      
-      showToast("Đã giao bài thành công! Học sinh sẽ thấy ngay lập tức.", "success");
+      showToast("Đã giao bài thành công!", "success");
       setAssigningExam(null);
     } catch (err) {
       showToast("Lỗi khi giao bài", "error");
@@ -121,129 +134,134 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Xóa đề thi này? Hành động không thể hoàn tác.")) return;
+    if (!confirm("Bạn chắc chắn muốn xóa?")) return;
     const { error } = await supabase.from('exams').delete().eq('id', id);
     if (!error) showToast("Đã xóa đề thi", "success");
+    else showToast("Xóa thất bại", "error");
   };
 
-  // --- 3. FILTER LOGIC (TRÁI TIM CỦA DASHBOARD) ---
-  const getProcessedExams = () => {
-    let filtered = exams.filter(e => (e.title || "").toLowerCase().includes(searchTerm.toLowerCase()));
-
-    if (isTeacher) {
-      if (filterStatus === 'locked') filtered = filtered.filter(e => e.is_locked);
-      if (filterStatus === 'unlocked') filtered = filtered.filter(e => !e.is_locked);
-      return filtered;
-    } else {
-      // Logic cho Học Sinh
-      if (studentTab === 'assigned') {
-        // Tab 1: Bài được giao (Khớp class_id của user VÀ đang mở)
-        // Lưu ý: user.class_id cần tồn tại trong object user
-        return filtered.filter(e => e.class_id === user.class_id && !e.is_locked);
-      } else {
-        // Tab 2: Bài tự luyện (Không có class_id hoặc public)
-        return filtered.filter(e => !e.class_id && !e.is_locked);
-      }
-    }
-  };
-
-  const displayExams = getProcessedExams();
-
-  // --- 4. SUB-COMPONENTS ---
-  if (isEditorOpen) return <ExamEditor user={user} classId={selectedClassId} exam={editingExam} aiGeneratedData={parsedExamData} onClose={() => { setIsEditorOpen(false); setParsedExamData(null); }} />;
+  // --- RENDER HELPERS ---
+  if (isEditorOpen) return <ExamEditor user={user} classId={assignClassTarget} exam={editingExam} aiGeneratedData={parsedExamData} onClose={() => { setIsEditorOpen(false); setParsedExamData(null); }} />;
   if (takingExam) return <StudentQuiz exam={takingExam} user={user} onClose={() => setTakingExam(null)} />;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-slate-50/50">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-slate-50">
       
-      {/* HEADER SECTION */}
-      <div className="flex flex-col lg:flex-row justify-between items-end gap-6 mb-8">
-        <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">
-            {isTeacher ? "Quản Lý Đề Thi" : "Góc Học Tập"}
-          </h1>
-          <p className="text-slate-500 font-medium text-lg">
+      {/* HEADER & WELCOME SECTION */}
+      <div className="mb-8">
+        <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">
+          {isTeacher ? "Trung Tâm Khảo Thí" : "Góc Học Tập Của Bạn"}
+        </h1>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <p className="text-slate-500 text-lg">
             {isTeacher 
-              ? "Tạo đề, giao bài và theo dõi tiến độ học sinh." 
-              : "Hoàn thành các bài tập được giao đúng hạn nhé!"}
+              ? "Quản lý đề thi, ngân hàng câu hỏi và tiến độ học sinh." 
+              : "Chào mừng trở lại! Hãy xem các bài tập cần hoàn thành hôm nay."}
           </p>
+          
+          {/* STATS MINI DASHBOARD (TEACHER ONLY) */}
+          {isTeacher && (
+            <div className="flex gap-4">
+              <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><BookOpen size={18}/></div>
+                <div><div className="text-xs text-slate-500 font-bold uppercase">Tổng Đề</div><div className="font-bold text-slate-800">{stats.total}</div></div>
+              </div>
+              <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><CheckCircle2 size={18}/></div>
+                <div><div className="text-xs text-slate-500 font-bold uppercase">Đang Mở</div><div className="font-bold text-slate-800">{stats.active}</div></div>
+              </div>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* CONTROL BAR */}
+      <div className="sticky top-4 z-30 bg-white/80 backdrop-blur-xl p-3 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col xl:flex-row gap-4 justify-between items-center transition-all">
         
-        {/* TAB SWITCHER CHO HỌC SINH */}
-        {!isTeacher && (
-          <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex">
-            <button 
-              onClick={() => setStudentTab('assigned')}
-              className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${studentTab === 'assigned' ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              <AlertCircle size={18} /> Bài Được Giao
-              {exams.filter(e => e.class_id === user.class_id && !e.is_locked).length > 0 && 
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>
-              }
-            </button>
-            <button 
-              onClick={() => setStudentTab('practice')}
-              className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${studentTab === 'practice' ? 'bg-emerald-100 text-emerald-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
-            >
-              <BookOpen size={18} /> Tự Luyện Tập
-            </button>
+        {/* Search & Filter Group */}
+        <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto flex-1">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 text-slate-400" size={18}/>
+            <input 
+              type="text" 
+              placeholder="Tìm kiếm đề thi..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 hover:bg-white focus:bg-white border border-transparent focus:border-indigo-500 rounded-xl outline-none transition-all shadow-sm"
+            />
           </div>
-        )}
-      </div>
-
-      {/* TOOLBAR */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-8 sticky top-4 z-30 flex flex-col md:flex-row gap-4 justify-between items-center">
-        <div className="relative flex-1 w-full md:max-w-md">
-          <Search className="absolute left-3 top-3.5 text-slate-400" size={20}/>
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm đề thi..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-          />
+          
+          {/* Filter Chips */}
+          {isTeacher ? (
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              {(['all', 'unlocked', 'locked'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all ${filterStatus === status ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {status === 'all' ? 'Tất cả' : status === 'unlocked' ? 'Đang mở' : 'Đã khóa'}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button 
+                onClick={() => setStudentTab('assigned')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${studentTab === 'assigned' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}
+              >
+                Bài Tập Lớp {exams.filter(e => e.class_id === user.class_id && !e.is_locked).length > 0 && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"/>}
+              </button>
+              <button 
+                onClick={() => setStudentTab('practice')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${studentTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+              >
+                Luyện Tự Do
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* Action Buttons (Teacher) */}
         {isTeacher && (
-          <div className="flex gap-3 w-full md:w-auto overflow-x-auto">
-             <select 
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="px-4 py-3 bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold rounded-xl outline-none cursor-pointer hover:bg-indigo-100 transition-colors"
-            >
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            
-            <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-3 bg-violet-50 text-violet-700 font-bold rounded-xl border border-violet-100 hover:bg-violet-100 transition-colors flex items-center gap-2 whitespace-nowrap">
-              <Sparkles size={18}/> AI Import
+          <div className="flex gap-3 w-full xl:w-auto">
+             <button onClick={() => setIsImportModalOpen(true)} className="flex-1 xl:flex-none px-4 py-3 bg-violet-50 text-violet-700 font-bold rounded-xl border border-violet-100 hover:bg-violet-100 hover:border-violet-200 transition-all flex justify-center items-center gap-2 whitespace-nowrap">
+              <Sparkles size={18}/> <span className="hidden md:inline">AI Import</span>
             </button>
             
-            <button onClick={() => { setEditingExam(null); setIsEditorOpen(true); }} className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap">
-              <Plus size={20}/> Tạo Mới
+            <button onClick={() => { setEditingExam(null); setIsEditorOpen(true); }} className="flex-1 xl:flex-none px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] active:scale-95 transition-all flex justify-center items-center gap-2 whitespace-nowrap">
+              <Plus size={20}/> Tạo Đề Mới
             </button>
           </div>
         )}
       </div>
 
-      {/* CONTENT GRID */}
+      {/* EXAM GRID / LIST */}
       {loading ? (
-        // LOADING SKELETON
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-64 bg-white rounded-3xl border border-slate-100 shadow-sm animate-pulse p-6">
-              <div className="w-12 h-12 bg-slate-200 rounded-xl mb-4"/>
-              <div className="h-6 bg-slate-200 rounded w-3/4 mb-3"/>
-              <div className="h-4 bg-slate-200 rounded w-1/2"/>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="h-[280px] bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-col gap-4">
+              <div className="flex justify-between">
+                <div className="w-12 h-12 bg-slate-100 rounded-xl animate-pulse"/>
+                <div className="w-8 h-8 bg-slate-100 rounded-full animate-pulse"/>
+              </div>
+              <div className="h-6 bg-slate-100 rounded-lg w-3/4 animate-pulse"/>
+              <div className="h-4 bg-slate-100 rounded-lg w-1/2 animate-pulse"/>
+              <div className="mt-auto h-10 bg-slate-100 rounded-xl w-full animate-pulse"/>
             </div>
           ))}
         </div>
       ) : (
-        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <AnimatePresence>
-            {displayExams.map(exam => (
+        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 pb-20">
+          <AnimatePresence mode="popLayout">
+            {filteredExams.map((exam) => (
               <motion.div 
-                key={exam.id} layout 
-                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                key={exam.id} 
+                layout 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
               >
                 <ExamCard 
                   exam={exam} 
@@ -252,51 +270,87 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
                   onView={() => setTakingExam(exam)}
                   onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }}
                   onDelete={() => handleDelete(exam.id)}
-                  onToggleLock={async () => {/* Logic toggle lock */}}
+                  onToggleLock={async () => {/* Implement lock logic here */}}
                   onAssign={(e) => setAssigningExam(e)}
                 />
               </motion.div>
             ))}
           </AnimatePresence>
 
-          {displayExams.length === 0 && (
-            <div className="col-span-full py-24 text-center">
-              <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <BookOpen size={40} className="text-slate-300"/>
+          {filteredExams.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center text-center opacity-60">
+              <div className="w-32 h-32 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+                <Search size={48} className="text-slate-300"/>
               </div>
-              <h3 className="text-xl font-bold text-slate-700">Chưa có bài thi nào ở đây</h3>
-              <p className="text-slate-500 mt-2">
-                {isTeacher ? "Hãy bắt đầu tạo bài thi đầu tiên của bạn!" : "Hiện tại thầy cô chưa giao bài mới. Hãy nghỉ ngơi nhé!"}
-              </p>
+              <h3 className="text-xl font-bold text-slate-800">Không tìm thấy bài thi nào</h3>
+              <p className="text-slate-500">Thử thay đổi bộ lọc hoặc tạo bài thi mới nhé.</p>
             </div>
           )}
         </motion.div>
       )}
 
-      {/* MODAL GIAO BÀI NHANH */}
+      {/* --- MODAL GIAO BÀI (ASSIGN) --- */}
       <AnimatePresence>
         {assigningExam && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} onClick={() => setAssigningExam(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"/>
-            <motion.div initial={{scale: 0.95, opacity: 0}} animate={{scale: 1, opacity: 1}} exit={{scale: 0.95, opacity: 0}} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-              <div className="bg-indigo-600 p-6 text-white">
-                <h3 className="text-xl font-bold">Giao Bài: {assigningExam.title}</h3>
-                <p className="opacity-80 text-sm mt-1">Học sinh sẽ nhận được thông báo ngay lập tức.</p>
+            <motion.div 
+              initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} 
+              onClick={() => setAssigningExam(null)} 
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{scale: 0.95, opacity: 0, y: 10}} 
+              animate={{scale: 1, opacity: 1, y: 0}} 
+              exit={{scale: 0.95, opacity: 0, y: 10}} 
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold">Giao Bài Thi</h3>
+                    <p className="opacity-80 text-sm mt-1 line-clamp-1">{assigningExam.title}</p>
+                  </div>
+                  <button onClick={() => setAssigningExam(null)} className="bg-white/20 p-1 rounded-full hover:bg-white/30 transition-colors">
+                    <X size={18}/>
+                  </button>
+                </div>
               </div>
-              <div className="p-6 space-y-4">
+              
+              <div className="p-6 space-y-5">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Chọn Lớp Áp Dụng</label>
-                  <select value={assignClassTarget} onChange={e => setAssignClassTarget(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
-                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <Users size={16} className="text-indigo-500"/> Chọn Lớp Áp Dụng
+                  </label>
+                  <div className="relative">
+                    <select 
+                      value={assignClassTarget} 
+                      onChange={e => setAssignClassTarget(e.target.value)} 
+                      className="w-full p-3 pl-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium text-slate-700"
+                    >
+                      {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <div className="absolute right-4 top-3.5 pointer-events-none text-slate-400">▼</div>
+                  </div>
                 </div>
+                
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Hạn Nộp Bài</label>
-                  <input type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/>
+                  <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                    <CalendarDays size={16} className="text-indigo-500"/> Hạn Nộp Bài
+                  </label>
+                  <input 
+                    type="datetime-local" 
+                    value={deadline} 
+                    onChange={e => setDeadline(e.target.value)} 
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700"
+                  />
+                  <p className="text-xs text-slate-400 mt-2 ml-1">* Học sinh sẽ thấy deadline này trên thẻ bài thi.</p>
                 </div>
-                <div className="flex gap-3 mt-6">
-                  <button onClick={() => setAssigningExam(null)} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl">Hủy</button>
-                  <button onClick={handleAssignConfirm} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200">Xác Nhận Giao</button>
+
+                <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
+                  <button onClick={() => setAssigningExam(null)} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Hủy Bỏ</button>
+                  <button onClick={handleAssignConfirm} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95">
+                    Xác Nhận Giao
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -304,7 +358,12 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
         )}
       </AnimatePresence>
       
-      <ImportExamFromFile isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={(data) => { setIsImportModalOpen(false); setParsedExamData(data); setIsEditorOpen(true); }} />
+      {/* Import Modal */}
+      <ImportExamFromFile 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+        onImportSuccess={(data) => { setIsImportModalOpen(false); setParsedExamData(data); setIsEditorOpen(true); }} 
+      />
     </div>
   );
 };
