@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Clock, AlertTriangle, Send, ChevronLeft, ChevronRight, 
-  Menu, X, ClipboardPaste, Trash2
+  Menu, X, ClipboardPaste, Trash2, Home
 } from 'lucide-react';
 import { Exam, Question, User } from '../types';
 import MathPreview from './MathPreview';
 import { useToast } from './Toast';
 import { quizService } from '../services/quizService';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../supabase'; // 🚀 Thêm import supabase để tự tải đề
+import { supabase } from '../supabase';
 
 interface Props {
   user: User;
-  onTabChange: (tab: string) => void; // Đã đổi props để tương thích với App.tsx
+  onTabChange: (tab: string) => void;
 }
 
 const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const { showToast } = useToast();
   
   // --- STATE ---
-  const [exam, setExam] = useState<Exam | null>(null); // Lưu trữ đề thi tự tải
+  const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -28,19 +28,25 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTimeUp, setIsTimeUp] = useState(false);
   
-  // --- INIT: TỰ ĐỘNG TẢI ĐỀ THI TỪ SUPABASE ---
+  // Thêm state loading riêng biệt để kiểm soát vòng quay
+  const [isLoading, setIsLoading] = useState(true);
+
+  // --- INIT: TẢI ĐỀ THI ---
   useEffect(() => {
     const fetchExamData = async () => {
-      // Đọc ID đề thi đã lưu khi học sinh bấm nút "Làm bài"
+      setIsLoading(true);
       const examId = localStorage.getItem('lms_active_exam_id');
+      
       if (!examId) {
-        showToast("Không tìm thấy mã đề thi. Vui lòng quay lại trang chủ!", "error");
+        showToast("Không tìm thấy mã đề thi.", "error");
         onTabChange('dashboard');
         return;
       }
 
       try {
-        // Tải dữ liệu đề thi từ Database
+        console.log("Đang tải đề thi ID:", examId);
+        
+        // 1. Tải dữ liệu từ DB
         const { data, error } = await supabase
           .from('exams')
           .select('*')
@@ -50,33 +56,53 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
         if (error || !data) throw error;
 
         setExam(data);
-        setTimeLeft(data.duration ? data.duration * 60 : 60 * 60);
+        setTimeLeft(data.duration ? data.duration * 60 : 45 * 60);
 
-        if (data.raw_content) {
-          const parsed = JSON.parse(data.raw_content);
-          if (Array.isArray(parsed)) setQuestions(parsed);
+        // 2. Xử lý câu hỏi (Quan trọng: Xử lý cả trường hợp NULL)
+        let parsedQuestions: Question[] = [];
+        
+        // Ưu tiên lấy từ cột questions (JSON)
+        if (data.questions && Array.isArray(data.questions)) {
+          parsedQuestions = data.questions;
+        } 
+        // Nếu không có, thử lấy từ content/raw_content (String JSON)
+        else if (data.raw_content || data.content) {
+            try {
+                const contentStr = data.raw_content || data.content;
+                const parsed = JSON.parse(contentStr);
+                if (Array.isArray(parsed)) parsedQuestions = parsed;
+            } catch (e) {
+                console.error("Lỗi parse nội dung đề thi", e);
+            }
         }
 
-        // Khôi phục bài làm dang dở
+        setQuestions(parsedQuestions);
+
+        // 3. Khôi phục bài làm dang dở
         const storageKey = `quiz_draft_${examId}_${user.id}`;
         const savedAnswers = localStorage.getItem(storageKey);
         if (savedAnswers) {
-          setAnswers(JSON.parse(savedAnswers));
-          showToast("Đã khôi phục bài làm trước đó!", "info");
+          try {
+            setAnswers(JSON.parse(savedAnswers));
+            showToast("Đã khôi phục bài làm trước đó!", "info");
+          } catch(e) {}
         }
+
       } catch (e) {
         console.error("Lỗi tải đề thi", e);
-        showToast("Lỗi tải đề thi. Vui lòng báo giáo viên.", "error");
-        onTabChange('dashboard');
+        showToast("Lỗi tải đề thi. Vui lòng thử lại.", "error");
+        // Không redirect ngay để user đọc lỗi
+      } finally {
+        setIsLoading(false); // Tắt loading dù thành công hay thất bại
       }
     };
 
     fetchExamData();
-  }, [user.id, onTabChange, showToast]);
+  }, [user.id, onTabChange]);
 
   // --- TIMER ---
   useEffect(() => {
-    if (!exam || isSubmitting) return; // Chỉ đếm ngược khi đã tải xong đề
+    if (isLoading || !exam || isSubmitting || questions.length === 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -89,11 +115,11 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [exam, isSubmitting]);
+  }, [exam, isSubmitting, isLoading, questions.length]);
 
-  // --- AUTO SUBMIT KHI HẾT GIỜ ---
+  // --- AUTO SUBMIT ---
   useEffect(() => {
-    if (isTimeUp && !isSubmitting && exam) {
+    if (isTimeUp && !isSubmitting && exam && questions.length > 0) {
       handleSubmit(true);
     }
   }, [isTimeUp]);
@@ -115,7 +141,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     const newAnswers = { ...answers };
     delete newAnswers[qId];
     setAnswers(newAnswers);
-    showToast("Đã xóa câu trả lời", "info");
   };
 
   const handlePaste = async (qId: string) => {
@@ -125,16 +150,17 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       handleSelectAnswer(qId, currentAnswer + text);
       showToast("Đã dán nội dung", "success");
     } catch(e) { 
-      showToast("Vui lòng cấp quyền Clipboard hoặc dùng phím Ctrl+V", "warning"); 
+      showToast("Dùng phím Ctrl+V để dán", "warning"); 
     }
   };
 
   const handleSubmit = async (autoSubmit = false) => {
     if (!exam) return;
-    if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài? Hành động này không thể hoàn tác.")) return;
+    if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài?")) return;
 
     setIsSubmitting(true);
     try {
+      // Tính điểm (nếu trắc nghiệm)
       const score = quizService.gradeExam(questions, answers);
       
       const payload: any = {
@@ -142,27 +168,37 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
         student_id: user.id,
         answers: answers,
         score: score,
+        completed_at: new Date().toISOString()
       };
       
       if ((user as any).class_id) {
         payload.class_id = (user as any).class_id;
       }
 
+      // Lưu kết quả
       await quizService.submitExam(payload);
 
+      // Xóa draft
       localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
-      showToast(autoSubmit ? "Hết giờ! Đã tự động nộp bài." : "Nộp bài thành công!", "success");
+      localStorage.removeItem('lms_active_exam_id'); // Xóa ID đề thi đang làm
       
-      // Đổi onClose() thành quay về trang chủ
+      showToast(autoSubmit ? "Hết giờ! Đã nộp bài." : "Nộp bài thành công!", "success");
       onTabChange('dashboard'); 
 
     } catch (err) {
       console.error(err);
-      showToast("Lỗi nộp bài. Dữ liệu vẫn được lưu nháp trên máy của bạn.", "error");
+      showToast("Lỗi nộp bài. Vui lòng thử lại!", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleExit = () => {
+      if(confirm("Bạn muốn thoát? Bài làm sẽ được lưu nháp.")) {
+          localStorage.removeItem('lms_active_exam_id'); // Xóa trạng thái đang làm để không bị kẹt
+          onTabChange('dashboard');
+      }
+  }
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -170,10 +206,49 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // 🚀 Màn hình Loading trong lúc lấy dữ liệu từ Supabase
-  if (!exam || questions.length === 0) return <div className="flex items-center justify-center h-screen bg-slate-50"><div className="p-10 text-center font-bold text-indigo-600 animate-pulse text-xl">Đang thiết lập phòng thi...</div></div>;
+  // --- RENDER 1: LOADING ---
+  if (isLoading) {
+      return (
+        <div className="fixed inset-0 flex items-center justify-center bg-slate-50 z-50">
+            <div className="text-center">
+                <div className="animate-spin w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"/>
+                <p className="text-slate-500 font-bold">Đang tải đề thi...</p>
+            </div>
+        </div>
+      );
+  }
 
+  // --- RENDER 2: ERROR / EMPTY STATE (QUAN TRỌNG ĐỂ FIX LỖI TREO) ---
+  // Nếu tải xong mà không có câu hỏi -> Hiển thị lỗi thay vì treo
+  if (!exam || questions.length === 0) {
+      return (
+        <div className="fixed inset-0 flex flex-col items-center justify-center bg-white z-50 p-4">
+            <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-6">
+                <AlertTriangle size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Đề thi chưa sẵn sàng</h2>
+            <p className="text-slate-500 text-center max-w-md mb-8">
+                Giáo viên chưa nhập câu hỏi cho đề thi này hoặc dữ liệu bị lỗi.
+                <br/>(ID: {localStorage.getItem('lms_active_exam_id')})
+            </p>
+            <button 
+                onClick={() => {
+                    localStorage.removeItem('lms_active_exam_id'); // Xóa key để thoát kẹt
+                    onTabChange('dashboard');
+                }}
+                className="px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 flex items-center gap-2"
+            >
+                <Home size={20}/> Quay về Trang chủ
+            </button>
+        </div>
+      );
+  }
+
+  // --- RENDER 3: GIAO DIỆN LÀM BÀI (Chỉ chạy khi có dữ liệu) ---
   const currentQ = questions[currentQIndex];
+  // Phòng hờ trường hợp index vượt quá giới hạn khi render lại
+  if (!currentQ) return null; 
+
   const progress = Math.round((Object.keys(answers).length / questions.length) * 100);
 
   return (
@@ -184,7 +259,10 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
            <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-full lg:hidden transition-colors">
              <Menu size={20} className="text-slate-600"/>
            </button>
-           <h2 className="font-bold text-slate-800 line-clamp-1 max-w-[200px] md:max-w-md">{exam.title}</h2>
+           <button onClick={handleExit} className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-full transition-colors hidden md:block" title="Thoát">
+             <X size={24}/>
+           </button>
+           <h2 className="font-bold text-slate-800 line-clamp-1 max-w-[150px] md:max-w-md">{exam.title}</h2>
         </div>
 
         <div className="flex items-center gap-4">
@@ -198,14 +276,14 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
              disabled={isSubmitting}
              className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md transition-all flex items-center gap-2 disabled:opacity-70"
            >
-             {isSubmitting ? "Đang xử lý..." : "Nộp Bài"} <Send size={16}/>
+             {isSubmitting ? "Đang nộp..." : "Nộp Bài"} <Send size={16}/>
            </button>
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* SIDEBAR (Danh sách câu hỏi) */}
+        {/* SIDEBAR */}
         <AnimatePresence>
           {(isSidebarOpen || window.innerWidth >= 1024) && (
             <motion.div 
@@ -224,7 +302,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                    const isActive = idx === currentQIndex;
                    return (
                      <button
-                       key={q.id}
+                       key={q.id || idx}
                        onClick={() => { setCurrentQIndex(idx); if(window.innerWidth < 1024) setSidebarOpen(false); }}
                        className={`h-11 w-11 rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-sm hover:scale-105 active:scale-95
                          ${isActive ? 'bg-indigo-600 text-white ring-4 ring-indigo-600/20' : 
@@ -239,7 +317,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
           )}
         </AnimatePresence>
 
-        {/* MAIN CONTENT (Khu vực làm bài) */}
+        {/* MAIN CONTENT */}
         <div className="flex-1 flex flex-col bg-slate-50/80 overflow-hidden relative">
            
            {/* ProgressBar */}
@@ -282,15 +360,15 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                                   key={i}
                                   onClick={() => handleSelectAnswer(currentQ.id, label)}
                                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-4 group hover:shadow-md
-                                     ${isSelected ? 'bg-indigo-50/50 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
+                                    ${isSelected ? 'bg-indigo-50/50 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
                                 >
-                                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold transition-all shrink-0 shadow-sm
-                                      ${isSelected ? 'bg-indigo-600 text-white scale-105' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
-                                      {label}
-                                   </div>
-                                   <div className="pt-2 text-slate-700 font-medium">
-                                      <MathPreview content={opt} />
-                                   </div>
+                                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold transition-all shrink-0 shadow-sm
+                                       ${isSelected ? 'bg-indigo-600 text-white scale-105' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
+                                        {label}
+                                     </div>
+                                     <div className="pt-2 text-slate-700 font-medium">
+                                        <MathPreview content={opt} />
+                                     </div>
                                 </div>
                              )
                           })}
