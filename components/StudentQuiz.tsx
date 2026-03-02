@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { 
-  Clock, Menu, CheckCircle, X, Trophy, Home, ChevronLeft, ChevronRight, AlertCircle 
+  Clock, Menu, CheckCircle, X, Trophy, Home, ChevronLeft, ChevronRight, AlertCircle, Eye
 } from 'lucide-react';
 import { Exam, Question, User } from '../types';
 import MathPreview from './MathPreview';
-import { useToast } from './Toast';
 import { quizService } from '../services/quizService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabase';
@@ -16,8 +15,6 @@ interface Props {
 }
 
 const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
-  const { showToast } = useToast();
-  
   // --- STATE ---
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -27,8 +24,9 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [resultData, setResultData] = useState<{score: number, total: number} | null>(null);
+  const [resultData, setResultData] = useState<{score: number, total: number, detailLog: string[]} | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false); // State để bật/tắt chế độ xem lỗi chấm điểm
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -47,31 +45,42 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       setExam(data);
       setTimeLeft(data.duration ? data.duration * 60 : 45 * 60);
 
-      // Xử lý questions
-      let parsedQuestions: Question[] = [];
+      // Xử lý questions linh hoạt
+      let parsedQuestions: any[] = [];
       if (data.questions && Array.isArray(data.questions)) parsedQuestions = data.questions;
       else if (data.content) {
           try {
-              const parsed = JSON.parse(data.content);
-              if (Array.isArray(parsed)) parsedQuestions = parsed;
+             // Thử parse nếu content là string JSON
+             parsedQuestions = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
           } catch (e) {}
       }
+      
+      // Nếu vẫn không có câu hỏi, thử check trường 'questions' bên trong content json
+      if (!Array.isArray(parsedQuestions) && (parsedQuestions as any)?.questions) {
+          parsedQuestions = (parsedQuestions as any).questions;
+      }
+      
+      if (!Array.isArray(parsedQuestions)) parsedQuestions = [];
 
-      // QUAN TRỌNG: Tạo ID ổn định (Stable ID) để không bị lỗi 0 điểm
+      // CHUẨN HÓA DỮ LIỆU CÂU HỎI
       const sanitized = parsedQuestions.map((q, index) => ({
           ...q, 
-          // Nếu không có ID thực, dùng index làm ID. Tuyệt đối KHÔNG dùng Date.now() ở đây
-          id: q.id || `fixed_q_${index}` 
+          // Tạo ID ổn định
+          id: q.id || `fixed_q_${index}`,
+          // Tìm đáp án đúng ở mọi ngóc ngách có thể
+          correct_option: q.correct_option || q.answer || q.correct || q.right_answer || q.dap_an_dung
       }));
+      
+      console.log("Dữ liệu câu hỏi đã tải:", sanitized); // Debug xem có đáp án đúng không
       setQuestions(sanitized);
 
-      // Load bản nháp
+      // Load bản nháp (nếu khớp ID)
       const savedAnswers = localStorage.getItem(`quiz_draft_${examId}_${user.id}`);
       if (savedAnswers) setAnswers(JSON.parse(savedAnswers));
 
     } catch (e) {
       console.error(e);
-      showToast("Lỗi tải đề thi.", "error");
+      alert("Lỗi tải đề thi. Vui lòng thử lại.");
     }
   };
 
@@ -91,41 +100,48 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     return () => clearInterval(timer);
   }, [exam, isSubmitting, questions.length, resultData]);
 
-  // --- HÀM TÍNH ĐIỂM (LOGIC ĐÃ SỬA) ---
+  // --- HÀM TÍNH ĐIỂM THÔNG MINH ---
   const calculateLocalScore = () => {
-    console.log("--- BẮT ĐẦU CHẤM ĐIỂM ---");
     let correctCount = 0;
+    const logs: string[] = []; // Log lại quá trình chấm để soi lỗi
     
     questions.forEach((q, idx) => {
-      if (q.type !== 'essay') {
-        const userAns = (answers[q.id] || "").trim().toUpperCase();
-        const correctAns = (q.correct_option || "").trim().toUpperCase();
+      if (q.type !== 'essay') { // Bỏ qua câu tự luận
+        // Lấy đáp án người dùng
+        const userAnsRaw = answers[q.id]; 
+        const userAns = (userAnsRaw || "").trim().toUpperCase();
         
-        // Debug trong Console F12 để xem tại sao sai/đúng
-        console.log(`Câu ${idx+1} (ID: ${q.id}): Chọn [${userAns}] - Đáp án đúng [${correctAns}] -> ${userAns === correctAns ? "ĐÚNG" : "SAI"}`);
+        // Lấy đáp án đúng (đã gộp từ nhiều nguồn)
+        const correctAnsRaw = q.correct_option;
+        const correctAns = (String(correctAnsRaw || "")).trim().toUpperCase();
+        
+        const isCorrect = userAns && correctAns && userAns === correctAns;
+        
+        logs.push(`Câu ${idx + 1}: Bạn chọn [${userAns || "Trống"}] - Đáp án đúng [${correctAns || "KHÔNG TÌM THẤY"}] -> ${isCorrect ? "✅ ĐÚNG" : "❌ SAI"}`);
 
-        if (userAns && userAns === correctAns) {
-          correctCount++;
-        }
+        if (isCorrect) correctCount++;
       }
     });
 
     const totalQ = questions.length;
     const score = totalQ === 0 ? 0 : (correctCount / totalQ) * 10;
-    console.log(`Tổng câu đúng: ${correctCount}/${totalQ} -> Điểm: ${score}`);
-    return Math.round(score * 100) / 100;
+    return { 
+      score: Math.round(score * 100) / 100,
+      logs: logs
+    };
   };
 
   const handleSafeSubmit = async (autoSubmit = false) => {
-    if (!autoSubmit && !window.confirm("Nộp bài ngay?")) return;
+    if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài?")) return;
     setIsSubmitting(true);
     
-    // 1. Tính điểm
-    const score = calculateLocalScore();
-    const finalResult = { score: score, total: 10 };
+    // 1. Chấm điểm
+    const { score, logs } = calculateLocalScore();
+    const finalResult = { score: score, total: 10, detailLog: logs };
     
-    // 2. Lưu Server
+    // 2. Lưu Server (Thử cả Service lẫn gọi trực tiếp Supabase để chắc ăn)
     try {
+      // Cách 1: Gọi qua Service (cũ)
       const payload: any = {
         exam_id: exam?.id,
         student_id: user.id,
@@ -135,15 +151,33 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       };
       if ((user as any).class_id) payload.class_id = (user as any).class_id;
 
+      // Thử submit
       await quizService.submitExam(payload);
       
+      // Dọn dẹp
       if(exam) localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       localStorage.removeItem('lms_active_exam_id');
-      setSaveError(null); // Reset lỗi nếu thành công
+      setSaveError(null);
 
     } catch (err: any) {
-      console.error("Lỗi lưu Supabase:", err);
-      setSaveError("Lỗi hệ thống: Không lưu được vào lịch sử (nhưng vẫn có điểm).");
+      console.error("Service failed, trying direct insert...", err);
+      // Cách 2: Fallback - Gọi trực tiếp Supabase nếu Service lỗi
+      try {
+          const { error: directError } = await supabase.from('submissions').insert([{
+              exam_id: exam?.id,
+              student_id: user.id,
+              answers: answers,
+              score: score,
+              completed_at: new Date().toISOString()
+          }]);
+          
+          if (directError) throw directError;
+          setSaveError(null); // Thành công
+          
+      } catch (finalErr: any) {
+          console.error("Lỗi lưu cuối cùng:", finalErr);
+          setSaveError("Lỗi kết nối CSDL. Vui lòng chụp màn hình kết quả.");
+      }
     } finally {
       setResultData(finalResult);
       setIsSubmitting(false);
@@ -159,7 +193,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const renderRichContent = (content: any) => {
     if (!content) return <span className="text-slate-400 italic">...</span>;
     let str = typeof content === 'string' ? content : content?.text || "";
-    // Xử lý ảnh base64 hoặc ảnh thường
     if (str.includes('<img') || str.includes('<p>')) {
        return <div className="prose max-w-none [&>img]:mx-auto [&>img]:max-h-64 [&>img]:object-contain" dangerouslySetInnerHTML={{ __html: str }} />;
     }
@@ -177,34 +210,57 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       
       {/* RESULT OVERLAY */}
       {resultData && (
-        <div className="absolute inset-0 z-[1000000] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-fade-in">
-           <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-10 max-w-md w-full text-center relative">
+        <div className="absolute inset-0 z-[1000000] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+           <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full text-center relative my-auto">
               
               {saveError ? (
                 <div className="mb-6 bg-red-50 border border-red-100 p-3 rounded-lg flex gap-3 text-left">
                   <AlertCircle className="text-red-500 shrink-0" />
                   <p className="text-sm text-red-600">
-                    <strong>Lưu ý:</strong> {saveError} <br/>
-                    Hãy chụp màn hình này gửi giáo viên để xác nhận điểm số.
+                    <strong>Thông báo hệ thống:</strong> {saveError} <br/>
+                    (Kết quả của bạn vẫn hợp lệ, hãy chụp màn hình gửi Giáo viên).
                   </p>
                 </div>
               ) : (
-                <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-                  <Trophy className="text-green-600" size={40} />
+                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <Trophy className="text-green-600" size={32} />
                 </div>
               )}
 
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">Kết Quả</h2>
-              <div className="py-8">
-                 <span className="text-7xl font-black text-indigo-600 tracking-tighter">{resultData.score}</span>
-                 <span className="text-2xl text-slate-400 font-medium">/10</span>
+              <h2 className="text-2xl font-bold text-slate-800">Kết quả bài làm</h2>
+              <div className="py-6">
+                 <span className="text-6xl font-black text-indigo-600">{resultData.score}</span>
+                 <span className="text-xl text-slate-400 font-medium">/10</span>
+              </div>
+
+              {/* KHU VỰC DEBUG - GIÚP BẠN SOI LỖI */}
+              <div className="mb-6">
+                <button 
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="text-sm text-indigo-600 underline hover:text-indigo-800 flex items-center justify-center gap-1 mx-auto"
+                >
+                   <Eye size={14}/> {showDebug ? "Ẩn chi tiết chấm điểm" : "Tại sao tôi được điểm này?"}
+                </button>
+                
+                {showDebug && (
+                  <div className="mt-4 p-3 bg-slate-100 rounded-lg text-left max-h-48 overflow-y-auto text-xs font-mono text-slate-600 border border-slate-200">
+                     {resultData.detailLog.map((log, i) => (
+                       <div key={i} className={`mb-1 pb-1 border-b border-slate-200 last:border-0 ${log.includes('✅') ? 'text-green-600' : 'text-red-500'}`}>
+                         {log}
+                       </div>
+                     ))}
+                     <div className="mt-2 text-slate-400 italic">
+                        *Lưu ý: Nếu thấy "Đáp án đúng [KHÔNG TÌM THẤY]", nghĩa là dữ liệu đề thi chưa nhập đáp án.
+                     </div>
+                  </div>
+                )}
               </div>
 
               <button 
                 onClick={() => onTabChange('dashboard')}
-                className="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-700 transition-all flex justify-center items-center gap-2"
+                className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition-all"
               >
-                <Home size={20}/> Về trang chủ
+                Về trang chủ
               </button>
            </div>
         </div>
@@ -304,6 +360,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       </div>
     </div>
   );
+
   return ReactDOM.createPortal(QuizInterface, document.body);
 };
 
