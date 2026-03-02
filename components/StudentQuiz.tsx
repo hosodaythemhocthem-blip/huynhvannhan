@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom'; // QUAN TRỌNG: Thêm thư viện này để dùng Portal
+import ReactDOM from 'react-dom';
 import { 
   Clock, AlertTriangle, ChevronLeft, ChevronRight, 
-  Menu, CheckCircle, X, HelpCircle
+  Menu, CheckCircle, X, HelpCircle, Trophy, Home, ArrowRight
 } from 'lucide-react';
 import { Exam, Question, User } from '../types';
 import MathPreview from './MathPreview';
@@ -29,11 +29,13 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [isTimeUp, setIsTimeUp] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // THÊM STATE ĐỂ LƯU KẾT QUẢ
+  const [resultData, setResultData] = useState<{score: number, total: number} | null>(null);
+
   // --- RENDER CONTENT ---
   const renderRichContent = (content: any) => {
     if (!content) return <span className="text-slate-400 italic text-sm">Không có nội dung</span>;
     let contentStr = typeof content === 'string' ? content : content?.text || JSON.stringify(content);
-    
     if (contentStr.includes('<img') || contentStr.includes('<p>') || contentStr.includes('<div>')) {
       return (
         <div 
@@ -50,13 +52,11 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     const fetchExamData = async () => {
       setIsLoading(true);
       const examId = localStorage.getItem('lms_active_exam_id');
-      
       if (!examId) {
         showToast("Không tìm thấy bài thi.", "error");
         onTabChange('dashboard');
         return;
       }
-
       try {
         const { data, error } = await supabase.from('exams').select('*').eq('id', examId).single();
         if (error || !data) throw error;
@@ -72,18 +72,13 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                 if (Array.isArray(parsed)) parsedQuestions = parsed;
             } catch (e) {}
         }
-
         const sanitized = parsedQuestions.map((q, index) => ({
-            ...q,
-            id: q.id || `q_${index}_${Date.now()}`,
-            options: q.options || []
+            ...q, id: q.id || `q_${index}_${Date.now()}`, options: q.options || []
         }));
-
         setQuestions(sanitized);
 
         const savedAnswers = localStorage.getItem(`quiz_draft_${examId}_${user.id}`);
         if (savedAnswers) setAnswers(JSON.parse(savedAnswers));
-
       } catch (e) {
         console.error(e);
         showToast("Lỗi tải đề thi.", "error");
@@ -96,7 +91,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
 
   // --- TIMER ---
   useEffect(() => {
-    if (isLoading || !exam || isSubmitting || questions.length === 0) return;
+    if (isLoading || !exam || isSubmitting || questions.length === 0 || resultData) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -108,9 +103,9 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [exam, isSubmitting, isLoading, questions.length]);
+  }, [exam, isSubmitting, isLoading, questions.length, resultData]);
 
-  useEffect(() => { if (isTimeUp && !isSubmitting) handleSubmit(true); }, [isTimeUp]);
+  useEffect(() => { if (isTimeUp && !isSubmitting && !resultData) handleSubmit(true); }, [isTimeUp]);
 
   // --- HANDLERS ---
   const handleSelectAnswer = (qId: string, value: string) => {
@@ -121,11 +116,14 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
 
   const handleSubmit = async (autoSubmit = false) => {
     if (!exam) return;
-    if (!autoSubmit && !window.confirm("Bạn muốn nộp bài và kết thúc thi?")) return;
+    if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài?")) return;
 
     setIsSubmitting(true);
     try {
+      console.log("Bắt đầu chấm điểm..."); // Debug log
       const score = quizService.gradeExam(questions, answers);
+      console.log("Điểm số tính được:", score); // Debug log
+
       const payload: any = {
         exam_id: exam.id, student_id: user.id, answers: answers, score: score,
         completed_at: new Date().toISOString()
@@ -133,147 +131,145 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       if ((user as any).class_id) payload.class_id = (user as any).class_id;
 
       await quizService.submitExam(payload);
+      
+      // Clear storage
       localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       localStorage.removeItem('lms_active_exam_id');
       
-      showToast(`Đã nộp bài! Điểm số: ${score}`, "success");
-      onTabChange('dashboard'); 
+      // QUAN TRỌNG: KHÔNG CHUYỂN TRANG, MÀ HIỆN KẾT QUẢ
+      setResultData({ score: score, total: 10 }); // Giả sử thang điểm 10
+      setIsSubmitting(false);
+
     } catch (err) {
-      showToast("Lỗi nộp bài.", "error");
+      console.error("Lỗi nộp bài:", err);
+      showToast("Lỗi nộp bài. Vui lòng thử lại!", "error");
       setIsSubmitting(false);
     }
   };
 
+  const handleFinish = () => {
+    // Hàm này chạy khi người dùng bấm "Về trang chủ" sau khi xem điểm
+    onTabChange('dashboard');
+  };
+
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  // --- CONTENT PHỤ (LOADING/ERROR) ---
   if (isLoading) return <div className="p-10 text-center">Đang tải đề thi...</div>;
-  if (!exam || questions.length === 0) return (
-    <div className="p-10 text-center">
-      <h2 className="text-xl font-bold text-red-500">Đề thi bị lỗi</h2>
-      <button onClick={() => onTabChange('dashboard')} className="mt-4 px-4 py-2 bg-slate-800 text-white rounded">Quay lại</button>
-    </div>
-  );
+  if (!exam || questions.length === 0) return <div className="p-10 text-center">Đề thi lỗi.</div>;
 
   const currentQ = questions[currentQIndex];
 
-  // --- PHẦN CHÍNH: SỬ DỤNG PORTAL ĐỂ "THOÁT LY" KHỎI PARENT ---
-  // Toàn bộ giao diện này sẽ được gắn thẳng vào body, đè lên tất cả mọi thứ khác
+  // --- GIAO DIỆN CHÍNH (PORTAL) ---
   const QuizInterface = (
     <div className="fixed inset-0 bg-slate-100 z-[999999] flex flex-col h-screen w-screen font-sans">
       
-      {/* HEADER: SIÊU ĐƠN GIẢN - KHÔNG AVATAR */}
-      <div className="bg-white px-4 h-16 shrink-0 flex items-center justify-between shadow-md relative z-50">
-        
-        {/* TRÁI: Menu & Tên đề */}
-        <div className="flex items-center gap-3 w-1/3">
-           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg lg:hidden">
-             <Menu size={24} className="text-slate-700"/>
-           </button>
-           <div className="flex flex-col">
-             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Đang làm bài thi</span>
-             <h1 className="font-bold text-slate-800 truncate max-w-[150px] sm:max-w-xs" title={exam.title}>{exam.title}</h1>
-           </div>
-        </div>
+      {/* 1. MÀN HÌNH KẾT QUẢ (HIỆN LÊN SAU KHI NỘP) */}
+      {resultData && (
+        <div className="absolute inset-0 z-[1000000] bg-white flex flex-col items-center justify-center p-4 animate-fade-in">
+           <motion.div 
+             initial={{ scale: 0.8, opacity: 0 }}
+             animate={{ scale: 1, opacity: 1 }}
+             className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 sm:p-12 max-w-md w-full text-center"
+           >
+              <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Trophy size={48} className="text-yellow-600" />
+              </div>
+              
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">Hoàn thành bài thi!</h2>
+              <p className="text-slate-500 mb-8">Hệ thống đã ghi nhận kết quả của bạn.</p>
 
-        {/* GIỮA: ĐỒNG HỒ */}
+              <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-200">
+                  <span className="block text-slate-500 text-sm font-bold uppercase tracking-wider mb-1">Điểm số của bạn</span>
+                  <span className="block text-5xl font-black text-indigo-600">{resultData.score} <span className="text-2xl text-slate-400">/ 10</span></span>
+              </div>
+
+              <button 
+                onClick={handleFinish}
+                className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Home size={20} /> Về trang chủ
+              </button>
+           </motion.div>
+        </div>
+      )}
+
+      {/* 2. HEADER */}
+      <div className="bg-white px-4 h-16 shrink-0 flex items-center justify-between shadow-md relative z-50">
+        <div className="flex items-center gap-3 w-1/3">
+           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg lg:hidden"><Menu size={24}/></button>
+           <h1 className="font-bold text-slate-800 truncate max-w-[150px] sm:max-w-xs">{exam.title}</h1>
+        </div>
         <div className="flex justify-center w-1/3">
-           <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xl font-bold border-2 shadow-sm ${
+           <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xl font-bold border-2 ${
              timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-white text-indigo-700 border-indigo-100'
            }`}>
-              <Clock size={22}/> 
-              {formatTime(timeLeft)}
+              <Clock size={22}/> {formatTime(timeLeft)}
            </div>
         </div>
-
-        {/* PHẢI: NÚT NỘP BÀI (Chỉ có nút này, không có gì khác để đè) */}
         <div className="flex justify-end w-1/3">
            <button 
              onClick={() => handleSubmit(false)} 
              disabled={isSubmitting} 
-             className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-indigo-200 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+             className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
            >
-             {isSubmitting ? "Đang nộp..." : "Nộp bài thi"}
+             {isSubmitting ? "Đang nộp..." : "Nộp bài"}
            </button>
         </div>
       </div>
 
-      {/* BODY */}
+      {/* 3. BODY */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* SIDEBAR DANH SÁCH CÂU HỎI */}
         <AnimatePresence>
           {(isSidebarOpen || window.innerWidth >= 1024) && (
             <motion.div 
-              initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }} transition={{type: "spring", stiffness: 300, damping: 30}}
-              className="absolute lg:static top-0 left-0 h-full bg-white border-r border-slate-200 z-40 w-[280px] flex flex-col shadow-2xl lg:shadow-none"
+              initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }}
+              className="absolute lg:static top-0 left-0 h-full bg-white border-r z-40 w-[280px] flex flex-col shadow-2xl lg:shadow-none"
             >
               <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
-                  <span className="font-bold text-slate-700 flex items-center gap-2"><HelpCircle size={18}/> Danh sách câu</span>
-                  <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 hover:bg-slate-200 rounded"><X size={20}/></button>
+                  <span className="font-bold text-slate-700">Danh sách câu</span>
+                  <button onClick={() => setSidebarOpen(false)} className="lg:hidden"><X size={20}/></button>
               </div>
               <div className="p-3 grid grid-cols-5 gap-2 overflow-y-auto content-start flex-1 pb-20">
-                 {questions.map((q, idx) => {
-                   const isDone = !!answers[q.id];
-                   const isCurrent = idx === currentQIndex;
-                   return (
+                 {questions.map((q, idx) => (
                      <button
                        key={q.id}
                        onClick={() => { setCurrentQIndex(idx); setSidebarOpen(false); }}
                        className={`h-10 rounded-md text-sm font-bold border transition-all ${
-                         isCurrent ? 'bg-indigo-600 text-white ring-2 ring-indigo-300 ring-offset-1 scale-105' : 
-                         isDone ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                         idx === currentQIndex ? 'bg-indigo-600 text-white' : 
+                         answers[q.id] ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white text-slate-600'
                        }`}
                      >
                        {idx + 1}
                      </button>
-                   )
-                 })}
+                 ))}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* KHUNG CÂU HỎI */}
         <div className="flex-1 flex flex-col bg-slate-100 relative overflow-hidden w-full">
            <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-32">
               <div className="max-w-4xl mx-auto space-y-6">
-                 
-                 {/* Câu hỏi Card */}
-                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-gradient-to-r from-indigo-50 to-white px-6 py-4 border-b border-indigo-50 flex justify-between items-center">
-                       <span className="font-bold text-indigo-800 text-lg">Câu hỏi số {currentQIndex + 1}</span>
-                       <span className="text-xs font-bold text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 uppercase tracking-wide">
-                          {currentQ.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm'}
-                       </span>
-                    </div>
-                    <div className="p-6 sm:p-8 text-slate-800 text-lg leading-relaxed min-h-[120px]">
-                       {renderRichContent(currentQ.content)}
-                    </div>
+                 <div className="bg-white rounded-2xl shadow-sm border p-6 sm:p-8 min-h-[120px] text-lg">
+                    <div className="mb-4 font-bold text-indigo-700">Câu {currentQIndex + 1}:</div>
+                    {renderRichContent(currentQ.content)}
                  </div>
-
-                 {/* Trả lời Card */}
-                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+                 <div className="bg-white rounded-2xl shadow-sm border p-6 sm:p-8">
                     {currentQ.type !== 'essay' ? (
                        <div className="grid gap-4">
                           {currentQ.options?.map((opt, i) => {
                              const label = ['A','B','C','D'][i];
                              const isSelected = answers[currentQ.id] === label;
                              return (
-                                <div 
-                                  key={i}
-                                  onClick={() => handleSelectAnswer(currentQ.id, label)}
-                                  className={`group flex items-center gap-5 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                    isSelected ? 'border-indigo-600 bg-indigo-50 shadow-md' : 'border-slate-100 hover:border-indigo-300 hover:bg-slate-50'
+                                <div key={i} onClick={() => handleSelectAnswer(currentQ.id, label)}
+                                  className={`flex items-center gap-5 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                    isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 hover:border-indigo-300'
                                   }`}
                                 >
-                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-base shrink-0 transition-transform duration-200 ${
-                                       isSelected ? 'bg-indigo-600 text-white scale-110' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'
-                                     }`}>
+                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${isSelected ? 'bg-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
                                        {isSelected ? <CheckCircle size={20}/> : label}
                                      </div>
-                                     <div className="flex-1 font-medium text-slate-700 text-base sm:text-lg">
-                                        {renderRichContent(opt)}
-                                     </div>
+                                     <div className="flex-1 font-medium text-slate-700 text-lg">{renderRichContent(opt)}</div>
                                 </div>
                              )
                           })}
@@ -282,38 +278,21 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                        <textarea
                           value={answers[currentQ.id] || ""}
                           onChange={(e) => handleSelectAnswer(currentQ.id, e.target.value)}
-                          placeholder="Nhập câu trả lời tự luận của bạn vào đây..."
-                          className="w-full h-56 p-5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none resize-none text-lg transition-all"
+                          className="w-full h-56 p-5 rounded-xl border focus:ring-4 focus:border-indigo-500 text-lg"
+                          placeholder="Nhập câu trả lời..."
                        />
                     )}
                  </div>
               </div>
            </div>
 
-           {/* FOOTER: THANH ĐIỀU HƯỚNG */}
-           <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 h-20 flex justify-between items-center shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-30">
-              <button 
-                disabled={currentQIndex === 0} 
-                onClick={() => setCurrentQIndex(i => i - 1)} 
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold transition-colors"
-              >
-                <ChevronLeft size={20}/> Quay lại
+           <div className="absolute bottom-0 left-0 right-0 bg-white border-t p-4 h-20 flex justify-between items-center shadow-lg z-30">
+              <button disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(i => i - 1)} className="flex gap-2 px-6 py-3 rounded-lg bg-slate-100 font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-50">
+                <ChevronLeft/> Trước
               </button>
-              
-              <div className="flex items-center gap-2 font-medium text-slate-400">
-                  <span className="text-slate-800 font-bold text-xl">{currentQIndex + 1}</span>
-                  <span>/</span>
-                  <span>{questions.length}</span>
-              </div>
-              
-              {/* QUAN TRỌNG: Thêm margin-right (mr-24 ~ 100px) để né nút Chat bong bóng tím */}
               <div className="mr-24 sm:mr-32"> 
-                <button 
-                  disabled={currentQIndex === questions.length - 1} 
-                  onClick={() => setCurrentQIndex(i => i + 1)} 
-                  className="flex items-center gap-2 px-8 py-3 rounded-lg bg-slate-800 text-white hover:bg-slate-700 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none font-bold transition-all"
-                >
-                  Câu tiếp <ChevronRight size={20}/>
+                <button disabled={currentQIndex === questions.length - 1} onClick={() => setCurrentQIndex(i => i + 1)} className="flex gap-2 px-8 py-3 rounded-lg bg-slate-800 text-white font-bold hover:bg-slate-700 disabled:opacity-50 shadow-lg">
+                  Sau <ChevronRight/>
                 </button>
               </div>
            </div>
@@ -322,7 +301,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     </div>
   );
 
-  // SỬ DỤNG PORTAL ĐỂ RENDER THẲNG VÀO BODY
   return ReactDOM.createPortal(QuizInterface, document.body);
 };
 
