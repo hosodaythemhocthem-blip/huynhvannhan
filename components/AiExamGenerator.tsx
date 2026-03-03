@@ -7,7 +7,8 @@ import {
   Save,
   Trash2,
   Copy,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import mammoth from "mammoth";
@@ -23,7 +24,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dis
 interface AIQuestion {
   text: string;
   options: string[];
-  correctAnswer?: number;
+  correctAnswer?: number; // 0=A, 1=B, 2=C, 3=D
 }
 
 interface PreviewExam {
@@ -54,11 +55,9 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
       let extractedText = "";
 
       if (file.name.endsWith(".docx")) {
-        // Đọc file Word bằng Mammoth
         const result = await mammoth.extractRawText({ arrayBuffer });
         extractedText = result.value;
       } else if (file.name.endsWith(".pdf")) {
-        // Đọc file PDF bằng PDF.js
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
@@ -70,14 +69,12 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
         return;
       }
 
-      // Nối text từ file vào nội dung hiện tại
       setTopic((prev) => (prev + "\n\n" + extractedText).trim());
     } catch (error) {
       console.error("Lỗi đọc file:", error);
       alert("Đã xảy ra lỗi khi đọc file. Vui lòng thử lại.");
     } finally {
       setProcessingFile(false);
-      // Reset input file để có thể upload lại cùng 1 file
       if (fileRef.current) fileRef.current.value = "";
     }
   };
@@ -88,10 +85,8 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     setLoading(true);
 
     try {
-      // Giới hạn số lượng ký tự để tránh quá tải API (8000 chars)
       const data = await geminiService.parseExamWithAI(topic.slice(0, 8000));
       if (data?.questions?.length) {
-        // 🚀 ĐÃ FIX LỖI VERCEL Ở ĐÂY BẰNG CÁCH THÊM "as any"
         setPreviewExam(data as any);
       } else {
         alert("AI không nhận diện được cấu trúc đề thi. Vui lòng kiểm tra lại nội dung.");
@@ -104,7 +99,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     }
   };
 
-  /* ================= THAO TÁC CÂU HỎI (XÓA / NHÂN BẢN) ================= */
+  /* ================= THAO TÁC CÂU HỎI ================= */
   const deleteQuestion = (index: number) => {
     if (!previewExam) return;
     const updatedQuestions = previewExam.questions.filter((_, i) => i !== index);
@@ -114,21 +109,35 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
   const duplicateQuestion = (index: number) => {
     if (!previewExam) return;
     const updatedQuestions = [...previewExam.questions];
-    // Copy câu hỏi và chèn vào ngay sau nó (Tương đương thao tác Ctrl+V)
     const clonedQuestion = { ...updatedQuestions[index] };
     updatedQuestions.splice(index + 1, 0, clonedQuestion);
+    setPreviewExam({ ...previewExam, questions: updatedQuestions });
+  };
+
+  // TÍNH NĂNG MỚI: CHỌN ĐÁP ÁN ĐÚNG BẰNG TAY
+  const handleSetCorrectAnswer = (qIndex: number, optIndex: number) => {
+    if (!previewExam) return;
+    const updatedQuestions = [...previewExam.questions];
+    updatedQuestions[qIndex].correctAnswer = optIndex;
     setPreviewExam({ ...previewExam, questions: updatedQuestions });
   };
 
   /* ================= SAVE TO SUPABASE ================= */
   const saveToCloud = async () => {
     if (!previewExam || previewExam.questions.length === 0) return;
+
+    // KIỂM TRA BẢO VỆ: Chặn lưu nếu có câu chưa có đáp án
+    const missingAnswers = previewExam.questions.filter(q => q.correctAnswer === undefined || q.correctAnswer === null);
+    if (missingAnswers.length > 0) {
+      alert(`⚠️ Chú ý: Còn ${missingAnswers.length} câu hỏi chưa có đáp án đúng. Vui lòng click chọn đáp án cho tất cả các câu trước khi lưu!`);
+      return;
+    }
+
     setLoading(true);
 
     try {
       const now = new Date().toISOString();
 
-      // 1️⃣ Lưu thông tin chung của Đề thi
       const { data: examData, error: examError } = await supabase
         .from("exams")
         .insert({
@@ -147,13 +156,13 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
 
       if (examError || !examData) throw new Error("Lỗi khi lưu đề thi");
 
-      // 2️⃣ Lưu danh sách câu hỏi
       const questionsToInsert = previewExam.questions.map((q, index) => ({
         exam_id: examData.id,
         content: q.text,
-        type: "MCQ", // Có thể mở rộng theo loại câu hỏi sau
+        type: "MCQ",
         options: q.options,
-        correct_answer: q.correctAnswer !== undefined ? String(q.correctAnswer) : null,
+        // Đã sửa đồng bộ hoàn hảo với StudentQuiz
+        correct_answer: String(q.correctAnswer), 
         points: 1,
         order: index + 1,
         created_at: now,
@@ -167,7 +176,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
       if (questionError) throw new Error("Lỗi khi lưu câu hỏi");
 
       alert("🎉 Đã lưu đề thi vĩnh viễn lên hệ thống thành công!");
-      setPreviewExam(null); // Reset sau khi lưu
+      setPreviewExam(null);
       setTopic("");
     } catch (err) {
       console.error(err);
@@ -234,16 +243,29 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
             </span>
           </div>
 
+          {/* Cảnh báo Giáo viên */}
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl flex items-start gap-3 text-amber-200">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <p className="text-sm">
+              <strong>Chú ý:</strong> File PDF thường không có sẵn đáp án. Vui lòng kiểm tra lại và <strong>click vào các lựa chọn (A, B, C, D) bên dưới</strong> để đánh dấu đáp án đúng cho từng câu hỏi trước khi lưu.
+            </p>
+          </div>
+
           <div className="space-y-4">
             <AnimatePresence>
-              {previewExam.questions.map((q, i) => (
+              {previewExam.questions.map((q, i) => {
+                const isMissingAnswer = q.correctAnswer === undefined || q.correctAnswer === null;
+                
+                return (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="bg-slate-800/50 border border-slate-700 p-5 rounded-xl hover:border-indigo-500/50 transition-colors group relative"
+                  className={`bg-slate-800/50 border p-5 rounded-xl transition-colors group relative ${
+                    isMissingAnswer ? 'border-rose-500/50' : 'border-slate-700 hover:border-indigo-500/50'
+                  }`}
                 >
                   {/* Thanh công cụ Xóa & Nhân bản */}
                   <div className="absolute top-4 right-4 flex opacity-0 group-hover:opacity-100 transition-opacity gap-2">
@@ -264,36 +286,44 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
                   </div>
 
                   <div className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold flex-shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold flex-shrink-0 ${
+                      isMissingAnswer ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-500/20 text-indigo-400'
+                    }`}>
                       {i + 1}
                     </div>
                     <div className="flex-1 space-y-4">
                       {/* Nội dung câu hỏi (Render Toán học) */}
                       <div className="text-slate-200 font-medium">
                         <MathPreview content={q.text} />
+                        {isMissingAnswer && (
+                          <span className="ml-2 text-xs text-rose-400 font-normal italic">
+                            (Chưa chọn đáp án)
+                          </span>
+                        )}
                       </div>
                       
-                      {/* Danh sách đáp án */}
+                      {/* Danh sách đáp án - CHO PHÉP CLICK */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                         {q.options.map((opt, idx) => {
                           const isCorrect = q.correctAnswer === idx;
                           return (
                             <div
                               key={idx}
-                              className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+                              onClick={() => handleSetCorrectAnswer(i, idx)}
+                              className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer hover:bg-slate-700/50 ${
                                 isCorrect
-                                  ? "bg-emerald-500/10 border-emerald-500/30"
+                                  ? "bg-emerald-500/10 border-emerald-500/50 ring-1 ring-emerald-500"
                                   : "bg-slate-900/50 border-slate-700/50"
                               }`}
                             >
                               <span className={`font-bold mt-0.5 ${isCorrect ? "text-emerald-400" : "text-slate-400"}`}>
                                 {String.fromCharCode(65 + idx)}.
                               </span>
-                              <div className={isCorrect ? "text-emerald-100" : "text-slate-300"}>
+                              <div className={`flex-1 ${isCorrect ? "text-emerald-100" : "text-slate-300"}`}>
                                 <MathPreview content={opt} />
                               </div>
                               {isCorrect && (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-auto flex-shrink-0 mt-1" />
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500 ml-auto flex-shrink-0 mt-0.5" />
                               )}
                             </div>
                           );
@@ -302,7 +332,8 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
                     </div>
                   </div>
                 </motion.div>
-              ))}
+                )
+              })}
             </AnimatePresence>
           </div>
 
@@ -310,7 +341,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
             <button
               onClick={saveToCloud}
               disabled={loading}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20"
+              className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />}
               Lưu Đề Vĩnh Viễn Lên Cloud
