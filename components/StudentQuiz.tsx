@@ -26,7 +26,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultData, setResultData] = useState<{score: number, total: number, detailLog: string[]} | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(false); // State để bật/tắt chế độ xem lỗi chấm điểm
+  const [showDebug, setShowDebug] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -50,31 +50,27 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       if (data.questions && Array.isArray(data.questions)) parsedQuestions = data.questions;
       else if (data.content) {
           try {
-             // Thử parse nếu content là string JSON
              parsedQuestions = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
           } catch (e) {}
       }
       
-      // Nếu vẫn không có câu hỏi, thử check trường 'questions' bên trong content json
       if (!Array.isArray(parsedQuestions) && (parsedQuestions as any)?.questions) {
           parsedQuestions = (parsedQuestions as any).questions;
       }
       
       if (!Array.isArray(parsedQuestions)) parsedQuestions = [];
 
-      // CHUẨN HÓA DỮ LIỆU CÂU HỎI
+      // CHUẨN HÓA DỮ LIỆU CÂU HỎI TỐI ƯU HƠN
       const sanitized = parsedQuestions.map((q, index) => ({
           ...q, 
-          // Tạo ID ổn định
           id: q.id || `fixed_q_${index}`,
-          // Tìm đáp án đúng ở mọi ngóc ngách có thể
-          correct_option: q.correct_option || q.answer || q.correct || q.right_answer || q.dap_an_dung
+          // QUAN TRỌNG: Vét sạch mọi trường có thể chứa đáp án đúng
+          correct_option: q.correct_option || q.correctAnswer || q.correct_answer || q.answer || q.correct || q.right_answer || q.dap_an_dung || q.dapan || q.correctOption
       }));
       
-      console.log("Dữ liệu câu hỏi đã tải:", sanitized); // Debug xem có đáp án đúng không
+      console.log("Dữ liệu câu hỏi đã tải:", sanitized);
       setQuestions(sanitized);
 
-      // Load bản nháp (nếu khớp ID)
       const savedAnswers = localStorage.getItem(`quiz_draft_${examId}_${user.id}`);
       if (savedAnswers) setAnswers(JSON.parse(savedAnswers));
 
@@ -103,17 +99,21 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   // --- HÀM TÍNH ĐIỂM THÔNG MINH ---
   const calculateLocalScore = () => {
     let correctCount = 0;
-    const logs: string[] = []; // Log lại quá trình chấm để soi lỗi
+    const logs: string[] = []; 
     
     questions.forEach((q, idx) => {
-      if (q.type !== 'essay') { // Bỏ qua câu tự luận
-        // Lấy đáp án người dùng
+      if (q.type !== 'essay') {
         const userAnsRaw = answers[q.id]; 
         const userAns = (userAnsRaw || "").trim().toUpperCase();
         
-        // Lấy đáp án đúng (đã gộp từ nhiều nguồn)
-        const correctAnsRaw = q.correct_option;
-        const correctAns = (String(correctAnsRaw || "")).trim().toUpperCase();
+        let correctAnsRaw = q.correct_option;
+        let correctAns = (String(correctAnsRaw || "")).trim().toUpperCase();
+        
+        // CỨU CÁNH LOGIC: Nếu database lưu đáp án là 0, 1, 2, 3 thay vì A, B, C, D
+        if (correctAns === "0") correctAns = "A";
+        else if (correctAns === "1") correctAns = "B";
+        else if (correctAns === "2") correctAns = "C";
+        else if (correctAns === "3") correctAns = "D";
         
         const isCorrect = userAns && correctAns && userAns === correctAns;
         
@@ -135,13 +135,10 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
     if (!autoSubmit && !window.confirm("Bạn chắc chắn muốn nộp bài?")) return;
     setIsSubmitting(true);
     
-    // 1. Chấm điểm
     const { score, logs } = calculateLocalScore();
     const finalResult = { score: score, total: 10, detailLog: logs };
     
-    // 2. Lưu Server (Thử cả Service lẫn gọi trực tiếp Supabase để chắc ăn)
     try {
-      // Cách 1: Gọi qua Service (cũ)
       const payload: any = {
         exam_id: exam?.id,
         student_id: user.id,
@@ -151,17 +148,14 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       };
       if ((user as any).class_id) payload.class_id = (user as any).class_id;
 
-      // Thử submit
       await quizService.submitExam(payload);
       
-      // Dọn dẹp
       if(exam) localStorage.removeItem(`quiz_draft_${exam.id}_${user.id}`);
       localStorage.removeItem('lms_active_exam_id');
       setSaveError(null);
 
     } catch (err: any) {
       console.error("Service failed, trying direct insert...", err);
-      // Cách 2: Fallback - Gọi trực tiếp Supabase nếu Service lỗi
       try {
           const { error: directError } = await supabase.from('submissions').insert([{
               exam_id: exam?.id,
@@ -172,7 +166,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
           }]);
           
           if (directError) throw directError;
-          setSaveError(null); // Thành công
+          setSaveError(null);
           
       } catch (finalErr: any) {
           console.error("Lỗi lưu cuối cùng:", finalErr);
@@ -208,11 +202,10 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const QuizInterface = (
     <div className="fixed inset-0 bg-slate-100 z-[999999] flex flex-col h-screen w-screen font-sans">
       
-      {/* RESULT OVERLAY */}
       {resultData && (
         <div className="absolute inset-0 z-[1000000] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full text-center relative my-auto">
-              
+             
               {saveError ? (
                 <div className="mb-6 bg-red-50 border border-red-100 p-3 rounded-lg flex gap-3 text-left">
                   <AlertCircle className="text-red-500 shrink-0" />
@@ -233,7 +226,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                  <span className="text-xl text-slate-400 font-medium">/10</span>
               </div>
 
-              {/* KHU VỰC DEBUG - GIÚP BẠN SOI LỖI */}
               <div className="mb-6">
                 <button 
                   onClick={() => setShowDebug(!showDebug)}
@@ -250,7 +242,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                        </div>
                      ))}
                      <div className="mt-2 text-slate-400 italic">
-                        *Lưu ý: Nếu thấy "Đáp án đúng [KHÔNG TÌM THẤY]", nghĩa là dữ liệu đề thi chưa nhập đáp án.
+                       *Lưu ý: Nếu thấy "Đáp án đúng [KHÔNG TÌM THẤY]", nghĩa là dữ liệu đề thi chưa nhập đáp án.
                      </div>
                   </div>
                 )}
@@ -266,7 +258,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
         </div>
       )}
 
-      {/* HEADER */}
       <div className="bg-white h-16 px-4 flex items-center justify-between shadow-sm shrink-0 z-50">
          <div className="flex items-center gap-3 w-1/3">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded"><Menu/></button>
@@ -284,7 +275,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
          </div>
       </div>
 
-      {/* BODY */}
       <div className="flex flex-1 overflow-hidden relative">
         <AnimatePresence>
           {(isSidebarOpen || window.innerWidth >= 1024) && (
@@ -314,7 +304,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
         <div className="flex-1 flex flex-col relative bg-slate-50">
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24">
              <div className="max-w-3xl mx-auto space-y-6">
-                {/* QUESTION CARD */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8">
                    <div className="mb-4 flex gap-2">
                       <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded text-xs font-bold uppercase">Câu {currentQIndex + 1}</span>
@@ -324,7 +313,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                    </div>
                 </div>
 
-                {/* OPTIONS */}
                 <div className="grid gap-3">
                   {currentQ.options?.map((opt, i) => {
                      const label = ['A','B','C','D'][i];
