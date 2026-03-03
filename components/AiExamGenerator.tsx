@@ -156,18 +156,25 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
 
       if (examError || !examData) throw new Error("Lỗi khi lưu đề thi");
 
-      const questionsToInsert = previewExam.questions.map((q, index) => ({
-        exam_id: examData.id,
-        content: q.text,
-        type: "MCQ",
-        options: q.options,
-        // Đã sửa đồng bộ hoàn hảo với StudentQuiz
-        correct_answer: String(q.correctAnswer), 
-        points: 1,
-        order: index + 1,
-        created_at: now,
-        updated_at: now,
-      }));
+      const questionsToInsert = previewExam.questions.map((q, index) => {
+        // --- THIS IS THE CRUCIAL FIX ---
+        // Convert numeric index (0, 1, 2, 3) to letters (A, B, C, D)
+        const answerLetters = ["A", "B", "C", "D"];
+        const correctLetter = q.correctAnswer !== undefined ? answerLetters[q.correctAnswer] : null;
+
+        return {
+          exam_id: examData.id,
+          content: q.text,
+          type: "MCQ",
+          options: q.options,
+          // Save the letter (A, B, C, or D) to the database
+          correct_answer: correctLetter, 
+          points: 1,
+          order: index + 1,
+          created_at: now,
+          updated_at: now,
+        };
+      });
 
       const { error: questionError } = await supabase
         .from("questions")
