@@ -29,7 +29,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [showDebug, setShowDebug] = useState(false);
   const [mounted, setMounted] = useState(false);
   
-  // NEW: State quản lý chế độ xem lại bài
+  // State quản lý chế độ xem lại bài
   const [isReviewMode, setIsReviewMode] = useState(false);
 
   useEffect(() => {
@@ -82,7 +82,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
 
   // --- TIMER ---
   useEffect(() => {
-    // Dừng đếm ngược nếu đang submit, đã có kết quả, hoặc đang ở chế độ xem lại
     if (!exam || isSubmitting || questions.length === 0 || resultData || isReviewMode) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -179,7 +178,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   };
 
   const handleSelectAnswer = (qId: string, value: string) => {
-    // Chặn không cho chọn đáp án nếu đang ở chế độ xem lại
     if (isReviewMode) return; 
 
     const newAnswers = { ...answers, [qId]: value };
@@ -253,7 +251,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
              </div>
 
              <div className="flex flex-col gap-3">
-               {/* NÚT XEM LẠI BÀI */}
                <button 
                  onClick={() => setIsReviewMode(true)}
                  className="w-full bg-indigo-100 text-indigo-700 py-3 rounded-xl font-bold hover:bg-indigo-200 transition-all border border-indigo-200"
@@ -310,7 +307,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                </div>
                <div className="flex-1 overflow-y-auto p-2 grid grid-cols-5 gap-2 content-start pb-20">
                  {questions.map((q, idx) => {
-                   // Logic tô màu danh sách câu hỏi khi ở chế độ Review
                    let btnClass = "bg-white text-slate-500 border-slate-200";
                    
                    if (isReviewMode) {
@@ -363,6 +359,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                    </div>
                 </div>
 
+                {/* VÙNG CHỨA CÁC ĐÁP ÁN A, B, C, D */}
                 <div className="grid gap-3">
                   {currentQ.options?.map((opt, i) => {
                      const label = ['A','B','C','D'][i];
@@ -379,22 +376,18 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                         const isCorrectOption = label === correctAns;
 
                         if (isCorrectOption) {
-                           // Tô xanh đáp án đúng (dù học sinh có chọn hay không)
                            optionClass = 'border-green-500 bg-green-50 z-10';
                            iconBg = 'bg-green-500 text-white';
                            iconContent = <CheckCircle size={16}/>;
                         } else if (isSelected && !isCorrectOption) {
-                           // Tô đỏ đáp án học sinh chọn sai
                            optionClass = 'border-red-500 bg-red-50 z-10';
                            iconBg = 'bg-red-500 text-white';
                            iconContent = <X size={16}/>;
                         } else {
-                           // Các đáp án khác làm mờ đi
                            optionClass = 'border-slate-200 bg-white opacity-60';
                            iconBg = 'bg-slate-100 text-slate-400';
                         }
                      } else {
-                        // Trạng thái bình thường khi đang thi
                         if (isSelected) {
                            optionClass = 'border-indigo-500 bg-indigo-50 z-10';
                            iconBg = 'bg-indigo-500 text-white';
@@ -414,15 +407,28 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                      )
                   })}
                 </div>
+
+                {/* ✨ KHUNG HIỂN THỊ LỜI GIẢI CHI TIẾT (CHỈ HIỆN Ở CHẾ ĐỘ XEM LẠI) ✨ */}
+                {isReviewMode && currentQ.explanation && (
+                  <div className="mt-8 p-5 bg-indigo-50 border border-indigo-200 rounded-xl animate-fade-in shadow-sm">
+                    <h4 className="font-bold text-indigo-800 mb-4 flex items-center gap-2 border-b border-indigo-200 pb-2">
+                      <CheckCircle size={20} className="text-indigo-600" /> Lời giải chi tiết:
+                    </h4>
+                    <div className="text-slate-800 text-base leading-relaxed">
+                       {renderRichContent(currentQ.explanation)}
+                    </div>
+                  </div>
+                )}
+
              </div>
           </div>
 
           <div className="absolute bottom-0 inset-x-0 h-20 bg-white border-t flex items-center justify-between px-6 z-30">
-             <button disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(i => i - 1)} className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-50">
+             <button disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(i => i - 1)} className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-50 transition-colors">
                <ChevronLeft size={20}/> Trước
              </button>
-             <div className="mr-20">
-               <button disabled={currentQIndex === questions.length - 1} onClick={() => setCurrentQIndex(i => i + 1)} className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 font-bold shadow-lg disabled:opacity-50">
+             <div className="mr-20 lg:mr-0"> {/* Tinh chỉnh lại margin ở responsive mobile */}
+               <button disabled={currentQIndex === questions.length - 1} onClick={() => setCurrentQIndex(i => i + 1)} className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 font-bold shadow-lg disabled:opacity-50 transition-colors">
                  Tiếp theo <ChevronRight size={20}/>
                </button>
              </div>
