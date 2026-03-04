@@ -28,6 +28,9 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  // NEW: State quản lý chế độ xem lại bài
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -45,7 +48,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       setExam(data);
       setTimeLeft(data.duration ? data.duration * 60 : 45 * 60);
 
-      // Xử lý questions linh hoạt
       let parsedQuestions: any[] = [];
       if (data.questions && Array.isArray(data.questions)) parsedQuestions = data.questions;
       else if (data.content) {
@@ -60,11 +62,9 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       
       if (!Array.isArray(parsedQuestions)) parsedQuestions = [];
 
-      // CHUẨN HÓA DỮ LIỆU CÂU HỎI TỐI ƯU HƠN
       const sanitized = parsedQuestions.map((q, index) => ({
           ...q, 
           id: q.id || `fixed_q_${index}`,
-          // QUAN TRỌNG: Vét sạch mọi trường có thể chứa đáp án đúng
           correct_option: q.correct_option || q.correctAnswer || q.correct_answer || q.answer || q.correct || q.right_answer || q.dap_an_dung || q.dapan || q.correctOption
       }));
       
@@ -82,7 +82,8 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
 
   // --- TIMER ---
   useEffect(() => {
-    if (!exam || isSubmitting || questions.length === 0 || resultData) return;
+    // Dừng đếm ngược nếu đang submit, đã có kết quả, hoặc đang ở chế độ xem lại
+    if (!exam || isSubmitting || questions.length === 0 || resultData || isReviewMode) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -94,7 +95,7 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [exam, isSubmitting, questions.length, resultData]);
+  }, [exam, isSubmitting, questions.length, resultData, isReviewMode]);
 
   // --- HÀM TÍNH ĐIỂM THÔNG MINH ---
   const calculateLocalScore = () => {
@@ -109,7 +110,6 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
         let correctAnsRaw = q.correct_option;
         let correctAns = (String(correctAnsRaw || "")).trim().toUpperCase();
         
-        // CỨU CÁNH LOGIC: Nếu database lưu đáp án là 0, 1, 2, 3 thay vì A, B, C, D
         if (correctAns === "0") correctAns = "A";
         else if (correctAns === "1") correctAns = "B";
         else if (correctAns === "2") correctAns = "C";
@@ -179,6 +179,9 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   };
 
   const handleSelectAnswer = (qId: string, value: string) => {
+    // Chặn không cho chọn đáp án nếu đang ở chế độ xem lại
+    if (isReviewMode) return; 
+
     const newAnswers = { ...answers, [qId]: value };
     setAnswers(newAnswers);
     if(exam) localStorage.setItem(`quiz_draft_${exam.id}_${user.id}`, JSON.stringify(newAnswers));
@@ -202,76 +205,96 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
   const QuizInterface = (
     <div className="fixed inset-0 bg-slate-100 z-[999999] flex flex-col h-screen w-screen font-sans">
       
-      {resultData && (
+      {/* MODAL KẾT QUẢ */}
+      {resultData && !isReviewMode && (
         <div className="absolute inset-0 z-[1000000] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-lg w-full text-center relative my-auto">
              
-              {saveError ? (
-                <div className="mb-6 bg-red-50 border border-red-100 p-3 rounded-lg flex gap-3 text-left">
-                  <AlertCircle className="text-red-500 shrink-0" />
-                  <p className="text-sm text-red-600">
-                    <strong>Thông báo hệ thống:</strong> {saveError} <br/>
-                    (Kết quả của bạn vẫn hợp lệ, hãy chụp màn hình gửi Giáo viên).
-                  </p>
-                </div>
-              ) : (
-                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                  <Trophy className="text-green-600" size={32} />
-                </div>
-              )}
+             {saveError ? (
+               <div className="mb-6 bg-red-50 border border-red-100 p-3 rounded-lg flex gap-3 text-left">
+                 <AlertCircle className="text-red-500 shrink-0" />
+                 <p className="text-sm text-red-600">
+                   <strong>Thông báo hệ thống:</strong> {saveError} <br/>
+                   (Kết quả của bạn vẫn hợp lệ, hãy chụp màn hình gửi Giáo viên).
+                 </p>
+               </div>
+             ) : (
+               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                 <Trophy className="text-green-600" size={32} />
+               </div>
+             )}
 
-              <h2 className="text-2xl font-bold text-slate-800">Kết quả bài làm</h2>
-              <div className="py-6">
-                 <span className="text-6xl font-black text-indigo-600">{resultData.score}</span>
-                 <span className="text-xl text-slate-400 font-medium">/10</span>
-              </div>
+             <h2 className="text-2xl font-bold text-slate-800">Kết quả bài làm</h2>
+             <div className="py-6">
+                <span className="text-6xl font-black text-indigo-600">{resultData.score}</span>
+                <span className="text-xl text-slate-400 font-medium">/10</span>
+             </div>
 
-              <div className="mb-6">
-                <button 
-                  onClick={() => setShowDebug(!showDebug)}
-                  className="text-sm text-indigo-600 underline hover:text-indigo-800 flex items-center justify-center gap-1 mx-auto"
-                >
-                   <Eye size={14}/> {showDebug ? "Ẩn chi tiết chấm điểm" : "Tại sao tôi được điểm này?"}
-                </button>
-                
-                {showDebug && (
-                  <div className="mt-4 p-3 bg-slate-100 rounded-lg text-left max-h-48 overflow-y-auto text-xs font-mono text-slate-600 border border-slate-200">
-                     {resultData.detailLog.map((log, i) => (
-                       <div key={i} className={`mb-1 pb-1 border-b border-slate-200 last:border-0 ${log.includes('✅') ? 'text-green-600' : 'text-red-500'}`}>
-                         {log}
-                       </div>
-                     ))}
-                     <div className="mt-2 text-slate-400 italic">
-                       *Lưu ý: Nếu thấy "Đáp án đúng [KHÔNG TÌM THẤY]", nghĩa là dữ liệu đề thi chưa nhập đáp án.
-                     </div>
-                  </div>
-                )}
-              </div>
+             <div className="mb-6">
+               <button 
+                 onClick={() => setShowDebug(!showDebug)}
+                 className="text-sm text-indigo-600 underline hover:text-indigo-800 flex items-center justify-center gap-1 mx-auto"
+               >
+                  <Eye size={14}/> {showDebug ? "Ẩn chi tiết chấm điểm" : "Tại sao tôi được điểm này?"}
+               </button>
+               
+               {showDebug && (
+                 <div className="mt-4 p-3 bg-slate-100 rounded-lg text-left max-h-48 overflow-y-auto text-xs font-mono text-slate-600 border border-slate-200">
+                    {resultData.detailLog.map((log, i) => (
+                      <div key={i} className={`mb-1 pb-1 border-b border-slate-200 last:border-0 ${log.includes('✅') ? 'text-green-600' : 'text-red-500'}`}>
+                        {log}
+                      </div>
+                    ))}
+                    <div className="mt-2 text-slate-400 italic">
+                      *Lưu ý: Nếu thấy "Đáp án đúng [KHÔNG TÌM THẤY]", nghĩa là dữ liệu đề thi chưa nhập đáp án.
+                    </div>
+                 </div>
+               )}
+             </div>
 
-              <button 
-                onClick={() => onTabChange('dashboard')}
-                className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition-all"
-              >
-                Về trang chủ
-              </button>
+             <div className="flex flex-col gap-3">
+               {/* NÚT XEM LẠI BÀI */}
+               <button 
+                 onClick={() => setIsReviewMode(true)}
+                 className="w-full bg-indigo-100 text-indigo-700 py-3 rounded-xl font-bold hover:bg-indigo-200 transition-all border border-indigo-200"
+               >
+                 Xem lại bài làm
+               </button>
+               
+               <button 
+                 onClick={() => onTabChange('dashboard')}
+                 className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition-all"
+               >
+                 Về trang chủ
+               </button>
+             </div>
            </div>
         </div>
       )}
 
+      {/* HEADER BÀI THI */}
       <div className="bg-white h-16 px-4 flex items-center justify-between shadow-sm shrink-0 z-50">
          <div className="flex items-center gap-3 w-1/3">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded"><Menu/></button>
-            <h1 className="font-bold text-slate-700 truncate hidden sm:block">{exam.title}</h1>
+            <h1 className="font-bold text-slate-700 truncate hidden sm:block">
+              {exam.title} {isReviewMode && <span className="text-indigo-600 ml-2">(Chế độ xem lại)</span>}
+            </h1>
          </div>
          <div className="flex justify-center w-1/3">
-            <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold border ${timeLeft < 300 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-100 text-slate-700'}`}>
-              <Clock size={18}/> {formatTime(timeLeft)}
+            <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-mono font-bold border ${timeLeft < 300 && !isReviewMode ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-100 text-slate-700'}`}>
+              <Clock size={18}/> {isReviewMode ? "Đã nộp bài" : formatTime(timeLeft)}
             </div>
          </div>
          <div className="flex justify-end w-1/3">
-            <button onClick={() => handleSafeSubmit(false)} disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold shadow transition-all">
-              {isSubmitting ? "..." : "Nộp bài"}
-            </button>
+            {isReviewMode ? (
+               <button onClick={() => onTabChange('dashboard')} className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-lg font-bold shadow transition-all flex items-center gap-2">
+                 <Home size={18}/> Thoát
+               </button>
+            ) : (
+               <button onClick={() => handleSafeSubmit(false)} disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold shadow transition-all">
+                 {isSubmitting ? "..." : "Nộp bài"}
+               </button>
+            )}
          </div>
       </div>
 
@@ -286,16 +309,38 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                  Danh sách câu <button onClick={() => setSidebarOpen(false)} className="lg:hidden"><X size={18}/></button>
                </div>
                <div className="flex-1 overflow-y-auto p-2 grid grid-cols-5 gap-2 content-start pb-20">
-                 {questions.map((q, idx) => (
-                   <button key={q.id} onClick={() => {setCurrentQIndex(idx); setSidebarOpen(false)}}
-                     className={`h-9 rounded text-xs font-bold border transition-all ${
-                       idx === currentQIndex ? 'bg-indigo-600 text-white border-indigo-600' : 
-                       answers[q.id] ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-slate-500 border-slate-200'
-                     }`}
-                   >
-                     {idx + 1}
-                   </button>
-                 ))}
+                 {questions.map((q, idx) => {
+                   // Logic tô màu danh sách câu hỏi khi ở chế độ Review
+                   let btnClass = "bg-white text-slate-500 border-slate-200";
+                   
+                   if (isReviewMode) {
+                     const userAns = (answers[q.id] || "").trim().toUpperCase();
+                     let correctAns = (String(q.correct_option || "")).trim().toUpperCase();
+                     if (correctAns === "0") correctAns = "A"; else if (correctAns === "1") correctAns = "B"; else if (correctAns === "2") correctAns = "C"; else if (correctAns === "3") correctAns = "D";
+                     
+                     if (userAns === correctAns) {
+                       btnClass = "bg-green-100 text-green-700 border-green-300"; // Đúng
+                     } else if (userAns) {
+                       btnClass = "bg-red-100 text-red-700 border-red-300"; // Sai
+                     } else {
+                       btnClass = "bg-slate-100 text-slate-400 border-slate-200"; // Bỏ trống
+                     }
+                   } else if (answers[q.id]) {
+                     btnClass = "bg-emerald-100 text-emerald-700 border-emerald-300"; // Đã làm
+                   }
+
+                   if (idx === currentQIndex) {
+                     btnClass = "bg-indigo-600 text-white border-indigo-600"; // Đang chọn
+                   }
+
+                   return (
+                     <button key={q.id} onClick={() => {setCurrentQIndex(idx); setSidebarOpen(false)}}
+                       className={`h-9 rounded text-xs font-bold border transition-all ${btnClass}`}
+                     >
+                       {idx + 1}
+                     </button>
+                   );
+                 })}
                </div>
             </motion.div>
           )}
@@ -307,6 +352,11 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8">
                    <div className="mb-4 flex gap-2">
                       <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded text-xs font-bold uppercase">Câu {currentQIndex + 1}</span>
+                      {isReviewMode && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 bg-indigo-50 text-indigo-600">
+                           Xem lại
+                        </span>
+                      )}
                    </div>
                    <div className="text-lg text-slate-800 leading-relaxed font-medium">
                       {renderRichContent(currentQ.content)}
@@ -317,15 +367,48 @@ const StudentQuiz: React.FC<Props> = ({ user, onTabChange }) => {
                   {currentQ.options?.map((opt, i) => {
                      const label = ['A','B','C','D'][i];
                      const isSelected = answers[currentQ.id] === label;
+                     
+                     let optionClass = 'border-transparent shadow-sm hover:border-indigo-200 bg-white';
+                     let iconBg = 'bg-slate-100 text-slate-500';
+                     let iconContent: React.ReactNode = label;
+
+                     if (isReviewMode) {
+                        let correctAns = (String(currentQ.correct_option || "")).trim().toUpperCase();
+                        if (correctAns === "0") correctAns = "A"; else if (correctAns === "1") correctAns = "B"; else if (correctAns === "2") correctAns = "C"; else if (correctAns === "3") correctAns = "D";
+                        
+                        const isCorrectOption = label === correctAns;
+
+                        if (isCorrectOption) {
+                           // Tô xanh đáp án đúng (dù học sinh có chọn hay không)
+                           optionClass = 'border-green-500 bg-green-50 z-10';
+                           iconBg = 'bg-green-500 text-white';
+                           iconContent = <CheckCircle size={16}/>;
+                        } else if (isSelected && !isCorrectOption) {
+                           // Tô đỏ đáp án học sinh chọn sai
+                           optionClass = 'border-red-500 bg-red-50 z-10';
+                           iconBg = 'bg-red-500 text-white';
+                           iconContent = <X size={16}/>;
+                        } else {
+                           // Các đáp án khác làm mờ đi
+                           optionClass = 'border-slate-200 bg-white opacity-60';
+                           iconBg = 'bg-slate-100 text-slate-400';
+                        }
+                     } else {
+                        // Trạng thái bình thường khi đang thi
+                        if (isSelected) {
+                           optionClass = 'border-indigo-500 bg-indigo-50 z-10';
+                           iconBg = 'bg-indigo-500 text-white';
+                           iconContent = <CheckCircle size={16}/>;
+                        }
+                     }
+
                      return (
                        <div key={i} onClick={() => handleSelectAnswer(currentQ.id, label)}
-                         className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all bg-white ${
-                           isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-transparent shadow-sm hover:border-indigo-200'
-                         }`}
+                         className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${isReviewMode ? 'cursor-default' : 'cursor-pointer'} ${optionClass}`}
                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                            isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'
-                          }`}>{isSelected ? <CheckCircle size={16}/> : label}</div>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${iconBg}`}>
+                             {iconContent}
+                          </div>
                           <div className="flex-1 text-slate-700 text-lg">{renderRichContent(opt)}</div>
                        </div>
                      )
