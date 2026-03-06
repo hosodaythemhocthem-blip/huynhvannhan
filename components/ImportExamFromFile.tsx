@@ -1,4 +1,3 @@
-// components/ImportExamFromFile.tsx
 import React, { useState, useRef, DragEvent } from "react";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
@@ -14,29 +13,85 @@ interface Props {
 }
 
 const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess }) => {
-  const [loadingStep, setLoadingStep] = useState<"idle" | "reading" | "analyzing">("idle");
+  // Thêm trạng thái "uploading" cho ảnh
+  const [loadingStep, setLoadingStep] = useState<"idle" | "reading" | "analyzing" | "uploading">("idle");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // LINK GOOGLE SCRIPT CỦA BẠN (Đã cập nhật code lưu vào folder 1Yx... ở bước trước)
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyI-Nbef4rbynbtiJgW5BwtKTybxeRsiRhTha23XNpc95N7TDt6l-O9lgFpjpVS4IX9w/exec';
+
   if (!isOpen) return null;
+
+  // Hàm hỗ trợ chuyển File Ảnh sang Base64
+  const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]); // Cắt bỏ phần mào đầu "data:image/png;base64,"
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
 
   const handleFile = async (file: File) => {
     if (!file) return;
 
     try {
       setFileName(file.name);
-      setLoadingStep("reading");
+      
+      // ==========================================
+      // NHÁNH 1: NẾU FILE LÀ ẢNH (Tải lên Google Drive)
+      // ==========================================
+      if (file.type.startsWith("image/")) {
+        setLoadingStep("uploading");
+        
+        const base64Data = await convertToBase64(file);
+        
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            fileName: file.name,
+            mimeType: file.type,
+            base64: base64Data,
+          }),
+        });
 
+        const data = await response.json();
+
+        if (data.status === 'error') {
+          throw new Error(data.message || "Lỗi từ Google Drive");
+        }
+
+        // Tải ảnh thành công, trả dữ liệu về Component cha
+        // Trả về type: 'image' kèm theo link ảnh để hiển thị đề trắc nghiệm
+        onImportSuccess({ 
+          type: 'image_exam', 
+          imageUrl: data.fileUrl, 
+          title: file.name 
+        });
+
+        setLoadingStep("idle");
+        setFileName(null);
+        onClose();
+        return; // Kết thúc hàm tại đây đối với Ảnh
+      }
+
+      // ==========================================
+      // NHÁNH 2: NẾU FILE LÀ WORD HOẶC PDF (Dùng AI xử lý như cũ)
+      // ==========================================
+      setLoadingStep("reading");
       const buffer = await file.arrayBuffer();
       let fullText = "";
 
-      // 1. XỬ LÝ ĐỌC FILE
       if (file.name.toLowerCase().endsWith(".docx")) {
         const result = await mammoth.extractRawText({ arrayBuffer: buffer });
         fullText = result.value.trim();
       } else if (file.name.toLowerCase().endsWith(".pdf")) {
-        // 🔥 FIX: Ép kiểu sang Uint8Array để pdf.js phiên bản mới đọc được mà không báo lỗi
         const uint8Array = new Uint8Array(buffer);
         const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
         const pdf = await loadingTask.promise;
@@ -51,30 +106,27 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
           fullText += pageText.trim() + "\n\n";
         }
       } else {
-        alert("Định dạng file không hỗ trợ. Vui lòng chọn .docx hoặc .pdf");
+        alert("Định dạng file không hỗ trợ. Vui lòng chọn .docx, .pdf hoặc ảnh (.png, .jpg)");
         setLoadingStep("idle");
         setFileName(null);
         return;
       }
 
-      if (!fullText) throw new Error("File rỗng hoặc thư viện không rút trích được chữ từ file này (có thể là file scan/ảnh).");
+      if (!fullText) throw new Error("File rỗng hoặc thư viện không rút trích được chữ từ file này.");
 
-      // 2. CHUYỂN QUA AI XỬ LÝ
+      // CHUYỂN QUA AI XỬ LÝ
       setLoadingStep("analyzing");
       const parsedData = await geminiService.parseExamWithAI(fullText);
       
-      // 3. HOÀN THÀNH
-      onImportSuccess(parsedData);
+      onImportSuccess({ type: 'text_exam', ...parsedData });
       
-      // Reset state & đóng modal
       setLoadingStep("idle");
       setFileName(null);
       onClose();
 
     } catch (error: any) {
       console.error("Lỗi xử lý file chi tiết:", error);
-      // 🔥 FIX: Báo thẳng lỗi thật ra màn hình để biết đường bắt bệnh
-      alert(`Báo lỗi: ${error?.message || "Lỗi không xác định"}\n\n(Nếu lỗi liên quan đến API Key hoặc JSON, Thầy hãy gửi code file services/geminiService.ts lên cho em nhé!)`);
+      alert(`Báo lỗi: ${error?.message || "Lỗi không xác định"}`);
       setLoadingStep("idle");
       setFileName(null);
     }
@@ -99,16 +151,29 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
     }
   };
 
+  // Helper để lấy text hiển thị trạng thái
+  const getStatusText = () => {
+    if (loadingStep === "reading") return "Đang trích xuất văn bản...";
+    if (loadingStep === "analyzing") return "AI đang phân tích câu hỏi...";
+    if (loadingStep === "uploading") return "Đang lưu ảnh lên Google Drive...";
+    return "";
+  };
+
   return (
     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
         {/* Header Modal */}
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <span>✨</span> Tạo đề thi AI từ File
+            <span>✨</span> Tạo đề thi (AI & Ảnh)
           </h3>
           <button 
-            onClick={onClose}
+            onClick={() => {
+              // Bấm X dể đóng form thì reset lại
+              setLoadingStep("idle");
+              setFileName(null);
+              onClose();
+            }}
             disabled={loadingStep !== "idle"}
             className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
           >
@@ -134,15 +199,22 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
               type="file" 
               ref={fileInputRef} 
               className="hidden" 
-              accept=".docx,.pdf"
-              onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+              // 🔥 CHO PHÉP CHỌN CẢ WORD, PDF VÀ ẢNH
+              accept=".docx,.pdf,image/png,image/jpeg,image/jpg"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  handleFile(e.target.files[0]);
+                  // Reset input value để chọn lại cùng 1 file không bị lỗi
+                  e.target.value = ''; 
+                }
+              }}
             />
             
             <div className="flex flex-col items-center justify-center space-y-3">
               <div className={`p-3 rounded-full ${loadingStep !== "idle" ? 'bg-indigo-100' : 'bg-blue-50'}`}>
                 {loadingStep === "idle" ? (
                   <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                 ) : (
                   <svg className="w-8 h-8 text-indigo-600 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -155,12 +227,12 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
               {loadingStep === "idle" ? (
                 <>
                   <p className="text-sm font-medium text-gray-700">Nhấn để chọn hoặc kéo thả file vào đây</p>
-                  <p className="text-xs text-gray-500">Hỗ trợ định dạng Word (.docx) và PDF</p>
+                  <p className="text-xs text-gray-500">Hỗ trợ File chữ (Word, PDF) hoặc File Ảnh (JPG, PNG)</p>
                 </>
               ) : (
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-indigo-600">
-                    {loadingStep === "reading" ? "Đang trích xuất văn bản..." : "AI đang phân tích và chia câu hỏi..."}
+                    {getStatusText()}
                   </p>
                   <p className="text-xs text-gray-500">{fileName}</p>
                 </div>
