@@ -9,7 +9,7 @@ import {
   FileText,
   ShieldCheck,
   Gamepad2,
-  X // Thêm icon X để đóng menu trên mobile
+  X 
 } from "lucide-react";
 import { User } from "../types";
 
@@ -18,9 +18,8 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onLogout: () => void;
-  collapsed?: boolean;
-  isMobileOpen?: boolean; 
-  onCloseMobile?: () => void; 
+  isOpen: boolean; // Nhận trạng thái mở/đóng từ Layout
+  onClose: () => void; // Hàm đóng menu
 }
 
 interface NavItem {
@@ -34,9 +33,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   onLogout,
-  collapsed = false,
-  isMobileOpen = false,
-  onCloseMobile,
+  isOpen,
+  onClose,
 }) => {
   const navItems = useMemo<NavItem[]>(() => {
     const baseItems: NavItem[] = [
@@ -71,35 +69,33 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const handleTabClick = (id: string) => {
     onTabChange(id);
-    if (onCloseMobile) onCloseMobile();
+    onClose(); // TỰ ĐỘNG ĐÓNG menu sau khi chọn xong tab
   };
 
   return (
     <>
-      {/* Lớp phủ Overlay màu đen trên Mobile */}
-      {isMobileOpen && (
+      {/* LỚP PHỦ NỀN ĐEN: Bấm ra ngoài khoảng đen là tự đóng menu */}
+      {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
-          onClick={onCloseMobile}
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm transition-opacity"
+          onClick={onClose}
         />
       )}
 
-      {/* Sidebar Chính */}
-      {/* Đã sửa phần className thẻ aside để ẩn hoàn toàn khi collapsed = true */}
+      {/* THANH MENU: Trượt từ trái sang phải */}
       <aside
-        className={`bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-all duration-300 z-50 w-72
-          ${isMobileOpen ? "translate-x-0" : "-translate-x-full"} /* Mobile: Ẩn/hiện dựa vào isMobileOpen */
-          ${collapsed ? "md:-translate-x-full" : "md:translate-x-0"} /* Desktop: Ẩn hoàn toàn (trượt sang trái) khi collapsed */
+        className={`bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-transform duration-300 ease-in-out z-50 w-72 shadow-2xl
+          ${isOpen ? "translate-x-0" : "-translate-x-full"} 
         `}
       >
         {/* Logo */}
         <div className="h-20 flex items-center justify-between px-6 font-black text-lg tracking-wide whitespace-nowrap overflow-hidden">
           <span>NhanLMS Pro</span>
           
-          {/* Nút đóng Sidebar trên Mobile */}
+          {/* Nút X đóng menu */}
           <button 
-            onClick={onCloseMobile} 
-            className="md:hidden text-slate-400 hover:text-white p-2 -mr-2"
+            onClick={onClose} 
+            className="text-slate-400 hover:text-white p-2 -mr-2 transition-colors"
           >
             <X size={24} />
           </button>
@@ -121,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <Icon size={20} className="shrink-0" />
-                <span className="whitespace-nowrap transition-opacity duration-200 block">
+                <span className="whitespace-nowrap block">
                   {label}
                 </span>
               </button>
@@ -136,7 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition"
           >
             <LogOut size={20} className="shrink-0" />
-            <span className="whitespace-nowrap transition-opacity duration-200 block">
+            <span className="whitespace-nowrap block">
               Đăng xuất
             </span>
           </button>
