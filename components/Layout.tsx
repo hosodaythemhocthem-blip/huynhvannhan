@@ -21,8 +21,8 @@ const Layout: React.FC<LayoutProps> = ({
   onTabChange,
   onLogout,
 }) => {
-  // Trạng thái thu/phóng trên Desktop
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  // Đã sửa: Khởi tạo mặc định là false để khép lại khi mới mở web
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   // Trạng thái ẩn/hiện trên Mobile
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
@@ -74,10 +74,10 @@ const Layout: React.FC<LayoutProps> = ({
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
-      {/* Điều chỉnh margin trái: Không có margin trên mobile (ml-0), có margin trên md trở lên */}
+      {/* Đã sửa: Thay md:ml-24 thành md:ml-0 để trả lại toàn bộ không gian khi đóng */}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full ${
-          isSidebarOpen ? "md:ml-72 ml-0" : "md:ml-24 ml-0"
+          isSidebarOpen ? "md:ml-72 ml-0" : "md:ml-0 ml-0"
         }`}
       >
         
@@ -108,7 +108,7 @@ const Layout: React.FC<LayoutProps> = ({
 
         <main className="flex-1 p-4 md:p-8 overflow-y-auto mt-12 md:mt-0">
           <div className="max-w-7xl mx-auto w-full">
-            <div className="flex items-center gap-2 mb-6 ml-12 md:ml-0"> {/* Đẩy text sang phải một chút trên mobile để không bị đè bởi nút Hamburger */}
+            <div className="flex items-center gap-2 mb-6 ml-12 md:ml-0">
               <h2 className="text-sm font-bold tracking-wide text-slate-400">
                 LMS <span className="mx-2 text-slate-300">/</span>
                 <span className="text-indigo-500">{pageTitle}</span>
