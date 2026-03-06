@@ -18,8 +18,8 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onLogout: () => void;
-  isOpen: boolean; // Nhận trạng thái mở/đóng từ Layout
-  onClose: () => void; // Hàm đóng menu
+  isOpen?: boolean; // Cho phép optional để tránh lỗi nếu quên truyền
+  onClose: () => void;
 }
 
 interface NavItem {
@@ -33,7 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
   onLogout,
-  isOpen,
+  isOpen = false, // Mặc định là false (ẩn)
   onClose,
 }) => {
   const navItems = useMemo<NavItem[]>(() => {
@@ -69,30 +69,29 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const handleTabClick = (id: string) => {
     onTabChange(id);
-    onClose(); // TỰ ĐỘNG ĐÓNG menu sau khi chọn xong tab
+    onClose(); 
   };
 
   return (
     <>
-      {/* LỚP PHỦ NỀN ĐEN: Bấm ra ngoài khoảng đen là tự đóng menu */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-sm transition-opacity"
           onClick={onClose}
         />
       )}
 
-      {/* THANH MENU: Trượt từ trái sang phải */}
       <aside
-        className={`bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-transform duration-300 ease-in-out z-50 w-72 shadow-2xl
-          ${isOpen ? "translate-x-0" : "-translate-x-full"} 
-        `}
+        className="bg-slate-900 text-white h-screen fixed left-0 top-0 flex flex-col transition-transform duration-300 ease-in-out shadow-2xl w-72"
+        style={{ 
+          // Ép buộc trượt ra ngoài và ẩn đi khi isOpen = false
+          transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+          visibility: isOpen ? 'visible' : 'hidden',
+          zIndex: 70 
+        }}
       >
-        {/* Logo */}
         <div className="h-20 flex items-center justify-between px-6 font-black text-lg tracking-wide whitespace-nowrap overflow-hidden">
           <span>NhanLMS Pro</span>
-          
-          {/* Nút X đóng menu */}
           <button 
             onClick={onClose} 
             className="text-slate-400 hover:text-white p-2 -mr-2 transition-colors"
@@ -101,7 +100,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-3 space-y-2 overflow-y-auto custom-scrollbar">
           {navItems.map(({ id, icon: Icon, label }) => {
             const isActive = activeTab === id;
@@ -125,7 +123,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Logout */}
         <div className="p-4 border-t border-slate-800">
           <button
             onClick={onLogout}
