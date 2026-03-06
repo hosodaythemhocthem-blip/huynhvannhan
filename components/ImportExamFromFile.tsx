@@ -1,3 +1,4 @@
+// components/ImportExamFromFile.tsx
 import React, { useState, useRef, DragEvent } from "react";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
@@ -19,8 +20,8 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // LINK GOOGLE SCRIPT CỦA BẠN (Đã cập nhật code lưu vào folder 1Yx... ở bước trước)
-  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyyI-Nbef4rbynbtiJgW5BwtKTybxeRsiRhTha23XNpc95N7TDt6l-O9lgFpjpVS4IX9w/exec';
+  // 🔥 ĐÂY LÀ LINK GOOGLE SCRIPT MỚI NHẤT CỦA BẠN ĐÃ ĐƯỢC LẮP VÀO:
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwFl06bvc3QVoWwaUNYB5vZ0B-RI-CTBGH7ESogIxSVJXiASfMJkpZwBGmM3NV2LRXo/exec';
 
   if (!isOpen) return null;
 
@@ -31,7 +32,7 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
       reader.readAsDataURL(file);
       reader.onload = () => {
         const result = reader.result as string;
-        resolve(result.split(',')[1]); // Cắt bỏ phần mào đầu "data:image/png;base64,"
+        resolve(result.split(',')[1]); // Cắt bỏ phần mào đầu
       };
       reader.onerror = (error) => reject(error);
     });
@@ -68,10 +69,9 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
         }
 
         // Tải ảnh thành công, trả dữ liệu về Component cha
-        // Trả về type: 'image' kèm theo link ảnh để hiển thị đề trắc nghiệm
         onImportSuccess({ 
           type: 'image_exam', 
-          imageUrl: data.fileUrl, 
+          imageUrl: data.fileUrl, // Link ảnh trực tiếp
           title: file.name 
         });
 
@@ -151,7 +151,6 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
     }
   };
 
-  // Helper để lấy text hiển thị trạng thái
   const getStatusText = () => {
     if (loadingStep === "reading") return "Đang trích xuất văn bản...";
     if (loadingStep === "analyzing") return "AI đang phân tích câu hỏi...";
@@ -169,7 +168,6 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
           </h3>
           <button 
             onClick={() => {
-              // Bấm X dể đóng form thì reset lại
               setLoadingStep("idle");
               setFileName(null);
               onClose();
@@ -204,7 +202,6 @@ const ImportExamFromFile: React.FC<Props> = ({ isOpen, onClose, onImportSuccess 
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) {
                   handleFile(e.target.files[0]);
-                  // Reset input value để chọn lại cùng 1 file không bị lỗi
                   e.target.value = ''; 
                 }
               }}
