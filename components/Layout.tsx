@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
+import React, { useState, useEffect, useMemo, memo } from "react";
 import { User } from "../types";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import AiAssistant from "./AiAssistant";
 import Toast from "./Toast";
-import { PanelLeftClose, PanelLeftOpen, Menu } from "lucide-react";
+import { Menu } from "lucide-react"; // Dùng duy nhất icon Menu cho gọn
 
 interface LayoutProps {
   children?: React.ReactNode;
@@ -21,27 +21,8 @@ const Layout: React.FC<LayoutProps> = ({
   onTabChange,
   onLogout,
 }) => {
-  // Đã sửa: Khởi tạo mặc định là false để khép lại khi mới mở web
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
-  // Trạng thái ẩn/hiện trên Mobile
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("lms_sidebar_state");
-        if (saved !== null) {
-          setIsSidebarOpen(JSON.parse(saved));
-        }
-      }
-    } catch (e) {
-      console.warn("Lỗi đọc trạng thái Sidebar", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("lms_sidebar_state", JSON.stringify(isSidebarOpen));
-  }, [isSidebarOpen]);
+  // Dùng 1 trạng thái duy nhất cho cả PC và Mobile (mặc định là ẩn)
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem("lms_last_active", Date.now().toString());
@@ -52,14 +33,6 @@ const Layout: React.FC<LayoutProps> = ({
     [activeTab]
   );
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen((prev) => !prev);
-  }, []);
-
-  const toggleMobileMenu = useCallback(() => {
-    setIsMobileMenuOpen((prev) => !prev);
-  }, []);
-
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans overflow-hidden">
       
@@ -69,46 +42,28 @@ const Layout: React.FC<LayoutProps> = ({
         activeTab={activeTab}
         onTabChange={onTabChange}
         onLogout={onLogout}
-        collapsed={!isSidebarOpen}
-        isMobileOpen={isMobileMenuOpen}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)} // Truyền hàm đóng xuống Sidebar
       />
 
-      {/* Đã sửa: Thay md:ml-24 thành md:ml-0 để trả lại toàn bộ không gian khi đóng */}
-      <div
-        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out relative w-full ${
-          isSidebarOpen ? "md:ml-72 ml-0" : "md:ml-0 ml-0"
-        }`}
-      >
+      {/* Nội dung chính LUÔN CHIẾM 100% chiều rộng (ml-0) */}
+      <div className="flex-1 flex flex-col w-full min-h-screen relative transition-all duration-300 ml-0">
         
         {/* @ts-ignore */}
         <Header user={user} activeTab={activeTab} />
 
-        {/* Nút Hamburger cho Mobile */}
+        {/* Nút bấm để MỞ menu - Cố định ở góc trái trên cùng */}
         <button
-          onClick={toggleMobileMenu}
-          className="absolute top-4 left-4 z-40 bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md hover:bg-indigo-50 transition-all active:scale-95 md:hidden flex items-center justify-center"
+          onClick={() => setIsMenuOpen(true)}
+          className="absolute top-4 left-4 z-30 bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md hover:bg-indigo-50 transition-all active:scale-95 flex items-center justify-center"
           title="Mở menu"
         >
           <Menu size={20} />
         </button>
 
-        {/* Nút Thu/Phóng cho Desktop */}
-        <button
-          onClick={toggleSidebar}
-          className="absolute top-4 left-4 z-40 bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md hover:bg-indigo-50 transition-all active:scale-95 hidden md:flex items-center justify-center"
-          title={isSidebarOpen ? "Thu gọn menu" : "Mở rộng menu"}
-        >
-          {isSidebarOpen ? (
-            <PanelLeftClose size={20} />
-          ) : (
-            <PanelLeftOpen size={20} />
-          )}
-        </button>
-
         <main className="flex-1 p-4 md:p-8 overflow-y-auto mt-12 md:mt-0">
           <div className="max-w-7xl mx-auto w-full">
-            <div className="flex items-center gap-2 mb-6 ml-12 md:ml-0">
+            <div className="flex items-center gap-2 mb-6 ml-12"> {/* ml-12 để tránh chữ đè vào nút Menu */}
               <h2 className="text-sm font-bold tracking-wide text-slate-400">
                 LMS <span className="mx-2 text-slate-300">/</span>
                 <span className="text-indigo-500">{pageTitle}</span>
