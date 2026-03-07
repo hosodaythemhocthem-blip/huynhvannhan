@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Search, Sparkles, BookOpen, Clock, 
-  Trophy, Zap, Filter, Layers, GraduationCap, AlertTriangle
+  Trophy, Zap, Filter, Layers, GraduationCap, AlertTriangle, X
 } from "lucide-react";
 import { supabase } from "../supabase";
 import ExamCard from "./ExamCard";
@@ -34,7 +34,11 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [parsedExamData, setParsedExamData] = useState<any>(null);
   const [takingExam, setTakingExam] = useState<Exam | null>(null);
+  
+  // State cho Modal Giao Bài
   const [assigningExam, setAssigningExam] = useState<Exam | null>(null);
+  const [assignClassId, setAssignClassId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
   
   const isTeacher = user.role === 'teacher' || user.role === 'admin';
 
@@ -78,7 +82,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
         throw error;
       }
 
-      console.log("✅ Data received:", data); // Kiểm tra dòng này trong Console F12
+      console.log("✅ Data received:", data); 
       setExams(data || []);
       
     } catch (err: any) {
@@ -95,38 +99,75 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
     if (!exams) return [];
     
     let result = exams.filter(e => {
-        // Fix lỗi crash nếu title bị null
         const title = e.title || ""; 
         return title.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
     if (!isTeacher) {
       if (studentTab === 'assigned') {
-        // Tab Bài tập: Có class_id
         return result.filter(e => e.class_id && e.class_id === user.class_id);
       } else {
-        // Tab Luyện tập: Không có class_id (Public)
         return result.filter(e => !e.class_id);
       }
     }
     return result; 
   }, [exams, searchTerm, studentTab, isTeacher, user.class_id]);
 
-  const stats = useMemo(() => ({
-    total: exams.length,
-    assigned: exams.filter(e => e.class_id === user.class_id).length,
-    practice: exams.filter(e => !e.class_id).length
-  }), [exams, user.class_id]);
-
   // --- 3. HÀNH ĐỘNG ---
   const handleDelete = async (id: string) => {
-    if (!confirm("Xóa đề thi này?")) return;
+    if (!confirm("Bạn có chắc chắn muốn xóa đề thi này không? Dữ liệu sẽ không thể khôi phục.")) return;
     const { error } = await supabase.from('exams').delete().eq('id', id);
-    if (!error) showToast("Đã xóa!", "success");
+    if (!error) {
+      showToast("Đã xóa đề thi!", "success");
+      setExams(exams.filter(e => e.id !== id));
+    } else {
+      showToast("Lỗi khi xóa: " + error.message, "error");
+    }
   };
 
-  // --- RENDER AN TOÀN ---
-  if (isEditorOpen) return <ExamEditor user={user} classId="" exam={editingExam} aiGeneratedData={parsedExamData} onClose={() => { setIsEditorOpen(false); setParsedExamData(null); }} />;
+  // 🚀 THÊM MỚI: Khóa/Mở khóa đề thi
+  const handleToggleLock = async (exam: Exam) => {
+    try {
+      const newStatus = !exam.is_locked;
+      const { error } = await supabase.from('exams').update({ is_locked: newStatus }).eq('id', exam.id);
+      if (error) throw error;
+      
+      showToast(newStatus ? "🔒 Đã khóa đề thi!" : "🔓 Đã mở khóa đề thi!", "success");
+      // Cập nhật lại state local ngay lập tức để UI đổi màu
+      setExams(exams.map(e => e.id === exam.id ? { ...e, is_locked: newStatus } : e));
+    } catch (err: any) {
+      showToast("Lỗi cập nhật trạng thái: " + err.message, "error");
+    }
+  };
+
+  // 🚀 THÊM MỚI: Lưu thông tin Giao bài
+  const submitAssignExam = async () => {
+    if (!assigningExam) return;
+    setIsAssigning(true);
+    try {
+      // Nếu bỏ trống classId -> Đề trở thành Luyện tập tự do (Public)
+      const targetClassId = assignClassId.trim() === "" ? null : assignClassId.trim();
+      
+      const { error } = await supabase
+        .from('exams')
+        .update({ class_id: targetClassId })
+        .eq('id', assigningExam.id);
+        
+      if (error) throw error;
+      
+      showToast(targetClassId ? `Đã giao bài cho lớp ${targetClassId}!` : "Đã chuyển thành đề Luyện tập tự do!", "success");
+      setAssigningExam(null);
+      setAssignClassId("");
+      fetchExams(false);
+    } catch (err: any) {
+      showToast("Lỗi giao bài: " + err.message, "error");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  // --- RENDER ---
+  if (isEditorOpen) return <ExamEditor user={user} classId={user.class_id || ""} exam={editingExam} aiGeneratedData={parsedExamData} onClose={() => { setIsEditorOpen(false); setParsedExamData(null); }} />;
   if (takingExam) return <StudentQuiz exam={takingExam} user={user} onClose={() => setTakingExam(null)} />;
 
   return (
@@ -181,7 +222,7 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
           <Search className="absolute left-4 top-3.5 text-slate-400" size={20}/>
           <input 
             type="text" 
-            placeholder="Tìm kiếm..." 
+            placeholder="Tìm kiếm tên đề thi..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none shadow-sm"
@@ -209,24 +250,22 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
           <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <AnimatePresence>
               {filteredExams.map((exam) => {
-                // AN TOÀN: Kiểm tra dữ liệu trước khi render ExamCard
-                // Nếu content hoặc questions bị null thì gán giá trị mặc định để không bị crash
                 const safeQuestionCount = Array.isArray(exam.questions) ? exam.questions.length : 0;
                 
                 return (
                   <motion.div 
                     key={exam.id} layout
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }}
                   >
                     <ExamCard 
                       exam={exam} 
                       role={user.role}
-                      questionCount={safeQuestionCount} // Truyền số lượng an toàn
+                      questionCount={safeQuestionCount}
                       onView={() => setTakingExam(exam)}
                       onEdit={() => { setEditingExam(exam); setIsEditorOpen(true); }}
-                      onDelete={() => handleDelete(exam.id)}
-                      onToggleLock={async () => {}} 
-                      onAssign={(e) => setAssigningExam(e)}
+                      onDelete={() => handleDelete(exam.id!)}
+                      onToggleLock={() => handleToggleLock(exam)} 
+                      onAssign={(e) => { setAssigningExam(e); setAssignClassId(e.class_id || ""); }}
                     />
                   </motion.div>
                 );
@@ -235,8 +274,9 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
             
             {!loading && filteredExams.length === 0 && (
               <div className="col-span-full text-center py-12 text-slate-400">
-                <p>Không tìm thấy đề thi nào.</p>
-                {isTeacher && <p className="text-sm mt-2">Hãy thử nhấn nút "Tạo Đề Mới" nhé!</p>}
+                <div className="text-6xl mb-4 opacity-20">📭</div>
+                <p className="font-bold text-lg">Không tìm thấy đề thi nào.</p>
+                {isTeacher && <p className="text-sm mt-2">Hãy thử nhấn nút "Tạo Đề Mới" để bắt đầu nhé!</p>}
               </div>
             )}
           </motion.div>
@@ -244,6 +284,57 @@ const ExamDashboard: React.FC<Props> = ({ user }) => {
       </div>
 
       <ImportExamFromFile isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={(data) => { setIsImportModalOpen(false); setParsedExamData(data); setIsEditorOpen(true); }} />
+
+      {/* 🚀 MODAL GIAO BÀI (Chỉ hiện khi bấm nút Giao bài trên Card) */}
+      <AnimatePresence>
+        {assigningExam && (
+          <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100"
+            >
+              <div className="bg-indigo-600 p-5 flex justify-between items-center text-white">
+                <h3 className="font-black text-lg flex items-center gap-2"><Trophy size={20}/> Giao Bài Tập</h3>
+                <button onClick={() => setAssigningExam(null)} className="hover:bg-indigo-500 p-1.5 rounded-lg transition-colors"><X size={20}/></button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Tên đề thi</label>
+                  <p className="text-slate-900 font-medium bg-slate-50 p-3 rounded-xl border border-slate-200">{assigningExam.title}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Mã Lớp (Class ID)</label>
+                  <input 
+                    type="text" 
+                    value={assignClassId}
+                    onChange={(e) => setAssignClassId(e.target.value)}
+                    placeholder="VD: LOP-12A1"
+                    className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none font-medium text-slate-900 transition-colors"
+                  />
+                  <p className="text-xs text-slate-500 mt-2 font-medium">
+                    * Mẹo: Nếu để trống ô này, đề thi sẽ được đưa vào mục <b>"Luyện tập tự do"</b> (tất cả học sinh đều thấy).
+                  </p>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button onClick={() => setAssigningExam(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">
+                    Hủy
+                  </button>
+                  <button 
+                    onClick={submitAssignExam} disabled={isAssigning}
+                    className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex justify-center items-center"
+                  >
+                    {isAssigning ? "Đang xử lý..." : "Xác nhận Giao"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
