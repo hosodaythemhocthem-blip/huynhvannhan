@@ -116,11 +116,13 @@ export const syncService = {
 
 
 /* ======================================================
-   GOOGLE DRIVE SYNC (MỚI THÊM)
+   GOOGLE DRIVE SYNC (ĐÃ CẬP NHẬT LINK MỚI VÀ 'DE_THI')
 ====================================================== */
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw-L5D7ZgFUgsU1yAA2IS1bvNDzgFxw5ncjUNd5gDIKvp2VULhXLsxLn3wplpy6pmmjHw/exec";
+// Đã thay bằng link Web App mới nhất của bạn:
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwFl06bvc3QVoWwaUNYB5vZ0B-RI-CTBGH7ESogIxSVJXiASfMJkpZwBGmM3NV2LRXo/exec";
 
-export type DriveFolderType = 'hoc_sinh' | 'nhom' | 'diem';
+// Đã thêm 'de_thi' vào đây:
+export type DriveFolderType = 'hoc_sinh' | 'nhom' | 'diem' | 'de_thi';
 
 export const saveToDrive = async (type: DriveFolderType, fileName: string, dataObj: any) => {
   try {
@@ -128,7 +130,7 @@ export const saveToDrive = async (type: DriveFolderType, fileName: string, dataO
 
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
-      mode: "no-cors", // QUAN TRỌNG: Bỏ qua lỗi CORS chặn từ trình duyệt
+      mode: "no-cors", // Bỏ qua lỗi CORS chặn từ trình duyệt
       headers: {
         "Content-Type": "text/plain;charset=utf-8",
       },
