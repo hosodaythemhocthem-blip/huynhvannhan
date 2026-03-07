@@ -17,6 +17,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import MathPreview from "./MathPreview";
 import { geminiService } from "../services/geminiService";
 import { supabase } from "../supabase";
+// IMPORT HÀM LƯU LÊN DRIVE MỚI THÊM
+import { saveToDrive } from "../services/syncService"; 
 
 // Cấu hình Worker PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -122,7 +124,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     setPreviewExam({ ...previewExam, questions: updatedQuestions });
   };
 
-  /* ================= SAVE TO SUPABASE ================= */
+  /* ================= SAVE TO SUPABASE & GOOGLE DRIVE ================= */
   const saveToCloud = async () => {
     if (!previewExam || previewExam.questions.length === 0) return;
 
@@ -138,6 +140,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
     try {
       const now = new Date().toISOString();
 
+      // 1. LƯU LÊN SUPABASE
       const { data: examData, error: examError } = await supabase
         .from("exams")
         .insert({
@@ -154,7 +157,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
         .select()
         .single();
 
-      if (examError || !examData) throw new Error("Lỗi khi lưu đề thi");
+      if (examError || !examData) throw new Error("Lỗi khi lưu đề thi vào cơ sở dữ liệu");
 
       const questionsToInsert = previewExam.questions.map((q, index) => {
         // --- THIS IS THE CRUCIAL FIX ---
@@ -180,9 +183,31 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
         .from("questions")
         .insert(questionsToInsert);
 
-      if (questionError) throw new Error("Lỗi khi lưu câu hỏi");
+      if (questionError) throw new Error("Lỗi khi lưu câu hỏi vào cơ sở dữ liệu");
 
-      alert("🎉 Đã lưu đề thi vĩnh viễn lên hệ thống thành công!");
+      // 2. LƯU ĐỒNG THỜI LÊN GOOGLE DRIVE
+      try {
+        // Format tên file cho đẹp (VD: De_thi_tao_bang_AI_1638382.json)
+        const driveFileName = `${(previewExam.title || "De_Thi").replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
+        
+        // Chuẩn bị dữ liệu để lưu
+        const driveData = {
+          title: previewExam.title,
+          teacherId: userId,
+          createdAt: now,
+          questions: questionsToInsert // Lưu cả danh sách câu hỏi có chứa đáp án chữ (A,B,C,D)
+        };
+
+        // Gọi hàm lưu với type là 'de_thi'
+        await saveToDrive('de_thi', driveFileName, driveData);
+        console.log("Đã backup đề thi lên Google Drive thành công!");
+      } catch (driveErr) {
+         // Nếu lưu Drive lỗi thì chỉ log ra chứ không báo lỗi chặn người dùng
+         // Vì mục tiêu chính là lưu CSDL đã thành công
+        console.error("Lỗi khi backup lên Google Drive:", driveErr);
+      }
+
+      alert("🎉 Đã lưu đề thi vĩnh viễn lên hệ thống và backup Google Drive thành công!");
       setPreviewExam(null);
       setTopic("");
     } catch (err) {
@@ -351,7 +376,7 @@ const AiExamGenerator: React.FC<Props> = ({ userId }) => {
               className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />}
-              Lưu Đề Vĩnh Viễn Lên Cloud
+              Lưu Đề Vĩnh Viễn Lên Cloud & Drive
             </button>
           </div>
         </div>
