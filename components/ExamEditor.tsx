@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { saveToDrive } from '../services/syncService'; // 👈 Đã thêm import ở đây
 
 // 1. ĐỊNH NGHĨA INTERFACE
 export interface Statement {
@@ -69,6 +70,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
     }
   }, [aiGeneratedData]);
 
+  // 🚀 HÀM LƯU ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐẨY LÊN DRIVE
   const handlePermanentSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên đề thi!");
     if (questions.length === 0) return alert("Chưa có câu hỏi nào để lưu!");
@@ -84,11 +86,12 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
         time_limit: timeLimit,
         questions: questions,
         teacher_id: teacherId,
-        class_id: classId, // 👈 Đã thêm trường này để lưu ID lớp xuống Database
+        class_id: classId, 
         updated_at: new Date().toISOString(),
         is_locked: false
       };
 
+      // 1. Lưu xuống Supabase (Database)
       let result;
       if (exam?.id) {
         result = await supabase.from('exams').update(examPayload).eq('id', exam.id);
@@ -98,7 +101,23 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
 
       if (result.error) throw result.error;
 
-      alert("🎉 Lưu thành công! Các hình ảnh và lời giải đã được lưu trữ.");
+      // ==========================================
+      // 2. 🚀 LƯU ĐỀ THI LÊN GOOGLE DRIVE (CLOUD)
+      // ==========================================
+      try {
+        // Tạo tên file an toàn (xóa ký tự đặc biệt, đổi khoảng trắng thành dấu _)
+        const safeFileName = title.replace(/[^a-zA-Z0-9 \-_]/g, '').trim().replace(/\s+/g, '_');
+        
+        // Gọi hàm lưu lên thư mục 'de_thi'
+        await saveToDrive('de_thi', safeFileName || 'De_Thi_Moi', examPayload);
+        console.log("Đã bắn dữ liệu thành công sang Google Drive!");
+      } catch (driveError) {
+        console.error("Lỗi khi backup lên Drive (nhưng đã lưu DB):", driveError);
+        // Không throw lỗi ở đây để không chặn thông báo thành công của Supabase
+      }
+      // ==========================================
+
+      alert("🎉 Lưu thành công! Đề thi đã được lưu vào Hệ thống & Google Drive.");
       onClose();
     } catch (error: any) {
       console.error("Lỗi lưu trữ:", error);
