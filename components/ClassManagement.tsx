@@ -3,12 +3,17 @@ import React, { useState, useEffect } from "react";
 import { 
   Users, Trash2, CheckCircle2, Search, 
   Loader2, School, Plus, ListFilter, X, 
-  ChevronRight, UserMinus, ShieldAlert, BadgeCheck
+  ChevronRight, UserMinus, ShieldAlert, BadgeCheck,
+  CloudUpload // MỚI: Thêm icon cho nút Lưu Drive
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { User, Class, ClassEnrollment } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
+
+// MỚI: Import hàm lưu Drive từ file service của bạn
+// (Nhớ kiểm tra lại đường dẫn import này cho đúng với project của bạn nhé)
+import { saveToDrive } from "../services/googleDriveService";
 
 // Định nghĩa Type kết hợp (Join) từ Database
 type EnrollmentWithDetails = ClassEnrollment & {
@@ -33,6 +38,9 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  // MỚI: State cho trạng thái đang lưu Drive
+  const [isSavingDrive, setIsSavingDrive] = useState(false);
 
   useEffect(() => {
     if (user && user.id) {
@@ -104,7 +112,6 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
       await loadAllData();
     } catch (err: any) {
       console.error("CHI TIẾT LỖI TẠO LỚP:", err);
-      // Hiển thị LỖI TẬN GỐC ra màn hình
       showToast(`Lỗi tạo lớp: ${err.message || err.details || "Kiểm tra lại RLS hoặc Khóa ngoại"}`, "error");
     } finally {
       setIsCreating(false);
@@ -181,6 +188,42 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
 
   const selectedClassData = classes.find(c => c.id === selectedClassId);
   const selectedClassName = selectedClassData?.name || null;
+
+  // ==========================================
+  // MỚI: HÀM XỬ LÝ LƯU DANH SÁCH LÊN DRIVE
+  // ==========================================
+  const handleSyncToDrive = async () => {
+    if (activeList.length === 0) {
+      showToast("Không có học sinh nào để lưu!", "info");
+      return;
+    }
+
+    setIsSavingDrive(true);
+    try {
+      // 1. Chuẩn bị dữ liệu gọn gàng để gửi (chỉ lấy Tên, Email, Tên Lớp)
+      const dataToSave = activeList.map(enroll => ({
+        ho_ten: enroll.student?.full_name || 'Chưa cập nhật',
+        email: enroll.student?.email || 'Không có',
+        lop: enroll.target_class?.name || 'Không rõ',
+        ngay_vao_lop: enroll.joined_at
+      }));
+
+      // 2. Tạo tên file theo tên lớp
+      const fileName = selectedClassName 
+        ? `Danh_Sach_HS_Lop_${selectedClassName.replace(/\s+/g, '_')}`
+        : `Danh_Sach_HS_Tat_Ca_Cac_Lop`;
+
+      // 3. Gọi hàm lưu (Tham số 'hoc_sinh' khớp với code bên Apps Script)
+      await saveToDrive('hoc_sinh', fileName, dataToSave);
+      
+      showToast(`Đã lưu danh sách lên Google Drive thành công!`, "success");
+    } catch (error: any) {
+      console.error("Lỗi lưu Drive:", error);
+      showToast("Có lỗi khi lưu lên Google Drive. Bật F12 xem chi tiết.", "error");
+    } finally {
+      setIsSavingDrive(false);
+    }
+  };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-40 space-y-4">
@@ -350,12 +393,25 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
 
            {/* DANH SÁCH LỚP HỌC CHÍNH THỨC */}
            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
-              <div className="p-8 border-b border-slate-50 flex items-center justify-between">
-                 <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                    <BadgeCheck className="text-emerald-500" size={24} />
-                    {selectedClassName ? `Học Sinh Lớp ${selectedClassName}` : 'Danh Sách Chính Thức'}
-                 </h4>
-                 <span className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-full text-xs font-bold">{activeList.length} em</span>
+              
+              {/* MỚI: Thêm khu vực Nút lưu lên Google Drive ở Header của Table */}
+              <div className="p-8 border-b border-slate-50 flex items-center justify-between flex-wrap gap-4">
+                 <div className="flex items-center gap-4">
+                    <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                       <BadgeCheck className="text-emerald-500" size={24} />
+                       {selectedClassName ? `Học Sinh Lớp ${selectedClassName}` : 'Danh Sách Chính Thức'}
+                    </h4>
+                    <span className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-full text-xs font-bold">{activeList.length} em</span>
+                 </div>
+
+                 <button 
+                    onClick={handleSyncToDrive}
+                    disabled={isSavingDrive || activeList.length === 0}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-100"
+                 >
+                    {isSavingDrive ? <Loader2 size={18} className="animate-spin" /> : <CloudUpload size={18} />}
+                    {isSavingDrive ? "Đang lưu..." : "Lưu lên Google Drive"}
+                 </button>
               </div>
 
               <div className="overflow-x-auto">
