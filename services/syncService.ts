@@ -113,3 +113,37 @@ export const syncService = {
     return true
   },
 }
+
+
+/* ======================================================
+   GOOGLE DRIVE SYNC (MỚI THÊM)
+====================================================== */
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw-L5D7ZgFUgsU1yAA2IS1bvNDzgFxw5ncjUNd5gDIKvp2VULhXLsxLn3wplpy6pmmjHw/exec";
+
+export type DriveFolderType = 'hoc_sinh' | 'nhom' | 'diem';
+
+export const saveToDrive = async (type: DriveFolderType, fileName: string, dataObj: any) => {
+  try {
+    const contentString = typeof dataObj === 'string' ? dataObj : JSON.stringify(dataObj, null, 2);
+
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors", // QUAN TRỌNG: Bỏ qua lỗi CORS chặn từ trình duyệt
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify({
+        type: type,
+        fileName: fileName.endsWith('.json') || fileName.endsWith('.txt') ? fileName : `${fileName}.json`,
+        content: contentString
+      }),
+    });
+
+    console.log("✅ Đã gửi lệnh lưu lên Drive!");
+    return { status: "success" };
+
+  } catch (error) {
+    console.error("❌ Lỗi khi lưu vào Google Drive:", error);
+    throw error;
+  }
+};
