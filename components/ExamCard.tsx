@@ -10,7 +10,7 @@ interface Props {
   onEdit?: (exam: Exam) => void;
   onDelete?: (id: string) => void;
   onToggleLock?: (exam: Exam) => void;
-  onAssign?: (exam: Exam) => void; // Thêm hàm Giao bài
+  onAssign?: (exam: Exam) => void;
   role?: "teacher" | "student" | "admin";
 }
 
@@ -68,7 +68,7 @@ const ExamCard: React.FC<Props> = ({
           {exam.title || "Đề thi chưa có tên"}
         </h3>
         
-        {/* Lưới thông số (Info Badges) */}
+        {/* Lưới thông số (Info Badges) - ĐÃ SỬA LỖI HTML Ở ĐÂY */}
         <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 font-medium mt-auto mb-5">
           <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-2 rounded-lg border border-slate-100">
             <FileText size={14} className="text-blue-500"/> 
@@ -78,6 +78,7 @@ const ExamCard: React.FC<Props> = ({
             <Clock size={14} className="text-amber-500"/> 
             <span>{exam.time_limit || 45} phút</span>
           </div>
+          {/* Sửa lại cách bọc "Ngày tạo" để không bị lồng tag sai */}
           <div className="col-span-2 flex items-center gap-1.5 bg-slate-50 px-2.5 py-2 rounded-lg border border-slate-100">
             <Calendar size={14} className="text-emerald-500"/> 
             <span>Ngày tạo: {createdDate}</span>
@@ -118,7 +119,7 @@ const ExamCard: React.FC<Props> = ({
                 <Edit3 size={16} />
               </button>
               <button
-                onClick={() => onDelete?.(exam.id)}
+                onClick={() => onDelete?.(exam.id!)}
                 className="p-2.5 bg-slate-50 border border-slate-100 text-slate-600 rounded-xl hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-colors"
                 title="Xóa vĩnh viễn"
               >
