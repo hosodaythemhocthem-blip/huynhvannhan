@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { saveToDrive } from '../services/syncService'; // 👈 Đã thêm import ở đây
+import { saveToDrive } from '../services/syncService';
 
 // 1. ĐỊNH NGHĨA INTERFACE
 export interface Statement {
@@ -26,11 +26,15 @@ export interface Exam {
   title: string;
   timeLimit: number;
   questions: Question[];
+  // 🚀 THÊM 3 TRƯỜNG DỮ LIỆU GOOGLE VÀO INTERFACE
+  googleFormUrl?: string;
+  googleSheetUrl?: string;
+  googleDrivePdfUrl?: string;
 }
 
 interface ExamEditorProps {
   user: { id: string } | null;
-  classId: string; // 👈 Đã thêm classId vào đây
+  classId: string;
   exam?: Exam | null;
   aiGeneratedData?: Partial<Exam> | null;
   onClose: () => void;
@@ -40,7 +44,15 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
   const [title, setTitle] = useState(exam?.title || "Đề thi mới (Chưa đặt tên)");
   const [timeLimit, setTimeLimit] = useState<number>(exam?.timeLimit || 45);
   const [questions, setQuestions] = useState<Question[]>(exam?.questions || []);
+  
+  // 🚀 THÊM STATE CHO 3 ĐƯỜNG LINK GOOGLE
+  const [googleFormUrl, setGoogleFormUrl] = useState(exam?.googleFormUrl || "");
+  const [googleSheetUrl, setGoogleSheetUrl] = useState(exam?.googleSheetUrl || "");
+  const [googleDrivePdfUrl, setGoogleDrivePdfUrl] = useState(exam?.googleDrivePdfUrl || "");
+  
   const [saving, setSaving] = useState(false);
+  // State ẩn/hiện bảng nhập Link Google cho gọn
+  const [showGoogleLinks, setShowGoogleLinks] = useState(!!(exam?.googleFormUrl || exam?.googleSheetUrl || exam?.googleDrivePdfUrl));
 
   const totalPoints = useMemo(() => {
     return questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
@@ -70,10 +82,11 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
     }
   }, [aiGeneratedData]);
 
-  // 🚀 HÀM LƯU ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐẨY LÊN DRIVE
+  // 🚀 HÀM LƯU ĐÃ ĐƯỢC CẬP NHẬT ĐỂ ĐẨY THÊM LINK GOOGLE LÊN DB
   const handlePermanentSave = async () => {
     if (!title.trim()) return alert("Vui lòng nhập tên đề thi!");
-    if (questions.length === 0) return alert("Chưa có câu hỏi nào để lưu!");
+    // Bỏ điều kiện bắt buộc có câu hỏi nếu người dùng chỉ muốn dùng Link Google Form
+    if (questions.length === 0 && !googleFormUrl.trim()) return alert("Chưa có câu hỏi nào hoặc chưa nhập link Google Form!");
     if (timeLimit <= 0) return alert("Thời gian làm bài phải lớn hơn 0!");
 
     setSaving(true);
@@ -88,7 +101,11 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
         teacher_id: teacherId,
         class_id: classId, 
         updated_at: new Date().toISOString(),
-        is_locked: false
+        is_locked: false,
+        // 🚀 ĐẨY 3 LINK GOOGLE VÀO PAYLOAD (Nhớ tạo 3 cột này trên bảng exams ở Supabase)
+        google_form_url: googleFormUrl,
+        google_sheet_url: googleSheetUrl,
+        google_drive_pdf_url: googleDrivePdfUrl
       };
 
       // 1. Lưu xuống Supabase (Database)
@@ -101,23 +118,16 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
 
       if (result.error) throw result.error;
 
-      // ==========================================
-      // 2. 🚀 LƯU ĐỀ THI LÊN GOOGLE DRIVE (CLOUD)
-      // ==========================================
+      // 2. Lưu lên Drive
       try {
-        // Tạo tên file an toàn (xóa ký tự đặc biệt, đổi khoảng trắng thành dấu _)
         const safeFileName = title.replace(/[^a-zA-Z0-9 \-_]/g, '').trim().replace(/\s+/g, '_');
-        
-        // Gọi hàm lưu lên thư mục 'de_thi'
         await saveToDrive('de_thi', safeFileName || 'De_Thi_Moi', examPayload);
         console.log("Đã bắn dữ liệu thành công sang Google Drive!");
       } catch (driveError) {
-        console.error("Lỗi khi backup lên Drive (nhưng đã lưu DB):", driveError);
-        // Không throw lỗi ở đây để không chặn thông báo thành công của Supabase
+        console.error("Lỗi khi backup lên Drive:", driveError);
       }
-      // ==========================================
 
-      alert("🎉 Lưu thành công! Đề thi đã được lưu vào Hệ thống & Google Drive.");
+      alert("🎉 Lưu thành công! Đề thi đã được lưu vào Hệ thống.");
       onClose();
     } catch (error: any) {
       console.error("Lỗi lưu trữ:", error);
@@ -135,7 +145,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
     }
   };
 
-  // Module cho câu hỏi chính VÀ lời giải (Hỗ trợ full chức năng + chèn ảnh)
   const mainQuillModules = {
     toolbar: [
       ['bold', 'italic', 'underline'],
@@ -145,7 +154,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
     ],
   };
 
-  // Module RÚT GỌN cho đáp án
   const miniQuillModules = {
     toolbar: [
       ['bold', 'italic', 'image', 'formula']
@@ -155,19 +163,12 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
   return (
     <div className="fixed inset-0 bg-white z-[9999] flex flex-col h-screen font-sans mt-20 border-t-4 border-indigo-600">
       
-      {/* ÉP XUNG CSS CHO REACT QUILL ĐỂ CHỮ ĐEN 100% */}
       <style>{`
-        .ql-editor {
-          color: #0f172a !important; /* Đen đậm */
-          font-size: 15px !important;
-        }
-        .ql-editor.ql-blank::before {
-          color: #94a3b8 !important; /* Xám đậm cho placeholder */
-          font-style: italic;
-        }
+        .ql-editor { color: #0f172a !important; font-size: 15px !important; }
+        .ql-editor.ql-blank::before { color: #94a3b8 !important; font-style: italic; }
       `}</style>
 
-      {/* HEADER */}
+      {/* HEADER TỔNG */}
       <div className="flex justify-between items-center p-6 bg-slate-50 shadow-sm">
         <div className="flex flex-col gap-2">
           <input 
@@ -214,10 +215,71 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
         {/* CỘT TRÁI: NHẬP LIỆU */}
         <div className="w-1/2 h-full overflow-y-auto p-8 border-r-2 border-slate-100 bg-white">
           <div className="space-y-8 pb-40">
+            
+            {/* 🚀 KHU VỰC NHẬP LINK GOOGLE (HYBRID) */}
+            <div className={`p-6 rounded-3xl border-2 transition-all ${showGoogleLinks ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'}`}>
+              <div 
+                className="flex justify-between items-center cursor-pointer"
+                onClick={() => setShowGoogleLinks(!showGoogleLinks)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 text-emerald-600 w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-sm">🔗</div>
+                  <div>
+                    <h3 className="font-black text-slate-800">Tích hợp Google Workspace (Tùy chọn)</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">Nhúng Google Form, Bảng điểm Sheets và Đáp án PDF</p>
+                  </div>
+                </div>
+                <button className="text-slate-400 font-bold bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
+                  {showGoogleLinks ? 'Thu gọn ▲' : 'Mở rộng ▼'}
+                </button>
+              </div>
+
+              {showGoogleLinks && (
+                <div className="mt-5 space-y-4 pt-4 border-t-2 border-emerald-100/50">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-purple-600">📝</span> Link Google Form (Đề thi)
+                    </label>
+                    <input 
+                      type="url" 
+                      value={googleFormUrl} 
+                      onChange={(e) => setGoogleFormUrl(e.target.value)}
+                      placeholder="https://docs.google.com/forms/d/..." 
+                      className="w-full p-2.5 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-sm font-medium text-slate-700 transition-colors"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-green-600">📊</span> Link Google Sheets (Bảng điểm)
+                    </label>
+                    <input 
+                      type="url" 
+                      value={googleSheetUrl} 
+                      onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..." 
+                      className="w-full p-2.5 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-sm font-medium text-slate-700 transition-colors"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-red-500">📕</span> Link Google Drive (PDF Đáp án/Lời giải)
+                    </label>
+                    <input 
+                      type="url" 
+                      value={googleDrivePdfUrl} 
+                      onChange={(e) => setGoogleDrivePdfUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..." 
+                      className="w-full p-2.5 bg-white border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-500 text-sm font-medium text-slate-700 transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* HẾT KHU VỰC NHẬP LINK GOOGLE */}
+
+            {/* DANH SÁCH CÂU HỎI TRONG APP */}
             {questions.map((q, qIndex) => (
               <div key={qIndex} className="p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 relative group">
-                
-                {/* TOOLBAR CÂU HỎI */}
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center flex-wrap gap-3">
                     <span className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-sm font-black shadow-sm">CÂU {qIndex + 1}</span>
@@ -227,7 +289,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                         const newQs = [...questions];
                         const newType = e.target.value as Question['type'];
                         newQs[qIndex].type = newType;
-                        
                         if (newType === 'true_false') {
                           newQs[qIndex].options = ['Đúng', 'Sai'];
                           newQs[qIndex].correctAnswer = 0;
@@ -236,10 +297,8 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                           newQs[qIndex].correctAnswer = 0;
                         } else if (newType === 'true_false_cluster') {
                           newQs[qIndex].statements = [
-                            { content: '', isTrue: true },
-                            { content: '', isTrue: false },
-                            { content: '', isTrue: true },
-                            { content: '', isTrue: false }
+                            { content: '', isTrue: true }, { content: '', isTrue: false },
+                            { content: '', isTrue: true }, { content: '', isTrue: false }
                           ];
                         }
                         setQuestions(newQs);
@@ -255,9 +314,7 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                     <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:border-amber-300 transition-colors shadow-sm">
                       <span className="text-sm font-bold text-slate-500 mr-2">Điểm:</span>
                       <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
+                        type="number" min="0.1" step="0.1"
                         value={q.points !== undefined ? q.points : 1}
                         onChange={(e) => {
                           const newQs = [...questions];
@@ -268,120 +325,72 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                       />
                     </div>
                   </div>
-                  {/* NÚT XÓA NGUYÊN CÂU HỎI */}
                   <button onClick={() => setQuestions(questions.filter((_, i) => i !== qIndex))} className="text-red-500 bg-red-50 px-3 py-1.5 rounded-lg font-bold text-sm hover:bg-red-500 hover:text-white transition-colors ml-2">
                     🗑️ XÓA CÂU NÀY
                   </button>
                 </div>
 
-                {/* NỘI DUNG CÂU HỎI CHÍNH */}
                 <div className="mb-4 bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 relative">
-                  
-                  {/* === NÚT XÓA TRẮNG NỘI DUNG (NẰM Ở GÓC PHẢI TOOLBAR) === */}
                   <button
-                    onClick={() => {
-                      const newQs = [...questions];
-                      newQs[qIndex].content = '';
-                      setQuestions(newQs);
-                    }}
+                    onClick={() => { const newQs = [...questions]; newQs[qIndex].content = ''; setQuestions(newQs); }}
                     className="absolute top-1.5 right-2 z-10 text-slate-500 bg-slate-200/80 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1"
                     title="Xóa trắng nội dung câu hỏi"
                   >
                     🗑️ XÓA
                   </button>
-
                   <ReactQuill 
-                    theme="snow"
-                    value={q.content}
-                    onChange={(content) => {
-                      const newQs = [...questions];
-                      newQs[qIndex].content = content;
-                      setQuestions(newQs);
-                    }}
-                    modules={mainQuillModules}
-                    placeholder="Nhập nội dung câu hỏi hoặc Ctrl+V để dán ảnh..."
-                    className="min-h-[100px]"
+                    theme="snow" value={q.content}
+                    onChange={(content) => { const newQs = [...questions]; newQs[qIndex].content = content; setQuestions(newQs); }}
+                    modules={mainQuillModules} placeholder="Nhập nội dung câu hỏi hoặc Ctrl+V để dán ảnh..." className="min-h-[100px]"
                   />
                 </div>
 
                 <div className="mt-4">
-                  {/* TRẮC NGHIỆM ĐÁP ÁN (MULTIPLE CHOICE / TRUE FALSE) */}
                   {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                     <div className="grid grid-cols-2 gap-4">
                       {q.options.map((opt: string, oIdx: number) => (
                         <div key={oIdx} className={`flex flex-col gap-2 p-3 rounded-xl border-2 transition-all ${q.correctAnswer === oIdx ? 'border-green-500 bg-green-50 shadow-sm' : 'border-slate-200 bg-white'}`}>
-                          
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
                               <input 
-                                type="radio" 
-                                checked={q.correctAnswer === oIdx} 
-                                onChange={() => {
-                                  const newQs = [...questions];
-                                  newQs[qIndex].correctAnswer = oIdx;
-                                  setQuestions(newQs);
-                                }}
+                                type="radio" checked={q.correctAnswer === oIdx} 
+                                onChange={() => { const newQs = [...questions]; newQs[qIndex].correctAnswer = oIdx; setQuestions(newQs); }}
                                 className="w-5 h-5 accent-green-600 cursor-pointer"
                               />
                               <span className="font-bold text-indigo-700">Đáp án {String.fromCharCode(65 + oIdx)}</span>
                             </div>
-                            
-                            {/* NÚT XÓA TỪNG ĐÁP ÁN A, B, C, D */}
                             <button
                               onClick={() => {
                                 const newQs = [...questions];
                                 newQs[qIndex].options = newQs[qIndex].options.filter((_: any, i: number) => i !== oIdx);
-                                if (newQs[qIndex].correctAnswer === oIdx) {
-                                  newQs[qIndex].correctAnswer = 0; 
-                                } else if (newQs[qIndex].correctAnswer !== undefined && newQs[qIndex].correctAnswer! > oIdx) {
-                                  newQs[qIndex].correctAnswer! -= 1; 
-                                }
+                                if (newQs[qIndex].correctAnswer === oIdx) newQs[qIndex].correctAnswer = 0; 
+                                else if (newQs[qIndex].correctAnswer !== undefined && newQs[qIndex].correctAnswer! > oIdx) newQs[qIndex].correctAnswer! -= 1; 
                                 setQuestions(newQs);
                               }}
                               className="text-red-500 bg-red-50 hover:bg-red-500 hover:text-white text-xs font-bold px-2 py-1 rounded transition-colors"
-                              title="Xóa ô đáp án này"
                             >
                               🗑️ Xóa đáp án
                             </button>
                           </div>
-                          
-                          {/* Ô NHẬP LIỆU */}
                           <div className="bg-white rounded-md overflow-hidden border border-slate-200 mini-quill">
                             {q.type === 'true_false' ? (
                               <input 
-                                type="text"
-                                value={q.options[oIdx]}
-                                onChange={(e) => {
-                                  const newQs = [...questions];
-                                  newQs[qIndex].options[oIdx] = e.target.value;
-                                  setQuestions(newQs);
-                                }}
+                                type="text" value={q.options[oIdx]}
+                                onChange={(e) => { const newQs = [...questions]; newQs[qIndex].options[oIdx] = e.target.value; setQuestions(newQs); }}
                                 className="w-full p-2 text-sm font-bold text-slate-900 outline-none bg-transparent"
                               />
                             ) : (
                               <ReactQuill 
-                                theme="snow"
-                                value={q.options[oIdx]} 
-                                onChange={(content) => {
-                                  const newQs = [...questions];
-                                  newQs[qIndex].options[oIdx] = content;
-                                  setQuestions(newQs);
-                                }}
-                                modules={miniQuillModules}
-                                placeholder={`Nhập nội dung đáp án ${String.fromCharCode(65 + oIdx)}...`}
+                                theme="snow" value={q.options[oIdx]} 
+                                onChange={(content) => { const newQs = [...questions]; newQs[qIndex].options[oIdx] = content; setQuestions(newQs); }}
+                                modules={miniQuillModules} placeholder={`Nhập nội dung đáp án ${String.fromCharCode(65 + oIdx)}...`}
                               />
                             )}
                           </div>
                         </div>
                       ))}
-
-                      {/* NÚT THÊM ĐÁP ÁN */}
                       <button
-                        onClick={() => {
-                          const newQs = [...questions];
-                          newQs[qIndex].options.push(""); 
-                          setQuestions(newQs);
-                        }}
+                        onClick={() => { const newQs = [...questions]; newQs[qIndex].options.push(""); setQuestions(newQs); }}
                         className="flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 transition-all p-3"
                       >
                         + THÊM ĐÁP ÁN
@@ -389,7 +398,6 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                     </div>
                   )}
 
-                  {/* ĐÚNG/SAI CẤU TRÚC MỚI (CLUSTER) */}
                   {q.type === 'true_false_cluster' && q.statements && (
                     <div className="space-y-4">
                       <div className="text-sm font-bold text-indigo-700 bg-indigo-50 p-2 rounded-lg inline-block mb-1">
@@ -397,122 +405,51 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
                       </div>
                       {q.statements.map((stmt, sIdx) => (
                         <div key={sIdx} className="flex flex-col gap-2 p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-300 transition-all focus-within:border-indigo-500">
-                          
                           <div className="flex justify-between items-center mb-1">
                             <div className="flex items-center gap-3">
-                              <span className="font-black text-indigo-500 bg-indigo-50 w-8 h-8 flex items-center justify-center rounded-full uppercase">
-                                {String.fromCharCode(97 + sIdx)} {/* Tự nhảy a, b, c, d... */}
-                              </span>
-                              
-                              {/* Nút Chọn Đúng / Sai */}
+                              <span className="font-black text-indigo-500 bg-indigo-50 w-8 h-8 flex items-center justify-center rounded-full uppercase">{String.fromCharCode(97 + sIdx)}</span>
                               <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
-                                <button
-                                  onClick={() => updateStatement(qIndex, sIdx, 'isTrue', true)}
-                                  className={`px-5 py-1.5 rounded-md text-sm font-black transition-all ${stmt.isTrue ? 'bg-green-500 text-white shadow-md scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
-                                >
-                                  ĐÚNG
-                                </button>
-                                <button
-                                  onClick={() => updateStatement(qIndex, sIdx, 'isTrue', false)}
-                                  className={`px-5 py-1.5 rounded-md text-sm font-black transition-all ${!stmt.isTrue ? 'bg-red-500 text-white shadow-md scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
-                                >
-                                  SAI
-                                </button>
+                                <button onClick={() => updateStatement(qIndex, sIdx, 'isTrue', true)} className={`px-5 py-1.5 rounded-md text-sm font-black transition-all ${stmt.isTrue ? 'bg-green-500 text-white shadow-md scale-105' : 'text-slate-500 hover:bg-slate-200'}`}>ĐÚNG</button>
+                                <button onClick={() => updateStatement(qIndex, sIdx, 'isTrue', false)} className={`px-5 py-1.5 rounded-md text-sm font-black transition-all ${!stmt.isTrue ? 'bg-red-500 text-white shadow-md scale-105' : 'text-slate-500 hover:bg-slate-200'}`}>SAI</button>
                               </div>
                             </div>
-
-                            {/* NÚT XÓA TỪNG Ý (a,b,c,d) */}
                             <button
-                              onClick={() => {
-                                const newQs = [...questions];
-                                newQs[qIndex].statements = newQs[qIndex].statements!.filter((_: any, i: number) => i !== sIdx);
-                                setQuestions(newQs);
-                              }}
+                              onClick={() => { const newQs = [...questions]; newQs[qIndex].statements = newQs[qIndex].statements!.filter((_: any, i: number) => i !== sIdx); setQuestions(newQs); }}
                               className="text-red-500 bg-red-50 hover:bg-red-500 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors"
-                              title="Xóa ý này"
                             >
                               🗑️ Xóa ý {String.fromCharCode(97 + sIdx)}
                             </button>
                           </div>
-
-                          {/* Mini Editor cho từng ý a, b, c, d */}
                           <div className="bg-slate-50 rounded-md overflow-hidden border border-slate-200 mini-quill relative">
-                            <ReactQuill
-                              theme="snow"
-                              value={stmt.content}
-                              onChange={(content) => updateStatement(qIndex, sIdx, 'content', content)}
-                              modules={miniQuillModules}
-                              placeholder={`Nhập nội dung ý ${String.fromCharCode(97 + sIdx)} hoặc dán ảnh (Ctrl+V)...`}
-                            />
+                            <ReactQuill theme="snow" value={stmt.content} onChange={(content) => updateStatement(qIndex, sIdx, 'content', content)} modules={miniQuillModules} placeholder={`Nhập nội dung ý ${String.fromCharCode(97 + sIdx)} hoặc dán ảnh (Ctrl+V)...`} />
                           </div>
-
                         </div>
                       ))}
-
-                      {/* NÚT THÊM Ý CHO CÂU ĐÚNG/SAI */}
-                      <button
-                        onClick={() => {
-                          const newQs = [...questions];
-                          newQs[qIndex].statements!.push({ content: '', isTrue: true });
-                          setQuestions(newQs);
-                        }}
-                        className="w-full flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 transition-all p-3"
-                      >
+                      <button onClick={() => { const newQs = [...questions]; newQs[qIndex].statements!.push({ content: '', isTrue: true }); setQuestions(newQs); }} className="w-full flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 transition-all p-3">
                         + THÊM Ý MỚI
                       </button>
                     </div>
                   )}
 
-                  {/* TRẢ LỜI NGẮN */}
                   {q.type === 'short_answer' && (
                     <div className="flex flex-col gap-2 p-4 bg-white rounded-xl border-2 border-slate-100 shadow-sm">
                       <label className="text-sm font-bold text-slate-500">Nhập đáp án chính xác (Dùng để hệ thống chấm điểm tự động):</label>
                       <input 
-                        type="text"
-                        value={q.correctText || ''}
-                        onChange={(e) => {
-                          const newQs = [...questions];
-                          newQs[qIndex].correctText = e.target.value;
-                          setQuestions(newQs);
-                        }}
+                        type="text" value={q.correctText || ''}
+                        onChange={(e) => { const newQs = [...questions]; newQs[qIndex].correctText = e.target.value; setQuestions(newQs); }}
                         className="w-full p-3 border-2 border-slate-200 rounded-lg focus:border-indigo-500 outline-none font-medium text-slate-900"
                         placeholder="Ví dụ: 1945, Hà Nội, H2O..."
                       />
                     </div>
                   )}
 
-                  {/* THÊM MỚI: LỜI GIẢI CHI TIẾT CHO CÂU HỎI */}
                   <div className="mt-6 bg-blue-50/50 rounded-xl border-2 border-blue-100 p-4">
-                    <label className="flex items-center gap-2 text-sm font-bold text-blue-700 mb-2">
-                      💡 Lời giải chi tiết (Hiển thị cho học sinh sau khi nộp bài):
-                    </label>
+                    <label className="flex items-center gap-2 text-sm font-bold text-blue-700 mb-2">💡 Lời giải chi tiết (Hiển thị cho học sinh sau khi nộp bài):</label>
                     <div className="bg-white rounded-md overflow-hidden border border-slate-200 text-slate-900 relative">
-                      
-                      {/* === NÚT XÓA TRẮNG LỜI GIẢI === */}
-                      <button
-                        onClick={() => {
-                          const newQs = [...questions];
-                          newQs[qIndex].explanation = '';
-                          setQuestions(newQs);
-                        }}
-                        className="absolute top-1.5 right-2 z-10 text-slate-500 bg-slate-200/80 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1"
-                        title="Xóa trắng nội dung lời giải"
-                      >
+                      <button onClick={() => { const newQs = [...questions]; newQs[qIndex].explanation = ''; setQuestions(newQs); }} className="absolute top-1.5 right-2 z-10 text-slate-500 bg-slate-200/80 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm flex items-center gap-1">
                         🗑️ XÓA
                       </button>
-
-                      <ReactQuill 
-                        theme="snow"
-                        value={q.explanation || ''}
-                        onChange={(content) => {
-                          const newQs = [...questions];
-                          newQs[qIndex].explanation = content;
-                          setQuestions(newQs);
-                        }}
-                        modules={mainQuillModules}
-                        placeholder="Nhập lời giải hoặc Ctrl+V để dán ảnh giải thích..."
-                        className="min-h-[80px]"
-                      />
+                      <ReactQuill theme="snow" value={q.explanation || ''} onChange={(content) => { const newQs = [...questions]; newQs[qIndex].explanation = content; setQuestions(newQs); }} modules={mainQuillModules} placeholder="Nhập lời giải hoặc Ctrl+V để dán ảnh giải thích..." className="min-h-[80px]" />
                     </div>
                   </div>
 
@@ -524,14 +461,22 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
               onClick={() => setQuestions([...questions, { type: 'multiple_choice', content: "", options: ["", "", "", ""], correctAnswer: 0, correctText: "", points: 1, explanation: "" }])}
               className="w-full py-6 border-4 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm"
             >
-              + THÊM CÂU HỎI MỚI
+              + THÊM CÂU HỎI TỰ TẠO VÀO APP
             </button>
           </div>
         </div>
 
         {/* CỘT PHẢI: XEM TRƯỚC (PREVIEW) */}
         <div className="w-[50%] h-full overflow-y-auto p-12 bg-slate-100">
-          <div className="max-w-xl mx-auto bg-white p-10 rounded-[40px] shadow-2xl shadow-slate-200/50">
+          <div className="max-w-xl mx-auto bg-white p-10 rounded-[40px] shadow-2xl shadow-slate-200/50 relative">
+             
+             {/* BÁO HIỆU ĐÃ NHÚNG GOOGLE FORM */}
+             {(googleFormUrl || googleSheetUrl || googleDrivePdfUrl) && (
+               <div className="absolute -top-4 -right-4 bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 animate-bounce">
+                 ✨ Đã liên kết Google Workspace
+               </div>
+             )}
+
              <div className="flex justify-between items-start mb-6">
                 <h2 className="text-3xl font-black text-slate-800 uppercase flex-1 pr-4 leading-tight">{title}</h2>
                 <div className="flex flex-col items-end gap-2">
@@ -546,80 +491,59 @@ const ExamEditor: React.FC<ExamEditorProps> = ({ user, classId, exam, aiGenerate
              <div className="w-20 h-2 bg-indigo-600 mb-10 rounded-full"></div>
              
              {questions.length === 0 ? (
-               <div className="text-center py-20">
+               <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl">
                  <div className="text-6xl mb-4 opacity-20">📝</div>
-                 <p className="text-slate-400 italic font-medium">Đề thi đang trống</p>
+                 <p className="text-slate-400 italic font-medium">Chưa có câu hỏi tự tạo nào</p>
+                 {googleFormUrl && (
+                    <div className="mt-4 inline-block bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg font-bold border border-emerald-200 text-sm">
+                      Học sinh sẽ làm bài qua Google Form đã nhúng
+                    </div>
+                 )}
                </div>
              ) : (
                questions.map((q, i) => (
                  <div key={i} className="mb-10 animate-in fade-in slide-in-from-bottom-4 border-b-2 border-slate-100 pb-10">
                    <div className="font-bold text-slate-800 flex items-start gap-2 mb-3">
                      <span className="text-indigo-600 whitespace-nowrap mt-1">Câu {i+1}:</span> 
-                     <div 
-                       className="prose prose-sm max-w-none flex-1 mt-1 break-words text-slate-900"
-                       dangerouslySetInnerHTML={{ __html: q.content || "..." }} 
-                     />
-                     <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs whitespace-nowrap ml-2 mt-1">
-                       {q.points !== undefined ? q.points : 1} đ
-                     </span>
+                     <div className="prose prose-sm max-w-none flex-1 mt-1 break-words text-slate-900" dangerouslySetInnerHTML={{ __html: q.content || "..." }} />
+                     <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs whitespace-nowrap ml-2 mt-1">{q.points !== undefined ? q.points : 1} đ</span>
                    </div>
-                   
                    <div className="pl-12">
-                     {/* PREVIEW TRẮC NGHIỆM */}
                      {(q.type === 'multiple_choice' || q.type === 'true_false') && (
                         <div className="grid grid-cols-2 gap-4">
                           {q.options?.map((label: string, oi: number) => (
                             <div key={oi} className={`text-sm rounded-lg p-3 transition-colors flex items-start gap-2 ${q.correctAnswer === oi ? 'text-green-800 bg-green-50 border border-green-200' : 'text-slate-700 hover:bg-slate-50 border border-slate-100'}`}>
                               <span className="font-bold text-slate-900 shrink-0">{String.fromCharCode(65 + oi)}.</span> 
-                              <div 
-                                className="prose prose-sm max-w-none break-words flex-1 overflow-hidden text-slate-900" 
-                                dangerouslySetInnerHTML={{ __html: label || "..." }} 
-                              />
+                              <div className="prose prose-sm max-w-none break-words flex-1 overflow-hidden text-slate-900" dangerouslySetInnerHTML={{ __html: label || "..." }} />
                               {q.correctAnswer === oi && <span className="text-green-600 font-bold shrink-0">✓</span>}
                             </div>
                           ))}
                         </div>
                      )}
-
-                     {/* PREVIEW CẤU TRÚC ĐÚNG SAI MỚI */}
                      {q.type === 'true_false_cluster' && q.statements && (
                         <div className="grid grid-cols-1 gap-3 mt-2">
                           {q.statements.map((stmt, sIdx) => (
                             <div key={sIdx} className="flex justify-between items-start text-sm rounded-xl p-4 bg-slate-50 border border-slate-200">
                               <div className="flex-1 pr-4 flex items-start gap-2 overflow-hidden">
                                 <span className="font-black text-indigo-500 shrink-0">{String.fromCharCode(97 + sIdx)}.</span>
-                                <div 
-                                  className="prose prose-sm max-w-none text-slate-900 break-words flex-1"
-                                  dangerouslySetInnerHTML={{ __html: stmt.content || "..." }}
-                                />
+                                <div className="prose prose-sm max-w-none text-slate-900 break-words flex-1" dangerouslySetInnerHTML={{ __html: stmt.content || "..." }} />
                               </div>
                               <div className="flex gap-2 shrink-0 mt-1">
-                                 {stmt.isTrue ? (
-                                   <span className="bg-green-100 text-green-700 px-3 py-1 rounded-md font-bold text-xs border border-green-200 shadow-sm">Đúng ✓</span>
-                                 ) : (
-                                   <span className="bg-red-100 text-red-700 px-3 py-1 rounded-md font-bold text-xs border border-red-200 shadow-sm">Sai ✗</span>
-                                 )}
+                                 {stmt.isTrue ? <span className="bg-green-100 text-green-700 px-3 py-1 rounded-md font-bold text-xs border border-green-200 shadow-sm">Đúng ✓</span> : <span className="bg-red-100 text-red-700 px-3 py-1 rounded-md font-bold text-xs border border-red-200 shadow-sm">Sai ✗</span>}
                               </div>
                             </div>
                           ))}
                         </div>
                      )}
-
-                     {/* PREVIEW TRẢ LỜI NGẮN */}
                      {q.type === 'short_answer' && (
                         <div className="p-3 border-2 border-dashed border-slate-200 rounded-lg inline-block min-w-[200px] text-sm text-slate-400 mt-2 bg-slate-50">
                           {q.correctText ? <span className="text-green-600 font-bold">{q.correctText} ✓</span> : "Học sinh sẽ nhập đáp án vào đây..."}
                          </div>
                      )}
-
-                     {/* PREVIEW LỜI GIẢI CHI TIẾT */}
                      {q.explanation && q.explanation !== '<p><br></p>' && (
                         <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm">
                           <span className="font-bold text-blue-700 block mb-2">💡 Lời giải chi tiết:</span>
-                          <div 
-                            className="prose prose-sm max-w-none text-slate-900 break-words"
-                            dangerouslySetInnerHTML={{ __html: q.explanation }}
-                          />
+                          <div className="prose prose-sm max-w-none text-slate-900 break-words" dangerouslySetInnerHTML={{ __html: q.explanation }} />
                         </div>
                      )}
                    </div>
