@@ -4,15 +4,14 @@ import {
   Users, Trash2, CheckCircle2, Search, 
   Loader2, School, Plus, ListFilter, X, 
   ChevronRight, UserMinus, ShieldAlert, BadgeCheck,
-  CloudUpload // MỚI: Thêm icon cho nút Lưu Drive
+  UploadCloud // ĐÃ SỬA: Đổi từ CloudUpload thành UploadCloud
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { User, Class, ClassEnrollment } from "../types";
 import { useToast } from "./Toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-// MỚI: Import hàm lưu Drive từ file service của bạn
-// (Nhớ kiểm tra lại đường dẫn import này cho đúng với project của bạn nhé)
+// Import hàm lưu Drive từ file service của bạn
 import { saveToDrive } from "../services/googleDriveService";
 
 // Định nghĩa Type kết hợp (Join) từ Database
@@ -39,7 +38,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   const [newClassName, setNewClassName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  // MỚI: State cho trạng thái đang lưu Drive
+  // State cho trạng thái đang lưu Drive
   const [isSavingDrive, setIsSavingDrive] = useState(false);
 
   useEffect(() => {
@@ -190,7 +189,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
   const selectedClassName = selectedClassData?.name || null;
 
   // ==========================================
-  // MỚI: HÀM XỬ LÝ LƯU DANH SÁCH LÊN DRIVE
+  // HÀM XỬ LÝ LƯU DANH SÁCH LÊN DRIVE
   // ==========================================
   const handleSyncToDrive = async () => {
     if (activeList.length === 0) {
@@ -394,7 +393,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
            {/* DANH SÁCH LỚP HỌC CHÍNH THỨC */}
            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
               
-              {/* MỚI: Thêm khu vực Nút lưu lên Google Drive ở Header của Table */}
+              {/* Khu vực Nút lưu lên Google Drive ở Header của Table */}
               <div className="p-8 border-b border-slate-50 flex items-center justify-between flex-wrap gap-4">
                  <div className="flex items-center gap-4">
                     <h4 className="font-black text-slate-800 text-lg flex items-center gap-2">
@@ -409,7 +408,7 @@ const ClassManagement: React.FC<Props> = ({ user }) => {
                     disabled={isSavingDrive || activeList.length === 0}
                     className="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-100"
                  >
-                    {isSavingDrive ? <Loader2 size={18} className="animate-spin" /> : <CloudUpload size={18} />}
+                    {isSavingDrive ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />}
                     {isSavingDrive ? "Đang lưu..." : "Lưu lên Google Drive"}
                  </button>
               </div>
